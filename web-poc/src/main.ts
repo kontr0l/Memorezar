@@ -35,9 +35,37 @@ const expectedWordEl = document.getElementById('expected-word') as HTMLSpanEleme
 const statsEl = document.getElementById('stats') as HTMLDivElement;
 
 /**
+ * Detect if we're on iOS
+ */
+function isIOS(): boolean {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+/**
+ * Check if Speech Recognition is supported
+ */
+function isSpeechRecognitionSupported(): boolean {
+  return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+}
+
+/**
  * Initialize the application
  */
 async function init(): Promise<void> {
+  // Check browser support first
+  if (!isSpeechRecognitionSupported()) {
+    if (isIOS()) {
+      setStatus('⚠️ iOS Safari doesn\'t support speech recognition. For iPhone testing, we need to build the native app. Try on Chrome desktop for now!');
+      statusEl.style.background = '#fff3cd';
+      statusEl.style.color = '#856404';
+    } else {
+      setStatus('⚠️ Your browser doesn\'t support speech recognition. Please use Chrome or Edge.');
+    }
+    startBtn.disabled = true;
+    return;
+  }
+
   try {
     speechRecognition = new StreamingSpeechRecognition();
     comparator = new WordComparator({
@@ -57,7 +85,14 @@ async function init(): Promise<void> {
     setStatus('Ready. Enter a quote and click Start.');
     enableControls(true);
   } catch (error) {
-    setStatus(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    if (isIOS()) {
+      setStatus('⚠️ iOS Safari doesn\'t support speech recognition. For iPhone, we need the native app. Try Chrome desktop!');
+      statusEl.style.background = '#fff3cd';
+      statusEl.style.color = '#856404';
+    } else {
+      setStatus(`Error: ${msg}`);
+    }
     console.error('Init error:', error);
   }
 }
