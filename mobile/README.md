@@ -116,3 +116,40 @@ mobile/
 - Make sure you're using on-device recognition (not cloud)
 - Close other apps that might be using the microphone
 - Try in a quieter environment
+
+## iOS TestFlight Setup (via GitHub Actions)
+
+To automatically build and deploy to TestFlight:
+
+### 1. Create an Expo Account
+- Sign up at https://expo.dev/signup (free)
+- Go to Account Settings → Access Tokens
+- Create a new token and copy it
+
+### 2. Add GitHub Secrets
+Go to your repo → Settings → Secrets and variables → Actions → New repository secret
+
+Add these secrets:
+
+| Secret Name | Value |
+|-------------|-------|
+| `EXPO_TOKEN` | Your Expo access token |
+| `EXPO_APPLE_ID` | Your Apple ID email |
+| `EXPO_APPLE_PASSWORD` | App-specific password (see below) |
+
+### 3. Create App-Specific Password
+- Go to https://appleid.apple.com
+- Sign in → Security → App-Specific Passwords
+- Generate a new password for "Expo"
+- Use this as `EXPO_APPLE_PASSWORD`
+
+### 4. Run the Build
+- Go to Actions → "Build iOS App"
+- Click "Run workflow"
+- Select `preview` for testing or `production` for TestFlight
+- Wait ~15-20 minutes
+
+### 5. Install via TestFlight
+- For `production` builds, the app is auto-submitted to TestFlight
+- Open TestFlight on your iPhone
+- Accept the invite and install Memorezar
