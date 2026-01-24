@@ -9,7 +9,7 @@
  */
 
 import { StreamingSpeechRecognition } from './core/speech/streaming';
-import { WordComparator, ComparisonResult } from './core/comparison/comparator';
+import { WordComparator } from './core/comparison/comparator';
 import { AudioAlert } from './core/alert/audio';
 
 // State
@@ -103,7 +103,7 @@ async function startRecitation(): Promise<void> {
 /**
  * Handle each word as it's recognized
  */
-function handleWord(word: string, isFinal: boolean): void {
+function handleWord(word: string, _isFinal: boolean): void {
   if (!comparator || !audioAlert || !isReciting) return;
 
   // Compare the word

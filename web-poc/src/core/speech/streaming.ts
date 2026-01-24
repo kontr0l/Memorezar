@@ -7,6 +7,59 @@
  * - Word-by-word callback for immediate processing
  */
 
+// Web Speech API type definitions
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+  isFinal: boolean;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message: string;
+}
+
+interface SpeechRecognitionInstance extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  maxAlternatives: number;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionInstance;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
 export interface SpeechCallbacks {
   onWord: (word: string, isFinal: boolean) => void;
   onError: (error: string) => void;
@@ -14,7 +67,7 @@ export interface SpeechCallbacks {
 }
 
 export class StreamingSpeechRecognition {
-  private recognition: SpeechRecognition | null = null;
+  private recognition: SpeechRecognitionInstance | null = null;
   private isListening = false;
   private lastProcessedIndex = 0;
   private callbacks: SpeechCallbacks | null = null;
@@ -66,14 +119,14 @@ export class StreamingSpeechRecognition {
     // Process only the latest result
     const result = event.results[event.results.length - 1];
     const transcript = result[0].transcript.trim();
-    const isFinal = result.isFinal;
+    const resultIsFinal = result.isFinal;
 
     // Split into words and process new ones
-    const words = transcript.split(/\s+/).filter(w => w.length > 0);
+    const words = transcript.split(/\s+/).filter((w: string) => w.length > 0);
 
     // For interim results, we need to track which words we've already processed
     // to avoid alerting multiple times for the same word
-    if (isFinal) {
+    if (resultIsFinal) {
       // Final result - process all words from where we left off
       for (let i = this.lastProcessedIndex; i < words.length; i++) {
         this.callbacks.onWord(words[i], true);
@@ -119,13 +172,5 @@ export class StreamingSpeechRecognition {
 
   isActive(): boolean {
     return this.isListening;
-  }
-}
-
-// Type declarations for Web Speech API
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
   }
 }
