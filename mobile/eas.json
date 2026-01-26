@@ -19,7 +19,8 @@
     },
     "production": {
       "ios": {
-        "distribution": "store"
+        "distribution": "store",
+        "image": "latest"
       }
     }
   }
