@@ -16,7 +16,7 @@ import Voice, {
   SpeechResultsEvent,
   SpeechErrorEvent,
 } from '@react-native-voice/voice';
-import { WordComparator, ComparisonResult } from '@/src/core/comparator';
+import { WordComparator, ComparisonResult } from '../src/core/comparator';
 
 // Word status for highlighting
 type WordStatus = 'pending' | 'correct' | 'error';
@@ -42,25 +42,58 @@ export default function HomeScreen() {
   const comparatorRef = useRef<WordComparator | null>(null);
   const lastProcessedIndexRef = useRef(0);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const voiceAvailableRef = useRef(false);
 
   // Initialize
   useEffect(() => {
-    comparatorRef.current = new WordComparator();
-    setupVoice();
-    loadSound();
+    let mounted = true;
+
+    const init = async () => {
+      try {
+        comparatorRef.current = new WordComparator();
+        await setupVoice();
+        await loadSound();
+      } catch (error) {
+        console.error('Initialization error:', error);
+        if (mounted) {
+          setStatusMessage('Failed to initialize. Please restart the app.');
+        }
+      }
+    };
+
+    init();
 
     return () => {
-      Voice.destroy().then(Voice.removeAllListeners);
+      mounted = false;
+      try {
+        Voice.destroy().then(Voice.removeAllListeners).catch(() => {});
+      } catch (e) {
+        // Ignore cleanup errors
+      }
       soundRef.current?.unloadAsync();
     };
   }, []);
 
   // Setup voice recognition handlers
   const setupVoice = async () => {
-    Voice.onSpeechResults = onSpeechResults;
-    Voice.onSpeechPartialResults = onSpeechPartialResults;
-    Voice.onSpeechError = onSpeechError;
-    Voice.onSpeechEnd = onSpeechEnd;
+    try {
+      // Check if voice recognition is available
+      const isAvailable = await Voice.isAvailable();
+      if (!isAvailable) {
+        console.log('Voice recognition not available');
+        setStatusMessage('Speech recognition not available on this device');
+        return;
+      }
+
+      voiceAvailableRef.current = true;
+      Voice.onSpeechResults = onSpeechResults;
+      Voice.onSpeechPartialResults = onSpeechPartialResults;
+      Voice.onSpeechError = onSpeechError;
+      Voice.onSpeechEnd = onSpeechEnd;
+    } catch (error) {
+      console.error('Voice setup error:', error);
+      setStatusMessage('Failed to setup speech recognition');
+    }
   };
 
   // Load error beep sound
@@ -192,7 +225,7 @@ export default function HomeScreen() {
 
   // Handle speech end (auto-restart if still listening)
   const onSpeechEnd = () => {
-    if (isListening && !comparatorRef.current?.isComplete()) {
+    if (isListening && voiceAvailableRef.current && !comparatorRef.current?.isComplete()) {
       // Restart listening
       Voice.start('en-US').catch(console.error);
     }
@@ -202,6 +235,11 @@ export default function HomeScreen() {
   const startListening = async () => {
     if (!quoteText.trim()) {
       Alert.alert('Error', 'Please enter a quote first');
+      return;
+    }
+
+    if (!voiceAvailableRef.current) {
+      Alert.alert('Error', 'Speech recognition is not available on this device');
       return;
     }
 
@@ -230,9 +268,11 @@ export default function HomeScreen() {
 
   // Stop listening
   const stopListening = async () => {
+    setIsListening(false);
     try {
-      await Voice.stop();
-      setIsListening(false);
+      if (voiceAvailableRef.current) {
+        await Voice.stop();
+      }
       if (!comparatorRef.current?.isComplete()) {
         setStatusMessage('Stopped. Tap Start to try again.');
       }
