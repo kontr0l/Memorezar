@@ -2,7 +2,7 @@
   "expo": {
     "name": "Memorezar",
     "slug": "memorezar",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "memorezar",
@@ -18,7 +18,8 @@
       "bundleIdentifier": "com.memorezar.app",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Memorezar needs speech recognition to check your recitation in real-time.",
-        "NSMicrophoneUsageDescription": "Memorezar needs microphone access to hear you recite."
+        "NSMicrophoneUsageDescription": "Memorezar needs microphone access to hear you recite.",
+        "NSPhotoLibraryUsageDescription": "Memorezar does not access your photos, but this permission is required by a dependency."
       }
     },
     "android": {
