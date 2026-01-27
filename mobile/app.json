@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.memorezar.app",
+      "buildNumber": "2",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Memorezar needs speech recognition to check your recitation in real-time.",
         "NSMicrophoneUsageDescription": "Memorezar needs microphone access to hear you recite.",
