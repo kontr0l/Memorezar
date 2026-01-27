@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,10 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
-import Voice, {
-  SpeechResultsEvent,
-  SpeechErrorEvent,
-} from '@react-native-voice/voice';
+import {
+  ExpoSpeechRecognitionModule,
+  useSpeechRecognitionEvent,
+} from 'expo-speech-recognition';
 import { WordComparator, ComparisonResult } from '../src/core/comparator';
 
 // Word status for highlighting
@@ -39,79 +39,54 @@ export default function HomeScreen() {
   const [statusMessage, setStatusMessage] = useState('Enter a quote and tap Start');
 
   // Refs
-  const comparatorRef = useRef<WordComparator | null>(null);
+  const comparatorRef = useRef<WordComparator>(new WordComparator());
   const lastProcessedIndexRef = useRef(0);
-  const soundRef = useRef<Audio.Sound | null>(null);
-  const voiceAvailableRef = useRef(false);
 
-  // Initialize
-  useEffect(() => {
-    let mounted = true;
+  // Speech recognition lifecycle events
+  useSpeechRecognitionEvent('start', () => {
+    setIsListening(true);
+    setStatusMessage('Listening... Recite the quote');
+  });
 
-    const init = async () => {
-      try {
-        comparatorRef.current = new WordComparator();
-        await setupVoice();
-        await loadSound();
-      } catch (error) {
-        console.error('Initialization error:', error);
-        if (mounted) {
-          setStatusMessage('Failed to initialize. Please restart the app.');
-        }
+  useSpeechRecognitionEvent('end', () => {
+    setIsListening(false);
+  });
+
+  // Handle both partial and final results
+  useSpeechRecognitionEvent('result', (event) => {
+    const transcript = event.results[0]?.transcript ?? '';
+    const spokenWords = transcript.split(/\s+/).filter((w: string) => w.length > 0);
+    const isFinal = event.isFinal;
+
+    processNewWords(spokenWords, isFinal);
+
+    if (isFinal) {
+      // Reset index for next utterance
+      lastProcessedIndexRef.current = 0;
+
+      // Auto-restart if not complete
+      const comparator = comparatorRef.current;
+      if (comparator && !comparator.isComplete()) {
+        ExpoSpeechRecognitionModule.start({
+          lang: 'en-US',
+          interimResults: true,
+          continuous: true,
+          maxAlternatives: 1,
+        });
       }
-    };
-
-    init();
-
-    return () => {
-      mounted = false;
-      try {
-        Voice.destroy().then(Voice.removeAllListeners).catch(() => {});
-      } catch (e) {
-        // Ignore cleanup errors
-      }
-      soundRef.current?.unloadAsync();
-    };
-  }, []);
-
-  // Setup voice recognition handlers
-  const setupVoice = async () => {
-    try {
-      // Check if voice recognition is available
-      const isAvailable = await Voice.isAvailable();
-      if (!isAvailable) {
-        console.log('Voice recognition not available');
-        setStatusMessage('Speech recognition not available on this device');
-        return;
-      }
-
-      voiceAvailableRef.current = true;
-      Voice.onSpeechResults = onSpeechResults;
-      Voice.onSpeechPartialResults = onSpeechPartialResults;
-      Voice.onSpeechError = onSpeechError;
-      Voice.onSpeechEnd = onSpeechEnd;
-    } catch (error) {
-      console.error('Voice setup error:', error);
-      setStatusMessage('Failed to setup speech recognition');
     }
-  };
+  });
 
-  // Load error beep sound
-  const loadSound = async () => {
-    try {
-      // Create a simple beep using Audio API
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-    } catch (error) {
-      console.log('Audio setup error:', error);
+  useSpeechRecognitionEvent('error', (event) => {
+    console.log('Speech error:', event.error, event.message);
+    if (event.error === 'no-speech') {
+      return;
     }
-  };
+    setStatusMessage(`Error: ${event.message || event.error || 'Unknown error'}`);
+  });
 
-  // Play error feedback (haptic + visual flash handled in UI)
+  // Play error feedback (haptic)
   const playErrorFeedback = useCallback(async () => {
-    // Haptic feedback - strong vibration
     if (Platform.OS !== 'web') {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
@@ -124,37 +99,11 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Handle partial speech results (real-time, as user speaks)
-  const onSpeechPartialResults = (event: SpeechResultsEvent) => {
-    if (!event.value || !comparatorRef.current) return;
-
-    const transcript = event.value[0] || '';
-    const spokenWords = transcript.split(/\s+/).filter((w) => w.length > 0);
-
-    // Process only new words
-    processNewWords(spokenWords, false);
-  };
-
-  // Handle final speech results
-  const onSpeechResults = (event: SpeechResultsEvent) => {
-    if (!event.value || !comparatorRef.current) return;
-
-    const transcript = event.value[0] || '';
-    const spokenWords = transcript.split(/\s+/).filter((w) => w.length > 0);
-
-    // Process remaining words as final
-    processNewWords(spokenWords, true);
-
-    // Reset for next utterance
-    lastProcessedIndexRef.current = 0;
-  };
-
   // Process new words from speech recognition
   const processNewWords = (spokenWords: string[], isFinal: boolean) => {
     const comparator = comparatorRef.current;
     if (!comparator) return;
 
-    // For partial results, only process words we haven't seen
     const startIndex = lastProcessedIndexRef.current;
     const endIndex = isFinal ? spokenWords.length : Math.max(0, spokenWords.length - 1);
 
@@ -163,7 +112,6 @@ export default function HomeScreen() {
       const result = comparator.compareWord(word);
 
       if (result === null) {
-        // Filler word, ignore
         continue;
       }
 
@@ -174,19 +122,25 @@ export default function HomeScreen() {
         playErrorFeedback();
       }
 
-      // Check completion
       if (comparator.isComplete()) {
-        stopListening();
-        if (stats.errors === 0) {
-          setStatusMessage('Perfect! You did it!');
-          playSuccessFeedback();
-        } else {
-          setStatusMessage(`Done! ${stats.correct} correct, ${stats.errors} errors`);
-        }
+        ExpoSpeechRecognitionModule.stop();
+        setStats((prev) => {
+          const finalStats = {
+            correct: prev.correct + (result.isMatch ? 1 : 0),
+            errors: prev.errors + (result.isMatch ? 0 : 1),
+          };
+          if (finalStats.errors === 0) {
+            setStatusMessage('Perfect! You did it!');
+            playSuccessFeedback();
+          } else {
+            setStatusMessage(`Done! ${finalStats.correct} correct, ${finalStats.errors} errors`);
+          }
+          return finalStats;
+        });
+        return;
       }
     }
 
-    // Update processed index
     if (!isFinal && spokenWords.length > 1) {
       lastProcessedIndexRef.current = Math.max(lastProcessedIndexRef.current, endIndex);
     }
@@ -213,24 +167,6 @@ export default function HomeScreen() {
     }));
   };
 
-  // Handle speech errors
-  const onSpeechError = (event: SpeechErrorEvent) => {
-    console.log('Speech error:', event.error);
-    if (event.error?.code === 'no-speech') {
-      // No speech detected, just continue listening
-      return;
-    }
-    setStatusMessage(`Error: ${event.error?.message || 'Unknown error'}`);
-  };
-
-  // Handle speech end (auto-restart if still listening)
-  const onSpeechEnd = () => {
-    if (isListening && voiceAvailableRef.current && !comparatorRef.current?.isComplete()) {
-      // Restart listening
-      Voice.start('en-US').catch(console.error);
-    }
-  };
-
   // Start listening
   const startListening = async () => {
     if (!quoteText.trim()) {
@@ -238,15 +174,22 @@ export default function HomeScreen() {
       return;
     }
 
-    if (!voiceAvailableRef.current) {
+    // Check availability
+    const available = ExpoSpeechRecognitionModule.isRecognitionAvailable();
+    if (!available) {
       Alert.alert('Error', 'Speech recognition is not available on this device');
+      return;
+    }
+
+    // Request permissions
+    const permResult = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+    if (!permResult.granted) {
+      Alert.alert('Error', 'Microphone and speech recognition permissions are required');
       return;
     }
 
     // Reset state
     const comparator = comparatorRef.current;
-    if (!comparator) return;
-
     comparator.setTargetText(quoteText);
     lastProcessedIndexRef.current = 0;
 
@@ -255,36 +198,40 @@ export default function HomeScreen() {
     setCurrentPosition(0);
     setStats({ correct: 0, errors: 0 });
     setLastSpoken('-');
-    setStatusMessage('Listening... Recite the quote');
 
+    // Configure audio for recording
     try {
-      await Voice.start('en-US');
-      setIsListening(true);
-    } catch (error) {
-      console.error('Voice start error:', error);
-      setStatusMessage('Failed to start speech recognition');
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+    } catch (e) {
+      console.log('Audio mode setup error:', e);
     }
+
+    // Start speech recognition
+    ExpoSpeechRecognitionModule.start({
+      lang: 'en-US',
+      interimResults: true,
+      continuous: true,
+      maxAlternatives: 1,
+    });
   };
 
   // Stop listening
-  const stopListening = async () => {
-    setIsListening(false);
-    try {
-      if (voiceAvailableRef.current) {
-        await Voice.stop();
-      }
-      if (!comparatorRef.current?.isComplete()) {
-        setStatusMessage('Stopped. Tap Start to try again.');
-      }
-    } catch (error) {
-      console.error('Voice stop error:', error);
+  const stopListening = () => {
+    ExpoSpeechRecognitionModule.stop();
+    if (!comparatorRef.current?.isComplete()) {
+      setStatusMessage('Stopped. Tap Start to try again.');
     }
   };
 
   // Reset everything
   const resetAll = () => {
-    stopListening();
-    comparatorRef.current?.reset();
+    if (isListening) {
+      ExpoSpeechRecognitionModule.abort();
+    }
+    comparatorRef.current.reset();
     setWords([]);
     setCurrentPosition(0);
     setStats({ correct: 0, errors: 0 });

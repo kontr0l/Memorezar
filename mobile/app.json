@@ -2,7 +2,7 @@
   "expo": {
     "name": "Memorezar",
     "slug": "memorezar",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "memorezar",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.memorezar.app",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "infoPlist": {
         "NSSpeechRecognitionUsageDescription": "Memorezar needs speech recognition to check your recitation in real-time.",
         "NSMicrophoneUsageDescription": "Memorezar needs microphone access to hear you recite.",
@@ -35,10 +35,10 @@
     },
     "plugins": [
       [
-        "@react-native-voice/voice",
+        "expo-speech-recognition",
         {
           "microphonePermission": "Memorezar needs microphone access to hear you recite.",
-          "speechRecognitionPermission": "Memorezar needs speech recognition to check your recitation."
+          "speechRecognitionPermission": "Memorezar needs speech recognition to check your recitation in real-time."
         }
       ],
       "expo-router"
