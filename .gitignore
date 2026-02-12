@@ -31,8 +31,14 @@ npm-debug.log*
 *.mobileprovision
 *.orig.*
 web-build/
-ios/
 android/
+
+# iOS build artifacts (but keep source code)
+ios/build/
+ios/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/
 
 # Metro
 .metro-health-check*
