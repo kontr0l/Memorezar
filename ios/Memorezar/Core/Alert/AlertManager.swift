@@ -163,7 +163,7 @@ final class AlertManager {
             samples[i] = sample * envelope * 0.85
         }
 
-        return createWAVData(samples: samples, sampleRate: Int(sampleRate))
+        return Self.createWAVData(samples: samples, sampleRate: Int(sampleRate))
     }
 
     /// Preview a sound (for settings screen)
@@ -296,7 +296,7 @@ extension AlertManager {
         }
 
         // Convert to WAV data
-        return createWAVData(samples: samples, sampleRate: Int(sampleRate))
+        return Self.createWAVData(samples: samples, sampleRate: Int(sampleRate))
     }
 
     private static func createWAVData(samples: [Float], sampleRate: Int) -> Data? {

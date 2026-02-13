@@ -47,7 +47,7 @@ final class SpeechRecognitionService: NSObject {
             DispatchQueue.main.async {
                 switch status {
                 case .authorized:
-                    AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    AVAudioApplication.requestRecordPermission { granted in
                         DispatchQueue.main.async {
                             completion(granted)
                         }
