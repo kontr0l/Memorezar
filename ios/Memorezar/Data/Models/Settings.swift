@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// User preferences and app settings
 struct AppSettings: Codable {
