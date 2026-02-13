@@ -145,10 +145,8 @@ struct RecitationScreen: View {
             .background(Color(.secondarySystemBackground))
             .cornerRadius(16)
 
-            // Visibility controls
-            if settingsStore.wordVisibility != .showAll {
-                visibilityControls
-            }
+            // Visibility controls - always show for user control
+            visibilityControls
         }
         .onChange(of: viewModel.currentPosition) { _, newPosition in
             withAnimation {
@@ -160,7 +158,8 @@ struct RecitationScreen: View {
     // MARK: - Visibility Controls
 
     private var visibilityControls: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
+            // Toggle to show/hide all words
             Button {
                 withAnimation {
                     viewModel.toggleShowAllWords()
@@ -177,29 +176,41 @@ struct RecitationScreen: View {
                 .cornerRadius(8)
             }
 
-            if viewModel.showAllWords && settingsStore.wordVisibility == .partial {
-                VStack(spacing: 4) {
+            // Always show reveal percentage slider (unless all words are revealed)
+            if !viewModel.showAllWords {
+                VStack(spacing: 8) {
                     HStack {
-                        Text("Reveal:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        Image(systemName: "eye.circle")
+                            .foregroundColor(.blue)
+                        Text("Reveal Words")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
                         Spacer()
-                        Text("\(Int(settingsStore.wordRevealPercentage))%")
-                            .font(.caption)
+                        Text("\(Int(viewModel.revealPercentage))%")
+                            .font(.subheadline)
                             .foregroundColor(.secondary)
+                            .monospacedDigit()
                     }
+
                     Slider(
-                        value: Binding(
-                            get: { settingsStore.wordRevealPercentage },
-                            set: { newValue in
-                                settingsStore.wordRevealPercentage = newValue
-                            }
-                        ),
+                        value: $viewModel.revealPercentage,
                         in: 0...100,
                         step: 5
-                    )
+                    ) { editing in
+                        if !editing {
+                            // Re-randomize when user finishes dragging
+                            viewModel.applyRevealPercentage()
+                        }
+                    }
+                    .tint(.blue)
+
+                    Text("Slide to randomly reveal words as hints")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
-                .padding(.horizontal)
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
             }
         }
     }

@@ -155,6 +155,18 @@ final class SettingsStore: ObservableObject {
         }
     }
 
+    // MARK: - Sound Settings Accessors
+
+    var correctWordSound: CorrectWordSound {
+        get { settings.correctWordSound }
+        set { settings.correctWordSound = newValue }
+    }
+
+    var completionSound: CompletionSound {
+        get { settings.completionSound }
+        set { settings.completionSound = newValue }
+    }
+
     // MARK: - Apply Settings
 
     private func applySettings() {
@@ -164,5 +176,7 @@ final class SettingsStore: ObservableObject {
         alertManager.visualAlertEnabled = settings.visualAlertEnabled
         alertManager.hapticAlertEnabled = settings.hapticAlertEnabled
         alertManager.mistakeSound = settings.mistakeSound
+        alertManager.correctWordSound = settings.correctWordSound
+        alertManager.completionSound = settings.completionSound
     }
 }

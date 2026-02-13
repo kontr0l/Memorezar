@@ -14,9 +14,13 @@ final class AlertManager {
     // MARK: - Properties
 
     private var audioPlayer: AVAudioPlayer?
+    private var correctWordPlayer: AVAudioPlayer?
+    private var completionPlayer: AVAudioPlayer?
     private var hapticEngine: CHHapticEngine?
     private var systemSoundID: SystemSoundID = 0
-    private var cachedSoundData: [MistakeSound: Data] = [:]
+    private var cachedMistakeSoundData: [MistakeSound: Data] = [:]
+    private var cachedCorrectSoundData: [CorrectWordSound: Data] = [:]
+    private var cachedCompletionSoundData: [CompletionSound: Data] = [:]
     private var currentSound: MistakeSound = .explosion1
 
     // Alert configuration
@@ -30,12 +34,28 @@ final class AlertManager {
             }
         }
     }
+    var correctWordSound: CorrectWordSound = .none {
+        didSet {
+            if correctWordSound != oldValue {
+                prepareCorrectWordSound(correctWordSound)
+            }
+        }
+    }
+    var completionSound: CompletionSound = .applause {
+        didSet {
+            if completionSound != oldValue {
+                prepareCompletionSound(completionSound)
+            }
+        }
+    }
 
     // Callback for visual alerts (UI must handle this)
     var onVisualAlert: (() -> Void)?
 
     // Pre-loaded audio for minimal latency
     private var isAudioPrepared = false
+    private var isCorrectSoundPrepared = false
+    private var isCompletionSoundPrepared = false
 
     // MARK: - Initialization
 
@@ -43,6 +63,8 @@ final class AlertManager {
         prepareAllSounds()
         prepareHaptics()
         prepareSound(mistakeSound)
+        prepareCorrectWordSound(correctWordSound)
+        prepareCompletionSound(completionSound)
     }
 
     // MARK: - Alert Triggering
@@ -70,18 +92,35 @@ final class AlertManager {
 
     /// Pre-generate all sound effects for instant playback
     private func prepareAllSounds() {
+        // Mistake sounds
         for sound in MistakeSound.allCases {
-            if let data = generateSoundData(for: sound) {
-                cachedSoundData[sound] = data
+            if let data = generateMistakeSoundData(for: sound) {
+                cachedMistakeSoundData[sound] = data
+            }
+        }
+
+        // Correct word sounds
+        for sound in CorrectWordSound.allCases {
+            if let params = sound.soundParameters,
+               let data = generateSound(frequency: params.frequency, duration: params.duration, waveform: params.waveform) {
+                cachedCorrectSoundData[sound] = data
+            }
+        }
+
+        // Completion sounds
+        for sound in CompletionSound.allCases {
+            if let params = sound.soundParameters,
+               let data = generateSound(frequency: params.frequency, duration: params.duration, waveform: params.waveform) {
+                cachedCompletionSoundData[sound] = data
             }
         }
     }
 
-    /// Prepare a specific sound for playback
+    /// Prepare a specific mistake sound for playback
     private func prepareSound(_ sound: MistakeSound) {
         currentSound = sound
 
-        guard let data = cachedSoundData[sound] else {
+        guard let data = cachedMistakeSoundData[sound] else {
             // Fallback to system sound
             systemSoundID = 1057
             return
@@ -99,6 +138,42 @@ final class AlertManager {
         }
     }
 
+    /// Prepare correct word sound for playback
+    private func prepareCorrectWordSound(_ sound: CorrectWordSound) {
+        guard sound != .none, let data = cachedCorrectSoundData[sound] else {
+            isCorrectSoundPrepared = false
+            return
+        }
+
+        do {
+            correctWordPlayer = try AVAudioPlayer(data: data)
+            correctWordPlayer?.prepareToPlay()
+            correctWordPlayer?.volume = 0.5  // Softer than mistake sound
+            isCorrectSoundPrepared = true
+        } catch {
+            print("Failed to prepare correct word sound: \(error)")
+            isCorrectSoundPrepared = false
+        }
+    }
+
+    /// Prepare completion sound for playback
+    private func prepareCompletionSound(_ sound: CompletionSound) {
+        guard sound != .none, let data = cachedCompletionSoundData[sound] else {
+            isCompletionSoundPrepared = false
+            return
+        }
+
+        do {
+            completionPlayer = try AVAudioPlayer(data: data)
+            completionPlayer?.prepareToPlay()
+            completionPlayer?.volume = 0.9
+            isCompletionSoundPrepared = true
+        } catch {
+            print("Failed to prepare completion sound: \(error)")
+            isCompletionSoundPrepared = false
+        }
+    }
+
     private func triggerAudio() {
         if isAudioPrepared, let player = audioPlayer {
             player.currentTime = 0
@@ -113,8 +188,30 @@ final class AlertManager {
         }
     }
 
+    /// Trigger correct word sound
+    func triggerCorrectWordSound() {
+        guard audioAlertEnabled, correctWordSound != .none, isCorrectSoundPrepared,
+              let player = correctWordPlayer else { return }
+
+        player.currentTime = 0
+        player.play()
+        // Re-prepare for next play
+        DispatchQueue.global(qos: .userInitiated).async { [weak player] in
+            player?.prepareToPlay()
+        }
+    }
+
+    /// Trigger completion sound (applause, fanfare, etc.)
+    func triggerCompletionSound() {
+        guard audioAlertEnabled, completionSound != .none, isCompletionSoundPrepared,
+              let player = completionPlayer else { return }
+
+        player.currentTime = 0
+        player.play()
+    }
+
     /// Generate sound data for a specific mistake sound
-    private func generateSoundData(for sound: MistakeSound) -> Data? {
+    private func generateMistakeSoundData(for sound: MistakeSound) -> Data? {
         let params = sound.soundParameters
         return generateSound(
             frequency: params.frequency,
@@ -166,12 +263,36 @@ final class AlertManager {
         return Self.createWAVData(samples: samples, sampleRate: Int(sampleRate))
     }
 
-    /// Preview a sound (for settings screen)
+    /// Preview a mistake sound (for settings screen)
     func previewSound(_ sound: MistakeSound) {
-        guard let data = cachedSoundData[sound] else { return }
+        guard let data = cachedMistakeSoundData[sound] else { return }
         do {
             let previewPlayer = try AVAudioPlayer(data: data)
             previewPlayer.volume = 0.8
+            previewPlayer.play()
+        } catch {
+            print("Failed to preview sound: \(error)")
+        }
+    }
+
+    /// Preview a correct word sound (for settings screen)
+    func previewCorrectSound(_ sound: CorrectWordSound) {
+        guard sound != .none, let data = cachedCorrectSoundData[sound] else { return }
+        do {
+            let previewPlayer = try AVAudioPlayer(data: data)
+            previewPlayer.volume = 0.5
+            previewPlayer.play()
+        } catch {
+            print("Failed to preview sound: \(error)")
+        }
+    }
+
+    /// Preview a completion sound (for settings screen)
+    func previewCompletionSound(_ sound: CompletionSound) {
+        guard sound != .none, let data = cachedCompletionSoundData[sound] else { return }
+        do {
+            let previewPlayer = try AVAudioPlayer(data: data)
+            previewPlayer.volume = 0.9
             previewPlayer.play()
         } catch {
             print("Failed to preview sound: \(error)")

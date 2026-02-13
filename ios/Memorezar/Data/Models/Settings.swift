@@ -8,6 +8,8 @@ struct AppSettings: Codable {
     var visualAlertEnabled: Bool = true
     var hapticAlertEnabled: Bool = true
     var mistakeSound: MistakeSound = .explosion1
+    var correctWordSound: CorrectWordSound = .none
+    var completionSound: CompletionSound = .applause
 
     // Comparison settings
     var caseSensitive: Bool = false
@@ -34,16 +36,16 @@ struct AppSettings: Codable {
 
 /// Sound options for mistake alerts
 enum MistakeSound: String, Codable, CaseIterable {
-    case explosion1 = "Explosion 1"
-    case explosion2 = "Explosion 2"
-    case explosion3 = "Explosion 3"
+    case explosion1 = "Explosion"
     case bomb = "Bomb"
-    case crash = "Crash"
     case buzzer = "Buzzer"
-    case alarm = "Alarm"
-    case glass = "Glass Break"
-    case thunder = "Thunder"
+    case bullhorn = "Bullhorn"
+    case cricket = "Cricket"
+    case softChime = "Soft Chime"
     case drumHit = "Drum Hit"
+    case glassBreak = "Glass Break"
+    case thunder = "Thunder"
+    case airHorn = "Air Horn"
 
     /// Display name for UI
     var displayName: String { rawValue }
@@ -52,25 +54,77 @@ enum MistakeSound: String, Codable, CaseIterable {
     var soundParameters: (frequency: Double, duration: Double, waveform: SoundWaveform) {
         switch self {
         case .explosion1:
-            return (80, 0.3, .noise)      // Low rumble
-        case .explosion2:
-            return (60, 0.4, .noise)      // Deeper explosion
-        case .explosion3:
-            return (100, 0.25, .noise)    // Short blast
+            return (80, 0.3, .noise)      // Low rumble explosion
         case .bomb:
-            return (50, 0.5, .noise)      // Heavy bass
-        case .crash:
-            return (200, 0.2, .noise)     // High crash
+            return (50, 0.5, .noise)      // Heavy bass bomb
         case .buzzer:
             return (150, 0.15, .square)   // Classic buzzer
-        case .alarm:
-            return (880, 0.1, .sine)      // Sharp beep
-        case .glass:
+        case .bullhorn:
+            return (400, 0.25, .square)   // Loud bullhorn
+        case .cricket:
+            return (4000, 0.08, .sine)    // Soft cricket chirp
+        case .softChime:
+            return (1200, 0.12, .sine)    // Gentle chime
+        case .drumHit:
+            return (120, 0.08, .sine)     // Punchy drum
+        case .glassBreak:
             return (2000, 0.15, .noise)   // High shatter
         case .thunder:
             return (40, 0.6, .noise)      // Deep rumble
-        case .drumHit:
-            return (120, 0.08, .sine)     // Punchy drum
+        case .airHorn:
+            return (600, 0.35, .square)   // Loud air horn
+        }
+    }
+}
+
+/// Sound options for correct word feedback
+enum CorrectWordSound: String, Codable, CaseIterable {
+    case none = "None"
+    case softClick = "Soft Click"
+    case ding = "Ding"
+    case pop = "Pop"
+    case chime = "Chime"
+
+    var displayName: String { rawValue }
+
+    var soundParameters: (frequency: Double, duration: Double, waveform: SoundWaveform)? {
+        switch self {
+        case .none:
+            return nil
+        case .softClick:
+            return (800, 0.02, .sine)      // Very short click
+        case .ding:
+            return (1400, 0.08, .sine)     // Pleasant ding
+        case .pop:
+            return (600, 0.03, .sine)      // Quick pop
+        case .chime:
+            return (1000, 0.1, .sine)      // Gentle chime
+        }
+    }
+}
+
+/// Sound options for completion
+enum CompletionSound: String, Codable, CaseIterable {
+    case applause = "Applause"
+    case fanfare = "Fanfare"
+    case celebration = "Celebration"
+    case chime = "Success Chime"
+    case none = "None"
+
+    var displayName: String { rawValue }
+
+    var soundParameters: (frequency: Double, duration: Double, waveform: SoundWaveform)? {
+        switch self {
+        case .none:
+            return nil
+        case .applause:
+            return (300, 0.8, .noise)      // Simulated applause noise
+        case .fanfare:
+            return (880, 0.5, .sine)       // Triumphant fanfare
+        case .celebration:
+            return (1200, 0.6, .sine)      // Happy celebration tone
+        case .chime:
+            return (1400, 0.3, .sine)      // Success chime
         }
     }
 }

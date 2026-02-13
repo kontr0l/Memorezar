@@ -40,6 +40,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
     @Published var showHint = false
     @Published var lastMistake: MistakeInfo?
     @Published var showAllWords = false  // Manual override to show all words
+    @Published var revealPercentage: Double = 0  // Percentage of words to randomly reveal (0-100)
 
     // MARK: - Computed Properties
 
@@ -69,6 +70,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
     private var mistakes: [PracticeMistake] = []
     private var sessionStartTime: Date?
     private var hintTimer: Timer?
+    private var previousWordWasMistake = false  // Track for correct word sound after recovery
 
     var settingsStore: SettingsStore?
 
@@ -109,22 +111,35 @@ final class RecitationViewModel: NSObject, ObservableObject {
         guard let settings = settingsStore,
               settings.wordVisibility == .partial else { return }
 
-        let percentage = settings.wordRevealPercentage / 100.0
-        let revealCount = Int(Double(words.count) * percentage)
+        revealPercentage = settings.wordRevealPercentage
+        applyRevealPercentage()
+    }
 
-        // Randomly select words to reveal (but keep distribution somewhat even)
+    /// Apply the current reveal percentage with truly random word selection
+    func applyRevealPercentage() {
+        // Only reveal pending words (not current or already spoken words)
+        let pendingIndices = words.enumerated()
+            .filter { $0.offset > currentPosition && $0.element.state == .pending }
+            .map { $0.offset }
+
+        guard !pendingIndices.isEmpty else {
+            // No pending words to reveal
+            return
+        }
+
+        let percentage = revealPercentage / 100.0
+        let revealCount = Int(Double(pendingIndices.count) * percentage)
+
+        // First, hide all pending words
+        for index in pendingIndices {
+            words[index].isRevealed = false
+        }
+
+        // Randomly select words to reveal (truly random selection)
         if revealCount > 0 {
-            var indicesToReveal: Set<Int> = []
-
-            // Evenly distribute revealed words
-            let interval = Double(words.count) / Double(revealCount)
-            for i in 0..<revealCount {
-                let baseIndex = Int(Double(i) * interval)
-                // Add some randomness within a small range
-                let randomOffset = Int.random(in: 0...max(0, Int(interval / 2)))
-                let finalIndex = min(baseIndex + randomOffset, words.count - 1)
-                indicesToReveal.insert(finalIndex)
-            }
+            // Shuffle the indices and take the first N
+            let shuffledIndices = pendingIndices.shuffled()
+            let indicesToReveal = shuffledIndices.prefix(revealCount)
 
             for index in indicesToReveal {
                 words[index].isRevealed = true
@@ -139,22 +154,35 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
     /// Check if a word should be visible
     func shouldShowWord(at index: Int) -> Bool {
-        guard let settings = settingsStore else { return true }
-
-        // Manual override to show all
+        // Manual override to show all words
         if showAllWords { return true }
 
         let wordState = words[index]
 
+        // Already spoken words (correct/incorrect) and current word are always visible
+        if wordState.state == .correct || wordState.state == .incorrect || wordState.state == .current {
+            return true
+        }
+
+        // For pending words, check if they're revealed by the slider
+        // The revealPercentage slider controls visibility for all pending words
+        if revealPercentage > 0 {
+            return wordState.isRevealed
+        }
+
+        // If revealPercentage is 0, check the visibility mode from settings
+        guard let settings = settingsStore else { return true }
+
         switch settings.wordVisibility {
         case .showAll:
+            // If slider is at 0% but mode is showAll, show all
             return true
         case .hideUntilSpoken:
-            // Show only words that have been spoken (correct or incorrect) or current
-            return wordState.state == .correct || wordState.state == .incorrect || wordState.state == .current
+            // Hide until spoken
+            return false
         case .partial:
-            // Show if pre-revealed or already spoken
-            return wordState.isRevealed || wordState.state == .correct || wordState.state == .incorrect || wordState.state == .current
+            // Show if pre-revealed
+            return wordState.isRevealed
         }
     }
 
@@ -212,6 +240,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
         lastMistake = nil
         showHint = false
         showResults = false
+        previousWordWasMistake = false
 
         // Reset word states
         for i in words.indices {
@@ -281,6 +310,12 @@ final class RecitationViewModel: NSObject, ObservableObject {
             if result.isMatch {
                 // Correct word - mark as correct
                 words[previousPosition].state = .correct
+
+                // If we just recovered from a mistake, play correct word sound
+                if previousWordWasMistake {
+                    AlertManager.shared.triggerCorrectWordSound()
+                    previousWordWasMistake = false
+                }
             } else {
                 // Incorrect word
                 // Record mistake
@@ -301,6 +336,9 @@ final class RecitationViewModel: NSObject, ObservableObject {
                 // Trigger alerts
                 AlertManager.shared.triggerMistakeAlert()
 
+                // Track that this was a mistake (for correct word sound after recovery)
+                previousWordWasMistake = true
+
                 // If requireCorrectWord is enabled, flash incorrect then back to current
                 // The comparator won't have advanced, so we stay on same word
                 if settingsStore?.requireCorrectWord == true {
@@ -312,6 +350,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
                     }
                 } else {
                     words[previousPosition].state = .incorrect
+                    previousWordWasMistake = false  // Moving on, don't play correct sound
                 }
             }
 
@@ -330,6 +369,8 @@ final class RecitationViewModel: NSObject, ObservableObject {
         // Check completion
         if comparator.isComplete {
             pause()
+            // Play completion sound (applause, fanfare, etc.)
+            AlertManager.shared.triggerCompletionSound()
             showResults = true
         }
     }

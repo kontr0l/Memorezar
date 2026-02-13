@@ -12,22 +12,57 @@ struct SettingsScreen: View {
                 // Alert Settings
                 Section {
                     Toggle(isOn: $settingsStore.settings.audioAlertEnabled) {
-                        Label("Sound Alert", systemImage: "speaker.wave.2.fill")
+                        Label("Sound Alerts", systemImage: "speaker.wave.2.fill")
                     }
 
                     if settingsStore.settings.audioAlertEnabled {
+                        // Mistake Sound
                         Picker(selection: $settingsStore.settings.mistakeSound) {
                             ForEach(MistakeSound.allCases, id: \.self) { sound in
                                 Text(sound.displayName).tag(sound)
                             }
                         } label: {
-                            Label("Sound Effect", systemImage: "waveform")
+                            Label("Mistake Sound", systemImage: "xmark.circle")
                         }
 
                         Button {
                             AlertManager.shared.previewSound(settingsStore.settings.mistakeSound)
                         } label: {
-                            Label("Preview Sound", systemImage: "play.circle")
+                            Label("Preview Mistake Sound", systemImage: "play.circle")
+                        }
+
+                        // Correct Word Sound
+                        Picker(selection: $settingsStore.settings.correctWordSound) {
+                            ForEach(CorrectWordSound.allCases, id: \.self) { sound in
+                                Text(sound.displayName).tag(sound)
+                            }
+                        } label: {
+                            Label("Correct Word Sound", systemImage: "checkmark.circle")
+                        }
+
+                        if settingsStore.settings.correctWordSound != .none {
+                            Button {
+                                AlertManager.shared.previewCorrectSound(settingsStore.settings.correctWordSound)
+                            } label: {
+                                Label("Preview Correct Sound", systemImage: "play.circle")
+                            }
+                        }
+
+                        // Completion Sound
+                        Picker(selection: $settingsStore.settings.completionSound) {
+                            ForEach(CompletionSound.allCases, id: \.self) { sound in
+                                Text(sound.displayName).tag(sound)
+                            }
+                        } label: {
+                            Label("Completion Sound", systemImage: "party.popper")
+                        }
+
+                        if settingsStore.settings.completionSound != .none {
+                            Button {
+                                AlertManager.shared.previewCompletionSound(settingsStore.settings.completionSound)
+                            } label: {
+                                Label("Preview Completion Sound", systemImage: "play.circle")
+                            }
                         }
                     }
 
@@ -43,12 +78,12 @@ struct SettingsScreen: View {
                     Button {
                         AlertManager.shared.triggerMistakeAlert()
                     } label: {
-                        Label("Test All Alerts", systemImage: "bell.badge")
+                        Label("Test Mistake Alert", systemImage: "bell.badge")
                     }
                 } header: {
                     Text("Alerts")
                 } footer: {
-                    Text("Choose how you want to be notified when you make a mistake during recitation.")
+                    Text("Choose how you want to be notified during recitation. Mistake sounds play when you say the wrong word, correct sounds play after you fix a mistake, and completion sounds play when you finish.")
                 }
 
                 // Comparison Settings

@@ -414,6 +414,7 @@ struct CategoryEditView: View {
                                     .foregroundColor(selectedIcon == icon ? .white : .primary)
                                     .cornerRadius(10)
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                     .padding(.vertical, 8)
