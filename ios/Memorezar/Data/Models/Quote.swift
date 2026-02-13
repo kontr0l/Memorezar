@@ -5,7 +5,7 @@ struct Quote: Identifiable, Codable, Equatable {
     let id: UUID
     var title: String
     var text: String
-    var category: QuoteCategory
+    var categoryId: UUID  // Reference to QuoteCategory
     var createdAt: Date
     var lastPracticedAt: Date?
 
@@ -14,11 +14,14 @@ struct Quote: Identifiable, Codable, Equatable {
     var bestAccuracy: Double  // 0.0 to 1.0
     var lastAccuracy: Double? // Most recent attempt
 
+    // Legacy support for old category enum
+    private var legacyCategory: LegacyQuoteCategory?
+
     init(
         id: UUID = UUID(),
         title: String,
         text: String,
-        category: QuoteCategory = .general,
+        categoryId: UUID = QuoteCategory.defaultCategory.id,
         createdAt: Date = Date(),
         lastPracticedAt: Date? = nil,
         practiceCount: Int = 0,
@@ -28,12 +31,42 @@ struct Quote: Identifiable, Codable, Equatable {
         self.id = id
         self.title = title
         self.text = text
-        self.category = category
+        self.categoryId = categoryId
         self.createdAt = createdAt
         self.lastPracticedAt = lastPracticedAt
         self.practiceCount = practiceCount
         self.bestAccuracy = bestAccuracy
         self.lastAccuracy = lastAccuracy
+    }
+
+    // Custom decoding to handle legacy enum-based categories
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        text = try container.decode(String.self, forKey: .text)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        lastPracticedAt = try container.decodeIfPresent(Date.self, forKey: .lastPracticedAt)
+        practiceCount = try container.decode(Int.self, forKey: .practiceCount)
+        bestAccuracy = try container.decode(Double.self, forKey: .bestAccuracy)
+        lastAccuracy = try container.decodeIfPresent(Double.self, forKey: .lastAccuracy)
+
+        // Try to decode new categoryId first, fall back to legacy category
+        if let catId = try? container.decode(UUID.self, forKey: .categoryId) {
+            categoryId = catId
+        } else if let legacy = try? container.decode(LegacyQuoteCategory.self, forKey: .legacyCategory) {
+            // Map legacy category to default
+            categoryId = QuoteCategory.defaultCategory.id
+            legacyCategory = legacy
+        } else {
+            categoryId = QuoteCategory.defaultCategory.id
+        }
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, text, categoryId, createdAt, lastPracticedAt
+        case practiceCount, bestAccuracy, lastAccuracy
+        case legacyCategory = "category"  // Map old "category" key to legacyCategory
     }
 
     /// Word count in the quote
@@ -58,8 +91,60 @@ struct Quote: Identifiable, Codable, Equatable {
     }
 }
 
-/// Categories for organizing quotes
-enum QuoteCategory: String, Codable, CaseIterable {
+/// User-customizable category for organizing quotes
+struct QuoteCategory: Codable, Equatable, Hashable, Identifiable {
+    let id: UUID
+    var name: String
+    var icon: String
+    var isDefault: Bool  // Cannot be deleted
+
+    init(id: UUID = UUID(), name: String, icon: String = "folder.fill", isDefault: Bool = false) {
+        self.id = id
+        self.name = name
+        self.icon = icon
+        self.isDefault = isDefault
+    }
+
+    /// The default "My Quotes" category
+    static let defaultCategory = QuoteCategory(
+        id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+        name: "My Quotes",
+        icon: "text.quote",
+        isDefault: true
+    )
+
+    /// Preset categories that users can add if they want
+    static let presets: [QuoteCategory] = [
+        QuoteCategory(name: "Scripture", icon: "book.closed.fill"),
+        QuoteCategory(name: "Poetry", icon: "text.book.closed.fill"),
+        QuoteCategory(name: "Speeches", icon: "person.wave.2.fill"),
+        QuoteCategory(name: "Lyrics", icon: "music.note"),
+        QuoteCategory(name: "Famous Quotes", icon: "quote.bubble.fill"),
+    ]
+
+    /// Available icons for custom categories
+    static let availableIcons: [String] = [
+        "folder.fill",
+        "text.quote",
+        "book.closed.fill",
+        "text.book.closed.fill",
+        "person.wave.2.fill",
+        "music.note",
+        "quote.bubble.fill",
+        "star.fill",
+        "heart.fill",
+        "flag.fill",
+        "bookmark.fill",
+        "tag.fill",
+        "doc.text.fill",
+        "graduationcap.fill",
+        "brain.head.profile",
+        "lightbulb.fill"
+    ]
+}
+
+// Legacy support - map old enum values to new category system
+enum LegacyQuoteCategory: String, Codable {
     case general = "General"
     case scripture = "Scripture"
     case poetry = "Poetry"
@@ -67,18 +152,6 @@ enum QuoteCategory: String, Codable, CaseIterable {
     case lyrics = "Lyrics"
     case quote = "Quote"
     case custom = "Custom"
-
-    var icon: String {
-        switch self {
-        case .general: return "text.quote"
-        case .scripture: return "book.closed.fill"
-        case .poetry: return "text.book.closed.fill"
-        case .speech: return "person.wave.2.fill"
-        case .lyrics: return "music.note"
-        case .quote: return "quote.bubble.fill"
-        case .custom: return "folder.fill"
-        }
-    }
 }
 
 /// Mastery levels for gamification

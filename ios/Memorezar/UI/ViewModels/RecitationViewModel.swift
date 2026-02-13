@@ -15,6 +15,7 @@ struct WordDisplayState: Identifiable {
     let id = UUID()
     let word: String
     var state: WordState
+    var isRevealed: Bool = false  // For partial reveal mode - whether this word is pre-revealed
 }
 
 /// Last mistake information
@@ -38,6 +39,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
     @Published var showResults = false
     @Published var showHint = false
     @Published var lastMistake: MistakeInfo?
+    @Published var showAllWords = false  // Manual override to show all words
 
     // MARK: - Computed Properties
 
@@ -87,13 +89,72 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
     private func setupQuote() {
         comparator.setTargetText(quote.text)
-        words = comparator.getTargetWords().map {
-            WordDisplayState(word: $0, state: .pending)
+        let targetWords = comparator.getTargetWords()
+
+        words = targetWords.map {
+            WordDisplayState(word: $0, state: .pending, isRevealed: false)
         }
 
         // Mark first word as current
         if !words.isEmpty {
             words[0].state = .current
+        }
+
+        // Apply initial reveal for partial mode
+        applyPartialReveal()
+    }
+
+    /// Apply partial reveal based on settings percentage
+    private func applyPartialReveal() {
+        guard let settings = settingsStore,
+              settings.wordVisibility == .partial else { return }
+
+        let percentage = settings.wordRevealPercentage / 100.0
+        let revealCount = Int(Double(words.count) * percentage)
+
+        // Randomly select words to reveal (but keep distribution somewhat even)
+        if revealCount > 0 {
+            var indicesToReveal: Set<Int> = []
+
+            // Evenly distribute revealed words
+            let interval = Double(words.count) / Double(revealCount)
+            for i in 0..<revealCount {
+                let baseIndex = Int(Double(i) * interval)
+                // Add some randomness within a small range
+                let randomOffset = Int.random(in: 0...max(0, Int(interval / 2)))
+                let finalIndex = min(baseIndex + randomOffset, words.count - 1)
+                indicesToReveal.insert(finalIndex)
+            }
+
+            for index in indicesToReveal {
+                words[index].isRevealed = true
+            }
+        }
+    }
+
+    /// Toggle showing all words
+    func toggleShowAllWords() {
+        showAllWords.toggle()
+    }
+
+    /// Check if a word should be visible
+    func shouldShowWord(at index: Int) -> Bool {
+        guard let settings = settingsStore else { return true }
+
+        // Manual override to show all
+        if showAllWords { return true }
+
+        let wordState = words[index]
+
+        switch settings.wordVisibility {
+        case .showAll:
+            return true
+        case .hideUntilSpoken:
+            // Show only words that have been spoken (correct or incorrect) or current
+            return wordState.state == .correct || wordState.state == .incorrect || wordState.state == .current
+        case .partial:
+            // Show if pre-revealed or already spoken
+            return wordState.isRevealed || wordState.state == .correct || wordState.state == .incorrect || wordState.state == .current
         }
     }
 
@@ -120,8 +181,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
         // Apply settings
         if let settings = settingsStore {
-            let options = settings.comparatorOptions
-            // Re-create comparator with new options if needed
+            comparator.updateOptions(settings.comparatorOptions)
         }
 
         do {
@@ -214,11 +274,15 @@ final class RecitationViewModel: NSObject, ObservableObject {
             return
         }
 
-        // Update word state
-        if currentPosition < words.count {
-            words[currentPosition].state = result.isMatch ? .correct : .incorrect
+        let previousPosition = currentPosition
 
-            if !result.isMatch {
+        // Update word state based on match result
+        if previousPosition < words.count {
+            if result.isMatch {
+                // Correct word - mark as correct
+                words[previousPosition].state = .correct
+            } else {
+                // Incorrect word
                 // Record mistake
                 let mistake = PracticeMistake(
                     position: result.position,
@@ -236,12 +300,26 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
                 // Trigger alerts
                 AlertManager.shared.triggerMistakeAlert()
+
+                // If requireCorrectWord is enabled, flash incorrect then back to current
+                // The comparator won't have advanced, so we stay on same word
+                if settingsStore?.requireCorrectWord == true {
+                    words[previousPosition].state = .incorrect
+                    // Brief flash of incorrect, then back to current
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                        guard let self = self, self.currentPosition == previousPosition else { return }
+                        self.words[previousPosition].state = .current
+                    }
+                } else {
+                    words[previousPosition].state = .incorrect
+                }
             }
 
+            // Update position to match comparator
             currentPosition = comparator.currentPosition
 
-            // Mark next word as current
-            if currentPosition < words.count {
+            // Mark next word as current (only if we advanced)
+            if currentPosition != previousPosition && currentPosition < words.count {
                 words[currentPosition].state = .current
             }
 

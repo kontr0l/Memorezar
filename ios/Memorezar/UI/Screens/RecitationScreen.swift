@@ -128,23 +128,78 @@ struct RecitationScreen: View {
     // MARK: - Word Display
 
     private func wordDisplay(proxy: ScrollViewProxy) -> some View {
-        FlowLayout(spacing: 8) {
-            ForEach(Array(viewModel.words.enumerated()), id: \.offset) { index, wordState in
-                WordView(
-                    word: wordState.word,
-                    state: wordState.state,
-                    isCurrentWord: index == viewModel.currentPosition,
-                    fontSize: settingsStore.fontSize.pointSize
-                )
-                .id(index)
+        VStack(spacing: 12) {
+            FlowLayout(spacing: 8) {
+                ForEach(Array(viewModel.words.enumerated()), id: \.offset) { index, wordState in
+                    WordView(
+                        word: wordState.word,
+                        state: wordState.state,
+                        isCurrentWord: index == viewModel.currentPosition,
+                        fontSize: settingsStore.fontSize.pointSize,
+                        isVisible: viewModel.shouldShowWord(at: index)
+                    )
+                    .id(index)
+                }
+            }
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(16)
+
+            // Visibility controls
+            if settingsStore.wordVisibility != .showAll {
+                visibilityControls
             }
         }
-        .padding()
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
         .onChange(of: viewModel.currentPosition) { _, newPosition in
             withAnimation {
                 proxy.scrollTo(max(0, newPosition - 2), anchor: .center)
+            }
+        }
+    }
+
+    // MARK: - Visibility Controls
+
+    private var visibilityControls: some View {
+        VStack(spacing: 8) {
+            Button {
+                withAnimation {
+                    viewModel.toggleShowAllWords()
+                }
+            } label: {
+                HStack {
+                    Image(systemName: viewModel.showAllWords ? "eye.fill" : "eye.slash.fill")
+                    Text(viewModel.showAllWords ? "Hide Words" : "Show All Words")
+                }
+                .font(.subheadline)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color.blue.opacity(0.1))
+                .cornerRadius(8)
+            }
+
+            if viewModel.showAllWords && settingsStore.wordVisibility == .partial {
+                VStack(spacing: 4) {
+                    HStack {
+                        Text("Reveal:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(Int(settingsStore.wordRevealPercentage))%")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Slider(
+                        value: Binding(
+                            get: { settingsStore.wordRevealPercentage },
+                            set: { newValue in
+                                settingsStore.wordRevealPercentage = newValue
+                            }
+                        ),
+                        in: 0...100,
+                        step: 5
+                    )
+                }
+                .padding(.horizontal)
             }
         }
     }
@@ -276,19 +331,34 @@ struct WordView: View {
     let state: WordState
     let isCurrentWord: Bool
     let fontSize: CGFloat
+    var isVisible: Bool = true
 
     var body: some View {
-        Text(word)
-            .font(.system(size: fontSize, weight: isCurrentWord ? .bold : .regular))
-            .foregroundColor(foregroundColor)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(backgroundColor)
-            .cornerRadius(6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(isCurrentWord ? Color.blue : Color.clear, lineWidth: 2)
-            )
+        Group {
+            if isVisible {
+                Text(word)
+                    .font(.system(size: fontSize, weight: isCurrentWord ? .bold : .regular))
+                    .foregroundColor(foregroundColor)
+            } else {
+                // Show placeholder box with approximate word width
+                Text(String(repeating: "_", count: word.count))
+                    .font(.system(size: fontSize, weight: .regular))
+                    .foregroundColor(.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                            .background(Color(.systemGray5).cornerRadius(4))
+                    )
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(backgroundColor)
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(isCurrentWord ? Color.blue : Color.clear, lineWidth: 2)
+        )
     }
 
     private var foregroundColor: Color {
@@ -301,6 +371,9 @@ struct WordView: View {
     }
 
     private var backgroundColor: Color {
+        if !isVisible && state == .pending {
+            return .clear
+        }
         switch state {
         case .pending: return .clear
         case .correct: return .green.opacity(0.2)

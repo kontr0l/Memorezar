@@ -10,24 +10,79 @@ final class QuoteStore: ObservableObject {
 
     @Published private(set) var quotes: [Quote] = []
     @Published private(set) var sessions: [PracticeSession] = []
+    @Published private(set) var categories: [QuoteCategory] = []
 
     // MARK: - Private Properties
 
     private let quotesKey = "memorezar_quotes"
     private let sessionsKey = "memorezar_sessions"
+    private let categoriesKey = "memorezar_categories"
     private let userDefaults: UserDefaults
 
     // MARK: - Initialization
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        loadCategories()
         loadQuotes()
         loadSessions()
+
+        // Ensure default category exists
+        if !categories.contains(where: { $0.id == QuoteCategory.defaultCategory.id }) {
+            categories.insert(QuoteCategory.defaultCategory, at: 0)
+            saveCategories()
+        }
 
         // Add sample quotes if empty (first launch)
         if quotes.isEmpty {
             addSampleQuotes()
         }
+    }
+
+    // MARK: - Category Management
+
+    func addCategory(_ category: QuoteCategory) {
+        categories.append(category)
+        saveCategories()
+    }
+
+    func updateCategory(_ category: QuoteCategory) {
+        if let index = categories.firstIndex(where: { $0.id == category.id }) {
+            categories[index] = category
+            saveCategories()
+        }
+    }
+
+    func deleteCategory(_ category: QuoteCategory) {
+        // Don't allow deleting default category
+        guard !category.isDefault else { return }
+
+        // Move all quotes in this category to default
+        for i in quotes.indices {
+            if quotes[i].categoryId == category.id {
+                quotes[i].categoryId = QuoteCategory.defaultCategory.id
+            }
+        }
+        saveQuotes()
+
+        categories.removeAll { $0.id == category.id }
+        saveCategories()
+    }
+
+    func getCategory(byId id: UUID) -> QuoteCategory? {
+        categories.first { $0.id == id }
+    }
+
+    /// Add a preset category
+    func addPresetCategory(_ preset: QuoteCategory) {
+        // Check if already exists by name
+        guard !categories.contains(where: { $0.name == preset.name }) else { return }
+        addCategory(preset)
+    }
+
+    /// Get quotes for a specific category
+    func quotes(inCategory categoryId: UUID) -> [Quote] {
+        quotes.filter { $0.categoryId == categoryId }
     }
 
     // MARK: - Quote Management
@@ -102,10 +157,6 @@ final class QuoteStore: ObservableObject {
 
     // MARK: - Filtering
 
-    func quotes(in category: QuoteCategory) -> [Quote] {
-        quotes.filter { $0.category == category }
-    }
-
     func quotes(withMastery level: MasteryLevel) -> [Quote] {
         quotes.filter { $0.masteryLevel == level }
     }
@@ -160,38 +211,74 @@ final class QuoteStore: ObservableObject {
         }
     }
 
+    private func loadCategories() {
+        guard let data = userDefaults.data(forKey: categoriesKey) else {
+            // Initialize with default category only
+            categories = [QuoteCategory.defaultCategory]
+            return
+        }
+        do {
+            categories = try JSONDecoder().decode([QuoteCategory].self, from: data)
+        } catch {
+            print("Failed to load categories: \(error)")
+            categories = [QuoteCategory.defaultCategory]
+        }
+    }
+
+    private func saveCategories() {
+        do {
+            let data = try JSONEncoder().encode(categories)
+            userDefaults.set(data, forKey: categoriesKey)
+        } catch {
+            print("Failed to save categories: \(error)")
+        }
+    }
+
     // MARK: - Sample Data
 
     private func addSampleQuotes() {
+        // All sample quotes go to the default category
+        let defaultCategoryId = QuoteCategory.defaultCategory.id
+
         let sampleQuotes = [
             Quote(
                 title: "Gettysburg Address (Opening)",
                 text: "Four score and seven years ago our fathers brought forth on this continent, a new nation, conceived in Liberty, and dedicated to the proposition that all men are created equal.",
-                category: .speech
+                categoryId: defaultCategoryId
             ),
             Quote(
                 title: "To be, or not to be",
                 text: "To be, or not to be, that is the question: Whether 'tis nobler in the mind to suffer the slings and arrows of outrageous fortune, or to take arms against a sea of troubles.",
-                category: .poetry
+                categoryId: defaultCategoryId
             ),
             Quote(
                 title: "I Have a Dream (Excerpt)",
                 text: "I have a dream that one day this nation will rise up and live out the true meaning of its creed: We hold these truths to be self-evident, that all men are created equal.",
-                category: .speech
+                categoryId: defaultCategoryId
             ),
             Quote(
                 title: "The Road Not Taken (Excerpt)",
                 text: "Two roads diverged in a wood, and I took the one less traveled by, and that has made all the difference.",
-                category: .poetry
+                categoryId: defaultCategoryId
             ),
             Quote(
                 title: "Einstein Quote",
                 text: "Imagination is more important than knowledge. Knowledge is limited. Imagination encircles the world.",
-                category: .quote
+                categoryId: defaultCategoryId
             )
         ]
 
         quotes = sampleQuotes
         saveQuotes()
+    }
+
+    /// Clear all user data (for settings reset)
+    func clearAllData() {
+        quotes.removeAll()
+        sessions.removeAll()
+        categories = [QuoteCategory.defaultCategory]
+        saveQuotes()
+        saveSessions()
+        saveCategories()
     }
 }

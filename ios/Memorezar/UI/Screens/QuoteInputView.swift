@@ -6,7 +6,7 @@ struct QuoteInputView: View {
 
     @State private var title: String
     @State private var text: String
-    @State private var category: QuoteCategory
+    @State private var selectedCategoryId: UUID
     @State private var showingPasteOptions = false
 
     private let quoteToEdit: Quote?
@@ -16,7 +16,7 @@ struct QuoteInputView: View {
         self.quoteToEdit = quoteToEdit
         _title = State(initialValue: quoteToEdit?.title ?? "")
         _text = State(initialValue: quoteToEdit?.text ?? "")
-        _category = State(initialValue: quoteToEdit?.category ?? .general)
+        _selectedCategoryId = State(initialValue: quoteToEdit?.categoryId ?? QuoteCategory.defaultCategory.id)
     }
 
     var body: some View {
@@ -34,10 +34,10 @@ struct QuoteInputView: View {
 
                 // Category Section
                 Section {
-                    Picker("Category", selection: $category) {
-                        ForEach(QuoteCategory.allCases, id: \.self) { cat in
-                            Label(cat.rawValue, systemImage: cat.icon)
-                                .tag(cat)
+                    Picker("Category", selection: $selectedCategoryId) {
+                        ForEach(quoteStore.categories) { category in
+                            Label(category.name, systemImage: category.icon)
+                                .tag(category.id)
                         }
                     }
                     .pickerStyle(.menu)
@@ -160,14 +160,14 @@ struct QuoteInputView: View {
             var updated = existingQuote
             updated.title = trimmedTitle
             updated.text = trimmedText
-            updated.category = category
+            updated.categoryId = selectedCategoryId
             quoteStore.updateQuote(updated)
         } else {
             // Create new
             let newQuote = Quote(
                 title: trimmedTitle,
                 text: trimmedText,
-                category: category
+                categoryId: selectedCategoryId
             )
             quoteStore.addQuote(newQuote)
         }
@@ -234,7 +234,7 @@ struct TipRow: View {
     QuoteInputView(quoteToEdit: Quote(
         title: "Test Quote",
         text: "This is a test quote that I want to memorize.",
-        category: .general
+        categoryId: QuoteCategory.defaultCategory.id
     ))
     .environmentObject(QuoteStore())
 }

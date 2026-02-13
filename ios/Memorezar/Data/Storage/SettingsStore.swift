@@ -44,6 +44,11 @@ final class SettingsStore: ObservableObject {
         set { settings.hapticAlertEnabled = newValue }
     }
 
+    var mistakeSound: MistakeSound {
+        get { settings.mistakeSound }
+        set { settings.mistakeSound = newValue }
+    }
+
     var caseSensitive: Bool {
         get { settings.caseSensitive }
         set { settings.caseSensitive = newValue }
@@ -84,6 +89,21 @@ final class SettingsStore: ObservableObject {
         set { settings.theme = newValue }
     }
 
+    var wordVisibility: WordVisibility {
+        get { settings.wordVisibility }
+        set { settings.wordVisibility = newValue }
+    }
+
+    var wordRevealPercentage: Double {
+        get { settings.wordRevealPercentage }
+        set { settings.wordRevealPercentage = newValue }
+    }
+
+    var requireCorrectWord: Bool {
+        get { settings.requireCorrectWord }
+        set { settings.requireCorrectWord = newValue }
+    }
+
     var showHints: Bool {
         get { settings.showHints }
         set { settings.showHints = newValue }
@@ -101,7 +121,8 @@ final class SettingsStore: ObservableObject {
             caseSensitive: settings.caseSensitive,
             ignorePunctuation: settings.ignorePunctuation,
             ignoreFillerWords: settings.ignoreFillerWords,
-            allowContractions: settings.allowContractions
+            allowContractions: settings.allowContractions,
+            requireCorrectWord: settings.requireCorrectWord
         )
     }
 
@@ -142,5 +163,6 @@ final class SettingsStore: ObservableObject {
         alertManager.audioAlertEnabled = settings.audioAlertEnabled
         alertManager.visualAlertEnabled = settings.visualAlertEnabled
         alertManager.hapticAlertEnabled = settings.hapticAlertEnabled
+        alertManager.mistakeSound = settings.mistakeSound
     }
 }

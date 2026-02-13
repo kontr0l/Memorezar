@@ -16,6 +16,7 @@ struct ComparatorOptions {
     var ignorePunctuation: Bool = true
     var ignoreFillerWords: Bool = true
     var allowContractions: Bool = true
+    var requireCorrectWord: Bool = true  // Don't advance until correct word is spoken
 
     static let `default` = ComparatorOptions()
 }
@@ -92,7 +93,9 @@ final class WordComparator {
     }()
 
     // Common homophones that should be treated as equivalent
+    // Includes speech recognition variations (how words are often transcribed)
     private static let homophones: [[String]] = [
+        // Classic homophones
         ["their", "there", "they're", "theyre"],
         ["your", "you're", "youre"],
         ["its", "it's"],
@@ -100,7 +103,7 @@ final class WordComparator {
         ["hear", "here"],
         ["no", "know"],
         ["knew", "new"],
-        ["right", "write"],
+        ["right", "write", "rite"],
         ["see", "sea"],
         ["be", "bee"],
         ["by", "buy", "bye"],
@@ -113,6 +116,88 @@ final class WordComparator {
         ["peace", "piece"],
         ["wait", "weight"],
         ["week", "weak"],
+
+        // Speech recognition variations - single letters and their spoken forms
+        ["o", "oh", "owe"],
+        ["i", "eye", "aye"],
+        ["a", "ay", "eh"],
+        ["u", "you"],
+        ["r", "are", "our"],
+        ["c", "see", "sea"],
+        ["b", "be", "bee"],
+        ["t", "tea", "tee"],
+        ["p", "pea", "pee"],
+        ["y", "why"],
+        ["q", "queue", "cue"],
+        ["w", "double-u", "doubleu"],
+
+        // Common speech recognition confusions
+        ["the", "thee", "da"],
+        ["a", "uh", "ah"],
+        ["an", "and"],  // Often confused in fast speech
+        ["of", "off", "ov"],
+        ["or", "ore", "oar"],
+        ["are", "our", "r"],
+        ["we", "wee"],
+        ["in", "inn"],
+        ["so", "sow", "sew"],
+        ["know", "no", "nah"],
+        ["through", "threw", "thru"],
+        ["though", "tho"],
+        ["cause", "'cause", "cuz", "because"],
+        ["gonna", "going to", "gon"],
+        ["wanna", "want to"],
+        ["gotta", "got to"],
+        ["kinda", "kind of"],
+        ["sorta", "sort of"],
+        ["coulda", "could have", "could of"],
+        ["woulda", "would have", "would of"],
+        ["shoulda", "should have", "should of"],
+
+        // Numbers that sound alike
+        ["eight", "ate"],
+        ["2", "to", "too", "two"],
+        ["4", "for", "four", "fore"],
+        ["8", "eight", "ate"],
+
+        // Religious/poetic terms often in memorization
+        ["thee", "the", "thy"],
+        ["thou", "you", "tho"],
+        ["thy", "thigh", "the"],
+        ["unto", "un to", "on to"],
+        ["hath", "has", "have"],
+        ["doth", "does", "do"],
+        ["art", "are"],
+        ["shalt", "shall"],
+        ["hast", "has", "have"],
+        ["ye", "you", "yeah"],
+        ["yea", "yeah", "yay", "yes"],
+        ["nay", "nah", "no"],
+        ["lo", "low"],
+        ["o'er", "over", "oer"],
+        ["ne'er", "never", "neer"],
+        ["e'er", "ever", "eer"],
+        ["'tis", "tis", "it is", "its"],
+        ["'twas", "twas", "it was"],
+
+        // Common proper noun variations
+        ["god", "god's", "gods"],
+        ["lord", "lord's", "lords"],
+        ["christ", "christ's", "christs"],
+
+        // Articles and prepositions that sound similar
+        ["and", "end", "in"],
+        ["than", "then"],
+        ["accept", "except"],
+        ["affect", "effect"],
+        ["weather", "whether"],
+        ["principal", "principle"],
+
+        // Common words that speech recognition gets wrong
+        ["going", "goin'", "goin"],
+        ["something", "somethin'", "somethin"],
+        ["nothing", "nothin'", "nothin"],
+        ["everything", "everythin'", "everythin"],
     ]
 
     // Pre-computed homophone lookup
@@ -184,10 +269,18 @@ final class WordComparator {
             position: currentPosition
         )
 
-        // Advance position regardless of match
-        currentPosition += 1
+        // Advance position based on settings
+        // If requireCorrectWord is enabled, only advance on correct match
+        if isMatch || !options.requireCorrectWord {
+            currentPosition += 1
+        }
 
         return result
+    }
+
+    /// Update comparator options
+    func updateOptions(_ options: ComparatorOptions) {
+        self.options = options
     }
 
     /// Reset to start of text

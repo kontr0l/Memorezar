@@ -16,11 +16,20 @@ final class AlertManager {
     private var audioPlayer: AVAudioPlayer?
     private var hapticEngine: CHHapticEngine?
     private var systemSoundID: SystemSoundID = 0
+    private var cachedSoundData: [MistakeSound: Data] = [:]
+    private var currentSound: MistakeSound = .explosion1
 
     // Alert configuration
     var audioAlertEnabled = true
     var visualAlertEnabled = true
     var hapticAlertEnabled = true
+    var mistakeSound: MistakeSound = .explosion1 {
+        didSet {
+            if mistakeSound != oldValue {
+                prepareSound(mistakeSound)
+            }
+        }
+    }
 
     // Callback for visual alerts (UI must handle this)
     var onVisualAlert: (() -> Void)?
@@ -31,8 +40,9 @@ final class AlertManager {
     // MARK: - Initialization
 
     private init() {
-        prepareAudio()
+        prepareAllSounds()
         prepareHaptics()
+        prepareSound(mistakeSound)
     }
 
     // MARK: - Alert Triggering
@@ -58,32 +68,114 @@ final class AlertManager {
 
     // MARK: - Audio Alert
 
-    private func prepareAudio() {
-        // Method 1: System sound (fastest, ~10ms latency)
-        // Use a built-in system sound for lowest latency
-        // 1057 = Tink sound, 1052 = Tweet, 1016 = Tweet high
-        systemSoundID = 1057
-
-        // Method 2: Custom audio file (backup)
-        if let soundURL = Bundle.main.url(forResource: "mistake_beep", withExtension: "wav") {
-            do {
-                audioPlayer = try AVAudioPlayer(contentsOf: soundURL)
-                audioPlayer?.prepareToPlay()
-                audioPlayer?.volume = 0.7
-                isAudioPrepared = true
-            } catch {
-                print("Failed to prepare audio: \(error)")
+    /// Pre-generate all sound effects for instant playback
+    private func prepareAllSounds() {
+        for sound in MistakeSound.allCases {
+            if let data = generateSoundData(for: sound) {
+                cachedSoundData[sound] = data
             }
         }
     }
 
-    private func triggerAudio() {
-        // Use system sound for minimum latency
-        AudioServicesPlaySystemSound(systemSoundID)
+    /// Prepare a specific sound for playback
+    private func prepareSound(_ sound: MistakeSound) {
+        currentSound = sound
 
-        // Alternative: custom audio
-        // audioPlayer?.play()
-        // audioPlayer?.prepareToPlay() // Re-prepare for next play
+        guard let data = cachedSoundData[sound] else {
+            // Fallback to system sound
+            systemSoundID = 1057
+            return
+        }
+
+        do {
+            audioPlayer = try AVAudioPlayer(data: data)
+            audioPlayer?.prepareToPlay()
+            audioPlayer?.volume = 0.8
+            isAudioPrepared = true
+        } catch {
+            print("Failed to prepare sound: \(error)")
+            // Fallback to system sound
+            systemSoundID = 1057
+        }
+    }
+
+    private func triggerAudio() {
+        if isAudioPrepared, let player = audioPlayer {
+            player.currentTime = 0
+            player.play()
+            // Re-prepare for next play (non-blocking)
+            DispatchQueue.global(qos: .userInitiated).async { [weak player] in
+                player?.prepareToPlay()
+            }
+        } else {
+            // Fallback: system sound
+            AudioServicesPlaySystemSound(systemSoundID)
+        }
+    }
+
+    /// Generate sound data for a specific mistake sound
+    private func generateSoundData(for sound: MistakeSound) -> Data? {
+        let params = sound.soundParameters
+        return generateSound(
+            frequency: params.frequency,
+            duration: params.duration,
+            waveform: params.waveform
+        )
+    }
+
+    /// Generate a sound with specified parameters
+    private func generateSound(frequency: Double, duration: Double, waveform: SoundWaveform) -> Data? {
+        let sampleRate: Double = 44100
+        let frameCount = Int(sampleRate * duration)
+        var samples = [Float](repeating: 0, count: frameCount)
+
+        // Generate waveform
+        for i in 0..<frameCount {
+            let t = Double(i) / sampleRate
+            var sample: Float
+
+            switch waveform {
+            case .sine:
+                sample = Float(sin(2 * .pi * frequency * t))
+            case .square:
+                sample = Float(sin(2 * .pi * frequency * t) > 0 ? 1 : -1)
+            case .noise:
+                // Filtered noise with frequency-based envelope
+                let noise = Float.random(in: -1...1)
+                let envelope = Float(exp(-t * (frequency / 20)))
+                sample = noise * envelope
+            }
+
+            // Apply envelope (attack/decay for punchier sound)
+            let attackFrames = Int(sampleRate * 0.005) // 5ms attack
+            let releaseStart = frameCount - Int(sampleRate * duration * 0.3) // 30% release
+
+            let envelope: Float
+            if i < attackFrames {
+                envelope = Float(i) / Float(attackFrames)
+            } else if i > releaseStart {
+                let releaseProgress = Float(i - releaseStart) / Float(frameCount - releaseStart)
+                envelope = 1.0 - releaseProgress
+            } else {
+                envelope = 1.0
+            }
+
+            samples[i] = sample * envelope * 0.85
+        }
+
+        return createWAVData(samples: samples, sampleRate: Int(sampleRate))
+    }
+
+    /// Preview a sound (for settings screen)
+    func previewSound(_ sound: MistakeSound) {
+        guard let data = cachedSoundData[sound] else { return }
+        do {
+            let previewPlayer = try AVAudioPlayer(data: data)
+            previewPlayer.volume = 0.8
+            previewPlayer.play()
+        } catch {
+            print("Failed to preview sound: \(error)")
+        }
     }
 
     // MARK: - Haptic Feedback

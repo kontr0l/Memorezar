@@ -15,6 +15,22 @@ struct SettingsScreen: View {
                         Label("Sound Alert", systemImage: "speaker.wave.2.fill")
                     }
 
+                    if settingsStore.settings.audioAlertEnabled {
+                        Picker(selection: $settingsStore.settings.mistakeSound) {
+                            ForEach(MistakeSound.allCases, id: \.self) { sound in
+                                Text(sound.displayName).tag(sound)
+                            }
+                        } label: {
+                            Label("Sound Effect", systemImage: "waveform")
+                        }
+
+                        Button {
+                            AlertManager.shared.previewSound(settingsStore.settings.mistakeSound)
+                        } label: {
+                            Label("Preview Sound", systemImage: "play.circle")
+                        }
+                    }
+
                     Toggle(isOn: $settingsStore.settings.visualAlertEnabled) {
                         Label("Visual Flash", systemImage: "lightbulb.fill")
                     }
@@ -27,7 +43,7 @@ struct SettingsScreen: View {
                     Button {
                         AlertManager.shared.triggerMistakeAlert()
                     } label: {
-                        Label("Test Alert", systemImage: "play.circle")
+                        Label("Test All Alerts", systemImage: "bell.badge")
                     }
                 } header: {
                     Text("Alerts")
@@ -68,6 +84,26 @@ struct SettingsScreen: View {
                         Label("Progress Bar", systemImage: "chart.bar.fill")
                     }
 
+                    Picker(selection: $settingsStore.settings.wordVisibility) {
+                        ForEach(WordVisibility.allCases, id: \.self) { visibility in
+                            Text(visibility.rawValue).tag(visibility)
+                        }
+                    } label: {
+                        Label("Word Visibility", systemImage: "eye")
+                    }
+
+                    if settingsStore.settings.wordVisibility == .partial {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Label("Reveal Percentage", systemImage: "percent")
+                                Spacer()
+                                Text("\(Int(settingsStore.settings.wordRevealPercentage))%")
+                                    .foregroundColor(.secondary)
+                            }
+                            Slider(value: $settingsStore.settings.wordRevealPercentage, in: 0...100, step: 5)
+                        }
+                    }
+
                     Picker(selection: $settingsStore.settings.fontSize) {
                         ForEach(FontSize.allCases, id: \.self) { size in
                             Text(size.rawValue).tag(size)
@@ -85,10 +121,16 @@ struct SettingsScreen: View {
                     }
                 } header: {
                     Text("Display")
+                } footer: {
+                    Text("Word Visibility controls whether words are shown before you speak them. Use 'Hide Until Spoken' for a memory challenge or 'Partial Reveal' to show a percentage of words.")
                 }
 
                 // Practice Settings
                 Section {
+                    Toggle(isOn: $settingsStore.settings.requireCorrectWord) {
+                        Label("Require Correct Word", systemImage: "checkmark.circle")
+                    }
+
                     Toggle(isOn: $settingsStore.settings.showHints) {
                         Label("Show Hints", systemImage: "lightbulb.max.fill")
                     }
@@ -110,7 +152,7 @@ struct SettingsScreen: View {
                 } header: {
                     Text("Practice")
                 } footer: {
-                    Text("Hints show the next expected word after a delay. Auto-restart begins a new session when you complete a quote.")
+                    Text("When 'Require Correct Word' is enabled, you must say the correct word before moving on. Hints show the next expected word after a delay.")
                 }
 
                 // Statistics
@@ -196,7 +238,7 @@ struct SettingsScreen: View {
             .alert("Delete All Data", isPresented: $showingDeleteDataAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
-                    // Note: Would need to add a method to QuoteStore to clear all data
+                    quoteStore.clearAllData()
                 }
             } message: {
                 Text("This will delete all your quotes, practice history, and statistics. This action cannot be undone.")
