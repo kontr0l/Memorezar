@@ -187,8 +187,11 @@ final class SpeechRecognitionService: NSObject {
 
         if isFinal {
             // Final result - process all words from where we left off
-            for i in lastProcessedWordCount..<words.count {
-                delegate?.speechRecognition(didRecognizeWord: words[i], isFinal: true)
+            // Guard against transcript revision where word count decreased
+            if lastProcessedWordCount < words.count {
+                for i in lastProcessedWordCount..<words.count {
+                    delegate?.speechRecognition(didRecognizeWord: words[i], isFinal: true)
+                }
             }
             lastProcessedWordCount = 0
             previousTranscript = ""
@@ -197,10 +200,15 @@ final class SpeechRecognitionService: NSObject {
             // Words are considered stable if they're not the last word (still being spoken)
             let stableWordCount = max(0, words.count - 1)
 
-            for i in lastProcessedWordCount..<stableWordCount {
-                delegate?.speechRecognition(didRecognizeWord: words[i], isFinal: false)
+            // Only process if we have new stable words
+            // Note: transcript can shrink during speech recognition revision
+            if stableWordCount > lastProcessedWordCount {
+                for i in lastProcessedWordCount..<stableWordCount {
+                    delegate?.speechRecognition(didRecognizeWord: words[i], isFinal: false)
+                }
             }
 
+            // Always update to current stable count (handles both growth and shrinkage)
             lastProcessedWordCount = stableWordCount
             previousTranscript = transcript
         }
