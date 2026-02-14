@@ -36,6 +36,11 @@ final class WordComparator {
     private(set) var currentPosition: Int = 0
     private var options: ComparatorOptions
 
+    // Compound word buffer - holds partial word when speech recognition splits a compound word
+    private var compoundBuffer: String? = nil
+    private var compoundBufferTimestamp: Date? = nil
+    private static let compoundBufferTimeout: TimeInterval = 1.5 // seconds to wait for second part
+
     // Pre-computed for performance
     private static let fillerWords: Set<String> = ["um", "uh", "er", "ah", "like", "you", "know", "so", "well", "actually"]
     private static let punctuationCharacters = CharacterSet.punctuationCharacters
@@ -96,6 +101,7 @@ final class WordComparator {
     // Includes speech recognition variations (how words are often transcribed)
     private static let homophones: [[String]] = [
         // Classic homophones
+        ["maid", "made"],
         ["their", "there", "they're", "theyre"],
         ["your", "you're", "youre"],
         ["its", "it's"],
@@ -244,6 +250,8 @@ final class WordComparator {
 
         // Check if we've reached the end
         guard currentPosition < targetWords.count else {
+            compoundBuffer = nil
+            compoundBufferTimestamp = nil
             return ComparisonResult(
                 isMatch: false,
                 expectedWord: "[END]",
@@ -257,11 +265,117 @@ final class WordComparator {
         let expectedWord = targetWords[currentPosition]
         let normalizedExpected = normalizedTargetWords[currentPosition]
 
-        // Check for match (including homophone and contraction handling)
+        // --- Compound word handling ---
+        // If we have a buffered partial word, try combining it with the new spoken word
+        if let buffered = compoundBuffer {
+            let combined = buffered + normalizedSpoken
+            let combinedFull = buffered + spokenWord
+
+            // Check if the combined word matches the expected word
+            if checkMatch(spoken: combined, expected: normalizedExpected) {
+                compoundBuffer = nil
+                compoundBufferTimestamp = nil
+
+                let result = ComparisonResult(
+                    isMatch: true,
+                    expectedWord: expectedWord,
+                    spokenWord: combinedFull,
+                    normalizedExpected: normalizedExpected,
+                    normalizedSpoken: combined,
+                    position: currentPosition
+                )
+
+                currentPosition += 1
+                return result
+            }
+
+            // Combined word doesn't match. Check if the buffer has timed out.
+            let timedOut = compoundBufferTimestamp.map {
+                Date().timeIntervalSince($0) > Self.compoundBufferTimeout
+            } ?? true
+
+            if timedOut {
+                // Buffer timed out — the buffered word was genuinely wrong.
+                // Emit a mismatch for the buffered word, then clear buffer
+                // and re-process the current spoken word on next call.
+                compoundBuffer = nil
+                compoundBufferTimestamp = nil
+
+                let result = ComparisonResult(
+                    isMatch: false,
+                    expectedWord: expectedWord,
+                    spokenWord: buffered,
+                    normalizedExpected: normalizedExpected,
+                    normalizedSpoken: buffered,
+                    position: currentPosition
+                )
+
+                if !options.requireCorrectWord {
+                    currentPosition += 1
+                }
+
+                // Re-process the current word by recursing (it wasn't consumed)
+                // We do this after returning the mismatch for the buffer
+                return result
+            }
+
+            // Not timed out but combined doesn't match — check if the expected word
+            // still starts with the combined text (keep buffering)
+            if normalizedExpected.hasPrefix(combined) {
+                compoundBuffer = combined
+                return nil // Still buffering, no result yet
+            }
+
+            // Combined doesn't match and isn't a prefix — the buffer was wrong
+            compoundBuffer = nil
+            compoundBufferTimestamp = nil
+
+            let result = ComparisonResult(
+                isMatch: false,
+                expectedWord: expectedWord,
+                spokenWord: buffered,
+                normalizedExpected: normalizedExpected,
+                normalizedSpoken: buffered,
+                position: currentPosition
+            )
+
+            if !options.requireCorrectWord {
+                currentPosition += 1
+            }
+
+            return result
+        }
+
+        // --- Normal (non-buffered) comparison ---
+
+        // Check for direct match (including homophone and contraction handling)
         let isMatch = checkMatch(spoken: normalizedSpoken, expected: normalizedExpected)
 
+        if isMatch {
+            let result = ComparisonResult(
+                isMatch: true,
+                expectedWord: expectedWord,
+                spokenWord: spokenWord,
+                normalizedExpected: normalizedExpected,
+                normalizedSpoken: normalizedSpoken,
+                position: currentPosition
+            )
+            currentPosition += 1
+            return result
+        }
+
+        // Not a direct match — check if this could be the start of a compound word.
+        // If the expected word starts with the spoken word (or a homophone of it),
+        // buffer the spoken word and wait for the next part.
+        if isCompoundWordPrefix(spoken: normalizedSpoken, expected: normalizedExpected) {
+            compoundBuffer = normalizedSpoken
+            compoundBufferTimestamp = Date()
+            return nil // Buffering — no result yet
+        }
+
+        // Definite mismatch
         let result = ComparisonResult(
-            isMatch: isMatch,
+            isMatch: false,
             expectedWord: expectedWord,
             spokenWord: spokenWord,
             normalizedExpected: normalizedExpected,
@@ -269,9 +383,7 @@ final class WordComparator {
             position: currentPosition
         )
 
-        // Advance position based on settings
-        // If requireCorrectWord is enabled, only advance on correct match
-        if isMatch || !options.requireCorrectWord {
+        if !options.requireCorrectWord {
             currentPosition += 1
         }
 
@@ -286,6 +398,8 @@ final class WordComparator {
     /// Reset to start of text
     func reset() {
         currentPosition = 0
+        compoundBuffer = nil
+        compoundBufferTimestamp = nil
     }
 
     /// Get total word count
@@ -338,6 +452,58 @@ final class WordComparator {
     /// Check if a word is a filler word
     private func isFillerWord(_ word: String) -> Bool {
         Self.fillerWords.contains(word.lowercased())
+    }
+
+    /// Check if the spoken word could be the start of a compound target word.
+    /// e.g., spoken "maid" could be the start of target "maidservant"
+    /// Also checks homophones of the spoken word (e.g., "made" → "maid" prefix of "maidservant")
+    private func isCompoundWordPrefix(spoken: String, expected: String) -> Bool {
+        // Only consider this if the expected word is meaningfully longer than spoken
+        guard expected.count > spoken.count + 1 else { return false }
+
+        // Direct prefix check
+        if expected.hasPrefix(spoken) {
+            return true
+        }
+
+        // Check if any homophone of the spoken word is a prefix of the expected word
+        if let homophoneGroup = Self.homophoneLookup[spoken] {
+            for homophone in homophoneGroup {
+                if homophone != spoken && expected.hasPrefix(homophone) {
+                    return true
+                }
+            }
+        }
+
+        return false
+    }
+
+    /// Flush the compound buffer, returning a mismatch result if there was buffered content.
+    /// Call this when you know the buffer can't complete (e.g., recognition ended).
+    func flushCompoundBuffer() -> ComparisonResult? {
+        guard let buffered = compoundBuffer else { return nil }
+        compoundBuffer = nil
+        compoundBufferTimestamp = nil
+
+        guard currentPosition < targetWords.count else { return nil }
+
+        let expectedWord = targetWords[currentPosition]
+        let normalizedExpected = normalizedTargetWords[currentPosition]
+
+        let result = ComparisonResult(
+            isMatch: false,
+            expectedWord: expectedWord,
+            spokenWord: buffered,
+            normalizedExpected: normalizedExpected,
+            normalizedSpoken: buffered,
+            position: currentPosition
+        )
+
+        if !options.requireCorrectWord {
+            currentPosition += 1
+        }
+
+        return result
     }
 
     /// Check if spoken word matches expected word (handles contractions and homophones)

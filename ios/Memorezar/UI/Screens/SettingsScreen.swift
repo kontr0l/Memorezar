@@ -74,6 +74,14 @@ struct SettingsScreen: View {
                         Label("Haptic Feedback", systemImage: "iphone.radiowaves.left.and.right")
                     }
 
+                    if settingsStore.settings.hapticAlertEnabled {
+                        Button {
+                            AlertManager.shared.testHaptic()
+                        } label: {
+                            Label("Test Haptic Feedback", systemImage: "hand.tap")
+                        }
+                    }
+
                     // Test alert button
                     Button {
                         AlertManager.shared.triggerMistakeAlert()

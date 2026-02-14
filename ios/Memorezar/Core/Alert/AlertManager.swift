@@ -16,6 +16,7 @@ final class AlertManager {
     private var audioPlayer: AVAudioPlayer?
     private var correctWordPlayer: AVAudioPlayer?
     private var completionPlayer: AVAudioPlayer?
+    private var previewPlayer: AVAudioPlayer?  // Retained for preview playback (ARC protection)
     private var hapticEngine: CHHapticEngine?
     private var systemSoundID: SystemSoundID = 0
     private var cachedMistakeSoundData: [MistakeSound: Data] = [:]
@@ -60,11 +61,23 @@ final class AlertManager {
     // MARK: - Initialization
 
     private init() {
+        configureAudioSession()
         prepareAllSounds()
         prepareHaptics()
         prepareSound(mistakeSound)
         prepareCorrectWordSound(correctWordSound)
         prepareCompletionSound(completionSound)
+    }
+
+    /// Configure the audio session so sounds play even when not recording
+    private func configureAudioSession() {
+        do {
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            try session.setActive(true)
+        } catch {
+            print("Failed to configure audio session: \(error)")
+        }
     }
 
     // MARK: - Alert Triggering
@@ -266,10 +279,12 @@ final class AlertManager {
     /// Preview a mistake sound (for settings screen)
     func previewSound(_ sound: MistakeSound) {
         guard let data = cachedMistakeSoundData[sound] else { return }
+        configureAudioSession()
         do {
-            let previewPlayer = try AVAudioPlayer(data: data)
-            previewPlayer.volume = 0.8
-            previewPlayer.play()
+            previewPlayer = try AVAudioPlayer(data: data)
+            previewPlayer?.volume = 0.8
+            previewPlayer?.prepareToPlay()
+            previewPlayer?.play()
         } catch {
             print("Failed to preview sound: \(error)")
         }
@@ -278,10 +293,12 @@ final class AlertManager {
     /// Preview a correct word sound (for settings screen)
     func previewCorrectSound(_ sound: CorrectWordSound) {
         guard sound != .none, let data = cachedCorrectSoundData[sound] else { return }
+        configureAudioSession()
         do {
-            let previewPlayer = try AVAudioPlayer(data: data)
-            previewPlayer.volume = 0.5
-            previewPlayer.play()
+            previewPlayer = try AVAudioPlayer(data: data)
+            previewPlayer?.volume = 0.5
+            previewPlayer?.prepareToPlay()
+            previewPlayer?.play()
         } catch {
             print("Failed to preview sound: \(error)")
         }
@@ -290,10 +307,12 @@ final class AlertManager {
     /// Preview a completion sound (for settings screen)
     func previewCompletionSound(_ sound: CompletionSound) {
         guard sound != .none, let data = cachedCompletionSoundData[sound] else { return }
+        configureAudioSession()
         do {
-            let previewPlayer = try AVAudioPlayer(data: data)
-            previewPlayer.volume = 0.9
-            previewPlayer.play()
+            previewPlayer = try AVAudioPlayer(data: data)
+            previewPlayer?.volume = 0.9
+            previewPlayer?.prepareToPlay()
+            previewPlayer?.play()
         } catch {
             print("Failed to preview sound: \(error)")
         }
@@ -370,6 +389,11 @@ final class AlertManager {
         let generator = UINotificationFeedbackGenerator()
         generator.prepare()
         generator.notificationOccurred(.error)
+    }
+
+    /// Test haptic feedback (for settings screen)
+    func testHaptic() {
+        triggerHaptic()
     }
 
     // MARK: - Visual Alert Helpers

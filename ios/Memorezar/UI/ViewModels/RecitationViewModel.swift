@@ -299,10 +299,15 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
     private func processWord(_ word: String) {
         guard let result = comparator.compareWord(word) else {
-            // Word was filtered (filler word)
+            // Word was filtered (filler word) or buffered for compound word matching
             return
         }
 
+        processComparisonResult(result)
+    }
+
+    /// Process a comparison result (from either direct comparison or flushed compound buffer)
+    private func processComparisonResult(_ result: ComparisonResult) {
         let previousPosition = currentPosition
 
         // Update word state based on match result
@@ -395,6 +400,11 @@ extension RecitationViewModel: SpeechRecognitionDelegate {
     nonisolated func speechRecognitionDidEnd() {
         Task { @MainActor in
             // Recognition ended (possibly due to silence)
+            // Flush any buffered compound word — if speech stopped, the partial word
+            // won't be completed, so treat it as a mismatch.
+            if let result = comparator.flushCompoundBuffer() {
+                processComparisonResult(result)
+            }
             // The speech service auto-restarts if still listening
         }
     }
