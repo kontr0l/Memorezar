@@ -29,6 +29,7 @@ final class SpeechRecognitionService: NSObject {
 
     private var lastProcessedWordCount = 0
     private var previousTranscript = ""
+    private var lastProcessedWord = ""  // Track the last word we processed to detect revisions
 
     private(set) var isListening = false
 
@@ -101,6 +102,7 @@ final class SpeechRecognitionService: NSObject {
         // Reset tracking
         lastProcessedWordCount = 0
         previousTranscript = ""
+        lastProcessedWord = ""
 
         // Start recognition task
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
@@ -151,6 +153,7 @@ final class SpeechRecognitionService: NSObject {
         isListening = false
         lastProcessedWordCount = 0
         previousTranscript = ""
+        lastProcessedWord = ""
 
         // Deactivate audio session
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -195,21 +198,34 @@ final class SpeechRecognitionService: NSObject {
             }
             lastProcessedWordCount = 0
             previousTranscript = ""
+            lastProcessedWord = ""
         } else {
-            // Interim result - process new "stable" words
-            // Words are considered stable if they're not the last word (still being spoken)
-            let stableWordCount = max(0, words.count - 1)
+            // Interim result - process ALL words including the last one
+            // This eliminates the 1-word lag that occurs when waiting for "stable" words
+            // The comparator handles any revisions (changed words) appropriately
 
-            // Only process if we have new stable words
-            // Note: transcript can shrink during speech recognition revision
-            if stableWordCount > lastProcessedWordCount {
-                for i in lastProcessedWordCount..<stableWordCount {
+            // Handle transcript revision (word count can decrease if recognizer revises)
+            if words.count < lastProcessedWordCount {
+                lastProcessedWordCount = words.count
+            }
+
+            // Process any new words
+            if words.count > lastProcessedWordCount {
+                for i in lastProcessedWordCount..<words.count {
                     delegate?.speechRecognition(didRecognizeWord: words[i], isFinal: false)
+                }
+                lastProcessedWordCount = words.count
+                lastProcessedWord = words.last ?? ""
+            } else if words.count > 0 && words.count == lastProcessedWordCount {
+                // Same word count - check if the last word was revised by the recognizer
+                let currentLastWord = words[words.count - 1]
+                if currentLastWord != lastProcessedWord && !lastProcessedWord.isEmpty {
+                    // Last word changed - reprocess it (handles partial word completion)
+                    delegate?.speechRecognition(didRecognizeWord: currentLastWord, isFinal: false)
+                    lastProcessedWord = currentLastWord
                 }
             }
 
-            // Always update to current stable count (handles both growth and shrinkage)
-            lastProcessedWordCount = stableWordCount
             previousTranscript = transcript
         }
     }

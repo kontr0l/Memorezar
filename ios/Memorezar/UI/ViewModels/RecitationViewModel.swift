@@ -164,26 +164,15 @@ final class RecitationViewModel: NSObject, ObservableObject {
             return true
         }
 
-        // For pending words, check if they're revealed by the slider
-        // The revealPercentage slider controls visibility for all pending words
+        // For pending words, the slider controls visibility
+        // When slider is at 0%, hide all pending words
+        // When slider is > 0%, show only revealed words
         if revealPercentage > 0 {
             return wordState.isRevealed
         }
 
-        // If revealPercentage is 0, check the visibility mode from settings
-        guard let settings = settingsStore else { return true }
-
-        switch settings.wordVisibility {
-        case .showAll:
-            // If slider is at 0% but mode is showAll, show all
-            return true
-        case .hideUntilSpoken:
-            // Hide until spoken
-            return false
-        case .partial:
-            // Show if pre-revealed
-            return wordState.isRevealed
-        }
+        // revealPercentage is 0 - hide all pending words
+        return false
     }
 
     private func setupAlertManager() {
@@ -223,8 +212,10 @@ final class RecitationViewModel: NSObject, ObservableObject {
     }
 
     func pause() {
-        speechService.stopListening()
+        // Set isListening to false BEFORE stopping speech service
+        // This ensures any pending speech callbacks will be ignored
         isListening = false
+        speechService.stopListening()
         stopHintTimer()
     }
 
@@ -242,11 +233,17 @@ final class RecitationViewModel: NSObject, ObservableObject {
         showResults = false
         previousWordWasMistake = false
 
-        // Reset word states
+        // Reset word states and revealed flags
         for i in words.indices {
             words[i].state = i == 0 ? .current : .pending
+            words[i].isRevealed = false
         }
         currentPosition = 0
+
+        // Re-apply reveal percentage if set (re-randomizes revealed words)
+        if revealPercentage > 0 {
+            applyRevealPercentage()
+        }
     }
 
     // MARK: - Hints
@@ -298,6 +295,9 @@ final class RecitationViewModel: NSObject, ObservableObject {
     // MARK: - Word Processing
 
     private func processWord(_ word: String) {
+        // Ignore words if not actively listening (e.g., after reset)
+        guard isListening else { return }
+
         guard let result = comparator.compareWord(word) else {
             // Word was filtered (filler word) or buffered for compound word matching
             return
@@ -386,6 +386,8 @@ final class RecitationViewModel: NSObject, ObservableObject {
 extension RecitationViewModel: SpeechRecognitionDelegate {
     nonisolated func speechRecognition(didRecognizeWord word: String, isFinal: Bool) {
         Task { @MainActor in
+            // Guard against processing after reset/stop
+            guard self.isListening else { return }
             processWord(word)
         }
     }
@@ -399,13 +401,15 @@ extension RecitationViewModel: SpeechRecognitionDelegate {
 
     nonisolated func speechRecognitionDidEnd() {
         Task { @MainActor in
+            // Guard against processing after reset/stop
+            guard self.isListening else { return }
+
             // Recognition ended (possibly due to silence)
             // Flush any buffered compound word — if speech stopped, the partial word
             // won't be completed, so treat it as a mismatch.
             if let result = comparator.flushCompoundBuffer() {
                 processComparisonResult(result)
             }
-            // The speech service auto-restarts if still listening
         }
     }
 }
