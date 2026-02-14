@@ -266,6 +266,19 @@ final class WordComparator {
         let normalizedExpected = normalizedTargetWords[currentPosition]
 
         // --- Compound word handling ---
+
+        // First, check if this word is a REVISION of the buffered word (speech recognizer
+        // revised a partial word to a complete word). This happens when:
+        // - We have "glor" buffered and receive "glorious"
+        // - "glorious" starts with "glor" → this is a revision, not a second word
+        // In this case, clear the buffer and process the new word as the complete word.
+        if let buffered = compoundBuffer, normalizedSpoken.hasPrefix(buffered) && normalizedSpoken.count > buffered.count {
+            // This is a revision of the partial word, not a new word to combine
+            compoundBuffer = nil
+            compoundBufferTimestamp = nil
+            // Fall through to normal comparison with the revised (complete) word
+        }
+
         // If we have a buffered partial word, try combining it with the new spoken word
         if let buffered = compoundBuffer {
             let combined = buffered + normalizedSpoken
