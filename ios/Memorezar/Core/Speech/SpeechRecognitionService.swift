@@ -74,8 +74,9 @@ final class SpeechRecognitionService: NSObject {
         stopListening()
 
         // Configure audio session for low latency
+        // Use .playAndRecord to allow both speech recognition and alert sounds
         let audioSession = AVAudioSession.sharedInstance()
-        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+        try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
 
         // Set preferred buffer duration for lower latency (smaller = faster but more CPU)
@@ -108,7 +109,22 @@ final class SpeechRecognitionService: NSObject {
 
         // Configure audio input
         let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        var recordingFormat = inputNode.outputFormat(forBus: 0)
+
+        // Validate the recording format - crash occurs if channelCount is 0
+        if recordingFormat.channelCount == 0 {
+            // Get a valid format from the input node's input format or use a standard format
+            let inputFormat = inputNode.inputFormat(forBus: 0)
+            if inputFormat.channelCount > 0 {
+                recordingFormat = inputFormat
+            } else {
+                // Use standard mono format as fallback
+                guard let standardFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1) else {
+                    throw SpeechError.requestCreationFailed
+                }
+                recordingFormat = standardFormat
+            }
+        }
 
         // Install tap to capture audio - use small buffer for lower latency
         inputNode.installTap(onBus: 0, bufferSize: 256, format: recordingFormat) { [weak self] buffer, _ in

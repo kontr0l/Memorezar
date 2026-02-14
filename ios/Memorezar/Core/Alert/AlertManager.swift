@@ -69,11 +69,12 @@ final class AlertManager {
         prepareCompletionSound(completionSound)
     }
 
-    /// Configure the audio session so sounds play even when not recording
+    /// Configure the audio session so sounds play even when recording
     private func configureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+            // Use .playAndRecord to allow both alert sounds and speech recognition
+            try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker])
             try session.setActive(true)
         } catch {
             print("Failed to configure audio session: \(error)")
