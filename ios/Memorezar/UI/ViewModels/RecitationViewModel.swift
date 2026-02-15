@@ -256,7 +256,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
     private func startHintTimer() {
         stopHintTimer()
-        let delay = settingsStore?.hintDelay ?? 3.0
+        let delay = settingsStore?.hintDelay ?? 5.0
         hintTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.showHint = true

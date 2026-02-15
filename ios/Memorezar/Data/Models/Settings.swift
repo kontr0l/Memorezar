@@ -28,7 +28,7 @@ struct AppSettings: Codable {
     // Practice settings
     var autoRestartOnCompletion: Bool = false
     var showHints: Bool = true
-    var hintDelay: Double = 3.0 // Seconds before showing hint
+    var hintDelay: Double = 5.0 // Seconds before showing hint
     var requireCorrectWord: Bool = true // Stay on word until spoken correctly
 
     static let `default` = AppSettings()
