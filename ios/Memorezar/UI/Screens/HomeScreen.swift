@@ -60,7 +60,7 @@ struct HomeScreen: View {
                 .font(.system(size: 60))
                 .foregroundStyle(.blue.gradient)
 
-            Text("Train Your Memory")
+            Text("Train Your Memory v1")
                 .font(.title.bold())
 
             Text("Get instant feedback as you recite from memory")
