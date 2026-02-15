@@ -491,32 +491,20 @@ final class WordComparator {
         return false
     }
 
-    /// Flush the compound buffer, returning a mismatch result if there was buffered content.
-    /// Call this when you know the buffer can't complete (e.g., recognition ended).
+    /// Flush the compound buffer when speech recognition ends.
+    /// If the buffer contains a prefix of the expected word (which it always does if buffered),
+    /// we silently discard it rather than counting as a mistake - the user likely said the word
+    /// but speech recognition was incomplete. They can try again.
     func flushCompoundBuffer() -> ComparisonResult? {
-        guard let buffered = compoundBuffer else { return nil }
+        guard compoundBuffer != nil else { return nil }
+
+        // Silently discard the buffer - it was a prefix of the expected word,
+        // so this was likely incomplete speech recognition, not a real mistake.
+        // The user will try again.
         compoundBuffer = nil
         compoundBufferTimestamp = nil
 
-        guard currentPosition < targetWords.count else { return nil }
-
-        let expectedWord = targetWords[currentPosition]
-        let normalizedExpected = normalizedTargetWords[currentPosition]
-
-        let result = ComparisonResult(
-            isMatch: false,
-            expectedWord: expectedWord,
-            spokenWord: buffered,
-            normalizedExpected: normalizedExpected,
-            normalizedSpoken: buffered,
-            position: currentPosition
-        )
-
-        if !options.requireCorrectWord {
-            currentPosition += 1
-        }
-
-        return result
+        return nil
     }
 
     /// Check if spoken word matches expected word (handles contractions and homophones)

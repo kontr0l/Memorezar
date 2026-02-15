@@ -54,7 +54,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
     }
 
     var mistakeCount: Int {
-        words.filter { $0.state == .incorrect }.count
+        mistakes.count
     }
 
     var hintWord: String? {
@@ -159,13 +159,14 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
         let wordState = words[index]
 
-        // Already spoken words (correct/incorrect) are always visible
-        if wordState.state == .correct || wordState.state == .incorrect {
+        // Correctly spoken words are always visible
+        if wordState.state == .correct {
             return true
         }
 
-        // Current word is only visible if hint is active OR it was pre-revealed
-        if wordState.state == .current {
+        // Current word (or incorrect current word) is only visible if hint is active OR it was pre-revealed
+        // This keeps the word hidden even when spoken incorrectly - only reveal via hint
+        if wordState.state == .current || wordState.state == .incorrect {
             return showHint || wordState.isRevealed
         }
 
