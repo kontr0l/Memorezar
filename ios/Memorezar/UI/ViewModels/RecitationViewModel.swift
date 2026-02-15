@@ -159,9 +159,14 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
         let wordState = words[index]
 
-        // Already spoken words (correct/incorrect) and current word are always visible
-        if wordState.state == .correct || wordState.state == .incorrect || wordState.state == .current {
+        // Already spoken words (correct/incorrect) are always visible
+        if wordState.state == .correct || wordState.state == .incorrect {
             return true
+        }
+
+        // Current word is only visible if hint is active OR it was pre-revealed
+        if wordState.state == .current {
+            return showHint || wordState.isRevealed
         }
 
         // For pending words, the slider controls visibility
