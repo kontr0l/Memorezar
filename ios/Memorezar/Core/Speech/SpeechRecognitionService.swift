@@ -31,6 +31,12 @@ final class SpeechRecognitionService: NSObject {
     private var previousTranscript = ""
     private var lastProcessedWord = ""  // Track the last word we processed to detect revisions
 
+    // Debounce mechanism for word revisions
+    // When speech recognition revises a word, we wait for it to "settle" before sending
+    private var pendingWord: String?
+    private var pendingWordTimer: Timer?
+    private static let revisionDebounceInterval: TimeInterval = 0.15 // 150ms stability window
+
     private(set) var isListening = false
 
     // MARK: - Initialization
@@ -103,6 +109,9 @@ final class SpeechRecognitionService: NSObject {
         lastProcessedWordCount = 0
         previousTranscript = ""
         lastProcessedWord = ""
+        pendingWord = nil
+        pendingWordTimer?.invalidate()
+        pendingWordTimer = nil
 
         // Start recognition task
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { [weak self] result, error in
@@ -141,6 +150,9 @@ final class SpeechRecognitionService: NSObject {
     }
 
     func stopListening() {
+        // Flush any pending word before stopping
+        flushPendingWord()
+
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
 
@@ -154,6 +166,9 @@ final class SpeechRecognitionService: NSObject {
         lastProcessedWordCount = 0
         previousTranscript = ""
         lastProcessedWord = ""
+        pendingWord = nil
+        pendingWordTimer?.invalidate()
+        pendingWordTimer = nil
 
         // Deactivate audio session
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
@@ -192,7 +207,10 @@ final class SpeechRecognitionService: NSObject {
         // For final results, we process all remaining words
 
         if isFinal {
-            // Final result - process all words from where we left off
+            // Final result - flush any pending revision first
+            flushPendingWord()
+
+            // Process all words from where we left off
             // Guard against transcript revision where word count decreased
             if lastProcessedWordCount < words.count {
                 for i in lastProcessedWordCount..<words.count {
@@ -216,6 +234,9 @@ final class SpeechRecognitionService: NSObject {
 
             // Process any new words
             if words.count > lastProcessedWordCount {
+                // New word(s) arrived - flush any pending revision first
+                flushPendingWord()
+
                 for i in lastProcessedWordCount..<words.count {
                     print("[SPEECH] → SEND (new): \"\(words[i])\"")
                     delegate?.speechRecognition(didRecognizeWord: words[i], isFinal: false)
@@ -226,14 +247,49 @@ final class SpeechRecognitionService: NSObject {
                 // Same word count - check if the last word was revised by the recognizer
                 let currentLastWord = words[words.count - 1]
                 if currentLastWord != lastProcessedWord && !lastProcessedWord.isEmpty {
-                    // Last word changed - reprocess it (handles partial word completion)
-                    print("[SPEECH] → SEND (revision): \"\(currentLastWord)\" (was \"\(lastProcessedWord)\")")
-                    delegate?.speechRecognition(didRecognizeWord: currentLastWord, isFinal: false)
+                    // Last word changed - this is a revision (speech recognizer refining its guess)
+                    // Don't send immediately - debounce to let the word "settle"
+                    print("[SPEECH] ⏳ REVISION: \"\(currentLastWord)\" (was \"\(lastProcessedWord)\") - debouncing...")
                     lastProcessedWord = currentLastWord
+                    scheduleRevisionSend(word: currentLastWord)
                 }
             }
 
             previousTranscript = transcript
+        }
+    }
+
+    /// Schedule a debounced send for a revised word.
+    /// If the word is revised again before the timer fires, the timer restarts.
+    /// This prevents multiple alerts when speech recognition refines its transcription.
+    private func scheduleRevisionSend(word: String) {
+        // Cancel any existing timer
+        pendingWordTimer?.invalidate()
+
+        // Store the pending word
+        pendingWord = word
+
+        // Schedule new timer
+        pendingWordTimer = Timer.scheduledTimer(withTimeInterval: Self.revisionDebounceInterval, repeats: false) { [weak self] _ in
+            guard let self = self, let word = self.pendingWord else { return }
+
+            print("[SPEECH] → SEND (settled): \"\(word)\"")
+            self.delegate?.speechRecognition(didRecognizeWord: word, isFinal: false)
+
+            self.pendingWord = nil
+            self.pendingWordTimer = nil
+        }
+    }
+
+    /// Flush any pending word immediately (called when recognition ends or new word arrives)
+    private func flushPendingWord() {
+        pendingWordTimer?.invalidate()
+        pendingWordTimer = nil
+
+        if let word = pendingWord {
+            print("[SPEECH] → SEND (flushed): \"\(word)\"")
+            delegate?.speechRecognition(didRecognizeWord: word, isFinal: false)
+            pendingWord = nil
         }
     }
 }

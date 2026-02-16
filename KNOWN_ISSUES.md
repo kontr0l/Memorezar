@@ -10,7 +10,7 @@ This document tracks known issues, bugs, workarounds, and ongoing investigations
 
 | Issue | Status | Description | Workaround |
 |-------|--------|-------------|------------|
-| SPEECH-001 | open | Duplicate word sends on transcript revision cause phantom mistakes | None - fix was reverted |
+| SPEECH-001 | investigating | Duplicate word sends on transcript revision cause phantom mistakes | Debounce fix implemented - testing |
 
 #### SPEECH-001: Partial Word Revisions Cause Cascading Mistakes
 
@@ -25,40 +25,52 @@ This document tracks known issues, bugs, workarounds, and ongoing investigations
 - Example: Saying "Juxtaposition" → 4 mistakes (word never matches because position advances)
 - Each partial transcription is compared against a DIFFERENT expected word
 
-**Root Cause (VERIFIED BY LOGS):**
-TWO interacting problems:
-1. **Speech service sends every partial transcription** as the recognizer refines its output
-2. **Comparator advances position on mismatch** instead of staying put
+**Root Cause (CORRECTED ANALYSIS - Feb 2026):**
 
-**Actual log from saying "Juxtaposition":**
+The problem is more nuanced than initially documented. After analyzing the actual code:
+
+**What happens with default settings (`requireCorrectWord = true`):**
+1. **Speech service sends every partial transcription** (lines 225-233) as the recognizer refines output
+2. **Comparator does NOT advance position on mismatch** - with default options, position only advances on MATCH
+3. **BUT each partial triggers a mismatch alert** at the SAME position
+4. **Compound buffer only helps for TRUE prefixes** - "Juxta" is a prefix of "juxtaposition", but "Just" and "Jax" are NOT
+
+**Actual flow when saying "Juxtaposition" (expected word at pos 0):**
 ```
-[SPEECH] INTERIM: "Just" | words=1 lastProcessed=0
-[SPEECH] → SEND (new): "Just"
-[COMPARE] pos=0 → "just" != "juxtaposition" → MISTAKE #1
+[SPEECH] → SEND: "Just"
+[COMPARE] pos=0 | "just" != "juxtaposition"
+         → NOT a prefix (juxtaposition doesn't start with "just")
+         → MISMATCH → Alert #1
 
-[SPEECH] INTERIM: "Jax" | words=1 lastProcessed=1
-[SPEECH] → SEND (revision): "Jax" (was "Just")
-[COMPARE] pos=1 → "jax" != "superfluous" → MISTAKE #2
+[SPEECH] → SEND (revision): "Jax"
+[COMPARE] pos=0 | "jax" != "juxtaposition"
+         → NOT a prefix
+         → MISMATCH → Alert #2 (same position!)
 
-[SPEECH] INTERIM: "Juxta" | words=1 lastProcessed=1
-[SPEECH] → SEND (revision): "Juxta" (was "Jax")
-[COMPARE] pos=2 → "juxta" != "extracurricular" → MISTAKE #3
+[SPEECH] → SEND (revision): "Juxta"
+[COMPARE] pos=0 | "juxta" is prefix of "juxtaposition"
+         → BUFFERED (no alert)
 
-[SPEECH] INTERIM: "Juxtaposition" | words=1 lastProcessed=1
-[SPEECH] → SEND (revision): "Juxtaposition" (was "Juxta")
-[COMPARE] pos=3 → "juxtaposition" != "tabletop" → MISTAKE #4
+[SPEECH] → SEND (revision): "Juxtaposition"
+[COMPARE] pos=0 | Revision of buffered word detected
+         → Buffer cleared, "juxtaposition" == "juxtaposition"
+         → MATCH → pos advances to 1
 ```
 
-**Key Insight:** There is NO count drop in this scenario. The word count stays at 1 throughout. The revision detection code (lines 225-233) fires because the last word keeps changing: "Just" → "Jax" → "Juxta" → "Juxtaposition".
+**Key Insight:** The problem is NOT position advancing incorrectly. The problem is:
+1. Speech recognition's intermediate guesses ("Just", "Jax") don't look like prefixes of the target word
+2. The comparator correctly identifies them as mismatches (they ARE different words)
+3. Each mismatch triggers an alert, even though they're all attempts at the SAME word
+4. User hears 2+ error alerts for speaking ONE word correctly
 
-**The reverted fix (commit 6f9e9b5) WOULD NOT HELP** - it only addressed count drops, not same-count revisions.
+**Why previous logs showed position advancing:** The earlier documented logs may have been from testing with `requireCorrectWord = false`, or were illustrative examples rather than actual output.
 
-**Potential Fixes:**
-1. **Don't send revisions to comparator** - Only send when word is "stable" (but adds latency)
-2. **Comparator: don't advance on revision mismatches** - Need way to distinguish new words vs revisions
-3. **Comparator: stay at same position on mismatch** - Only advance on match (but breaks skip detection)
-4. **Prefix matching** - Don't count mismatch if partial word is prefix of expected word
-5. **Debounce revisions** - Wait brief period before sending to let word stabilize
+**Potential Fixes (updated):**
+1. **Fuzzy prefix matching** - Treat "Just" as potential prefix of "Juxtaposition" using phonetic/edit distance
+2. **Debounce revisions** - Don't send a word until N ms have passed without revision
+3. **Track revision state** - Pass revision flag to comparator, which suppresses alerts for revisions
+4. **Confidence threshold** - Only compare words above a confidence threshold
+5. **"Settling" detection** - Buffer ALL words until they haven't changed for N ms
 
 ### Word Comparison
 
@@ -96,27 +108,42 @@ Document ongoing investigations, hypotheses, and debugging sessions.
 
 ### Current Investigations
 
-**SPEECH-001 Investigation (Feb 2026)**
+**SPEECH-001 Investigation (Feb 2026) - FIX IMPLEMENTED**
 - Initial theory about count drop was WRONG - logs show no count drop occurs
-- The real problem is revision detection (lines 225-233) sends every partial transcription
-- Combined with comparator advancing position on mismatch → cascading failures
-- Need to decide on fix approach (see potential fixes in SPEECH-001 description)
+- Second theory about "position advancing on mismatch" was also INCOMPLETE
+- With `requireCorrectWord = true` (default), position does NOT advance on mismatch
+- The REAL problem: partial transcriptions ("Just", "Jax") aren't prefixes of target ("juxtaposition")
+- Each partial is treated as a wrong word → multiple alerts for ONE correctly-spoken word
+- The compound buffer DOES help when a partial IS a prefix (e.g., "Juxta" → buffered)
+
+**Fix implemented (Feb 2026):** Debounce mechanism for word revisions
+- Added `pendingWord` and `pendingWordTimer` to track pending revisions
+- When a revision is detected, wait 150ms before sending to comparator
+- If another revision arrives within 150ms, restart the timer
+- Pending word is flushed immediately when: new word arrives, result is final, or recognition stops
+- This adds ~150ms latency to revised words but prevents multiple alerts for one word
+- See `scheduleRevisionSend()` and `flushPendingWord()` in SpeechRecognitionService.swift
 
 ### Past Investigation Findings
 
-**Feb 16, 2026 - Duplicate Word Bug Analysis (CORRECTED)**
+**Feb 16, 2026 - Duplicate Word Bug Analysis (CORRECTED x2)**
 
-Initial hypothesis: Count drop handler doesn't update `lastProcessedWord`.
+**Hypothesis 1:** Count drop handler doesn't update `lastProcessedWord`.
 **WRONG** - Logs proved this isn't the issue.
 
-Actual problem discovered via console logs:
+**Hypothesis 2:** Comparator advances position on each mismatch.
+**INCOMPLETE** - With `requireCorrectWord = true` (default), position does NOT advance on mismatch.
+
+**Actual problem (verified via code analysis):**
 - Speech recognizer sends partial transcriptions: "Just" → "Jax" → "Juxta" → "Juxtaposition"
 - Word count stays at 1 throughout (NO count drop)
-- Revision detection code fires on each change, sending to comparator
-- Comparator advances position on each mismatch
-- By the time correct "Juxtaposition" arrives, we're at position 3 expecting "tabletop"
+- Revision detection code (lines 225-233) fires on each change, sending to comparator
+- Comparator stays at position 0 (doesn't advance) but generates MISMATCH for each partial
+- Each MISMATCH triggers an alert → user hears 2+ alerts for ONE word
+- Only "Juxta" gets buffered (it's an actual prefix); "Just"/"Jax" are not prefixes
 
-The reverted fix (commit 6f9e9b5) addressed count drops, which is a DIFFERENT scenario. It would not fix this bug.
+The reverted fix (commit 6f9e9b5) addressed count drops, which is a DIFFERENT scenario.
+The `requireCorrectWord` option prevents position advancing but doesn't prevent multiple alerts.
 
 ---
 
@@ -133,8 +160,8 @@ Key learnings and decisions from development conversations that may be relevant 
 **iOS Speech Recognizer Sends Partial Transcriptions (Feb 2026)**
 The iOS speech recognizer continuously refines its transcription as it processes audio. For a word like "Juxtaposition", it may send: "Just" → "Jax" → "Juxta" → "Juxtaposition". This is expected behavior from the recognizer, but the app's revision detection code (lines 225-233) forwards EACH of these to the comparator.
 
-**Comparator Advances Position on Mismatch (Feb 2026)**
-The word comparator advances to the next expected word after ANY mismatch. This may be intentional (to handle skipped words) but causes problems when combined with partial transcription sends. Each partial word mismatches and advances, so the final correct word is compared against the wrong position.
+**Comparator Position Behavior (Feb 2026 - CORRECTED)**
+With `requireCorrectWord = true` (the default in `ComparatorOptions`), the comparator does NOT advance position on mismatch - only on match. Setting `requireCorrectWord = false` would cause position to advance on mismatch (for skip detection). The multi-alert problem occurs because EACH partial transcription triggers a separate MISMATCH result and alert, even though position stays the same.
 
 **Log Analysis is Essential (Feb 2026)**
 Initial theory based on code reading was completely wrong. The actual bug flow was only revealed by examining console logs. Always request/check logs before proposing fixes.
