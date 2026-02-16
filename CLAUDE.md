@@ -113,7 +113,8 @@ User should be able to configure which alerts are active.
 
 ```
 Memorezar/
-├── CLAUDE.md                 # This file
+├── CLAUDE.md                 # This file - AI assistant guidelines
+├── KNOWN_ISSUES.md           # Known bugs, investigations, and insights (READ EVERY SESSION!)
 ├── README.md                 # User-facing documentation
 ├── package.json              # Dependencies and scripts
 │
@@ -279,7 +280,24 @@ Track and maintain these metrics:
 
 ## For AI Assistants
 
-When working on this codebase:
+### CRITICAL: Known Issues Document
+
+**ALWAYS read [`KNOWN_ISSUES.md`](./KNOWN_ISSUES.md) at the start of every session.** This file contains:
+- Active bugs and their workarounds
+- Ongoing investigations
+- Key insights from past debugging sessions
+- Technical decisions that affect implementation
+
+**ALWAYS update `KNOWN_ISSUES.md`** when:
+- You discover a new bug or issue during the conversation
+- You resolve an existing issue
+- You uncover important debugging insights or root causes
+- Technical decisions are made that relate to known problems
+- You find workarounds or temporary fixes
+
+This ensures continuity across sessions and prevents re-investigating the same issues.
+
+### When Working on This Codebase
 
 1. **Latency is paramount** - Every millisecond matters in the speech pipeline
 2. **Test with real speech** - Synthetic tests miss real-world issues
@@ -288,6 +306,7 @@ When working on this codebase:
 5. **Profile before optimizing** - Measure actual bottlenecks
 
 ### Before Making Changes
+- **Check `KNOWN_ISSUES.md`** for related issues or past investigations
 - Understand the latency implications of any change to the speech pipeline
 - Check if the change affects the critical path (audio → comparison → alert)
 - Review existing normalization rules before adding new ones
