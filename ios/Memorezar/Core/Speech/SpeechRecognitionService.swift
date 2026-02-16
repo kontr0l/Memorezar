@@ -205,8 +205,11 @@ final class SpeechRecognitionService: NSObject {
             // The comparator handles any revisions (changed words) appropriately
 
             // Handle transcript revision (word count can decrease if recognizer revises)
+            // When count drops, also update lastProcessedWord to prevent false revision detection.
+            // This stops duplicate words being sent when recognizer changes e.g. "juxta position" → "juxtaposition"
             if words.count < lastProcessedWordCount {
                 lastProcessedWordCount = words.count
+                lastProcessedWord = words.last ?? ""
             }
 
             // Process any new words
