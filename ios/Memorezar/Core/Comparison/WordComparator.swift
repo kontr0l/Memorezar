@@ -238,18 +238,24 @@ final class WordComparator {
     func compareWord(_ spokenWord: String) -> ComparisonResult? {
         let normalizedSpoken = normalize(spokenWord)
 
+        // DEBUG: Log incoming word
+        print("[COMPARE] Received: \"\(spokenWord)\" → normalized: \"\(normalizedSpoken)\" | pos=\(currentPosition) buffer=\"\(compoundBuffer ?? "nil")\"")
+
         // Skip empty words
         guard !normalizedSpoken.isEmpty else {
+            print("[COMPARE] → SKIP (empty)")
             return nil
         }
 
         // Skip filler words
         if options.ignoreFillerWords && isFillerWord(normalizedSpoken) {
+            print("[COMPARE] → SKIP (filler)")
             return nil
         }
 
         // Check if we've reached the end
         guard currentPosition < targetWords.count else {
+            print("[COMPARE] → PAST END")
             compoundBuffer = nil
             compoundBufferTimestamp = nil
             return ComparisonResult(
@@ -264,6 +270,7 @@ final class WordComparator {
 
         let expectedWord = targetWords[currentPosition]
         let normalizedExpected = normalizedTargetWords[currentPosition]
+        print("[COMPARE] Expected: \"\(expectedWord)\" → normalized: \"\(normalizedExpected)\"")
 
         // --- Compound word handling ---
 
@@ -274,6 +281,7 @@ final class WordComparator {
         // In this case, clear the buffer and process the new word as the complete word.
         if let buffered = compoundBuffer, normalizedSpoken.hasPrefix(buffered) && normalizedSpoken.count > buffered.count {
             // This is a revision of the partial word, not a new word to combine
+            print("[COMPARE] Buffer revision detected: \"\(buffered)\" → \"\(normalizedSpoken)\"")
             compoundBuffer = nil
             compoundBufferTimestamp = nil
             // Fall through to normal comparison with the revised (complete) word
@@ -283,9 +291,11 @@ final class WordComparator {
         if let buffered = compoundBuffer {
             let combined = buffered + normalizedSpoken
             let combinedFull = buffered + spokenWord
+            print("[COMPARE] Trying buffer combine: \"\(buffered)\" + \"\(normalizedSpoken)\" = \"\(combined)\"")
 
             // Check if the combined word matches the expected word
             if checkMatch(spoken: combined, expected: normalizedExpected) {
+                print("[COMPARE] → MATCH (combined)! pos \(currentPosition) → \(currentPosition + 1)")
                 compoundBuffer = nil
                 compoundBufferTimestamp = nil
 
@@ -365,6 +375,7 @@ final class WordComparator {
         let isMatch = checkMatch(spoken: normalizedSpoken, expected: normalizedExpected)
 
         if isMatch {
+            print("[COMPARE] → MATCH (direct)! pos \(currentPosition) → \(currentPosition + 1)")
             let result = ComparisonResult(
                 isMatch: true,
                 expectedWord: expectedWord,
@@ -381,12 +392,14 @@ final class WordComparator {
         // If the expected word starts with the spoken word (or a homophone of it),
         // buffer the spoken word and wait for the next part.
         if isCompoundWordPrefix(spoken: normalizedSpoken, expected: normalizedExpected) {
+            print("[COMPARE] → BUFFER: \"\(normalizedSpoken)\" (prefix of \"\(normalizedExpected)\")")
             compoundBuffer = normalizedSpoken
             compoundBufferTimestamp = Date()
             return nil // Buffering — no result yet
         }
 
         // Definite mismatch
+        print("[COMPARE] → MISMATCH: \"\(normalizedSpoken)\" != \"\(normalizedExpected)\"")
         let result = ComparisonResult(
             isMatch: false,
             expectedWord: expectedWord,

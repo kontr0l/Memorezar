@@ -316,11 +316,15 @@ final class RecitationViewModel: NSObject, ObservableObject {
     private func processComparisonResult(_ result: ComparisonResult) {
         let previousPosition = currentPosition
 
+        // DEBUG: Log comparison result
+        print("[RESULT] isMatch=\(result.isMatch) spoken=\"\(result.spokenWord)\" expected=\"\(result.expectedWord)\" pos=\(result.position)")
+
         // Update word state based on match result
         if previousPosition < words.count {
             if result.isMatch {
                 // Correct word - mark as correct
                 words[previousPosition].state = .correct
+                print("[RESULT] → CORRECT count now: \(correctCount)")
 
                 // If we just recovered from a mistake, play correct word sound
                 if previousWordWasMistake {
@@ -337,6 +341,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
                     timestamp: Date()
                 )
                 mistakes.append(mistake)
+                print("[RESULT] → MISTAKE #\(mistakes.count): expected=\"\(result.expectedWord)\" got=\"\(result.spokenWord)\"")
 
                 // Show last mistake
                 lastMistake = MistakeInfo(

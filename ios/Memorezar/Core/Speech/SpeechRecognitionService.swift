@@ -184,6 +184,9 @@ final class SpeechRecognitionService: NSObject {
         // Split into words
         let words = transcript.split(separator: " ").map(String.init)
 
+        // DEBUG: Log every recognition result
+        print("[SPEECH] \(isFinal ? "FINAL" : "INTERIM"): \"\(transcript)\" | words=\(words.count) lastProcessed=\(lastProcessedWordCount) lastWord=\"\(lastProcessedWord)\"")
+
         // Process new words
         // For interim results, we process words that appear stable
         // For final results, we process all remaining words
@@ -193,6 +196,7 @@ final class SpeechRecognitionService: NSObject {
             // Guard against transcript revision where word count decreased
             if lastProcessedWordCount < words.count {
                 for i in lastProcessedWordCount..<words.count {
+                    print("[SPEECH] → SEND (final): \"\(words[i])\"")
                     delegate?.speechRecognition(didRecognizeWord: words[i], isFinal: true)
                 }
             }
@@ -206,12 +210,14 @@ final class SpeechRecognitionService: NSObject {
 
             // Handle transcript revision (word count can decrease if recognizer revises)
             if words.count < lastProcessedWordCount {
+                print("[SPEECH] ⚠️ COUNT DROP: \(lastProcessedWordCount) → \(words.count)")
                 lastProcessedWordCount = words.count
             }
 
             // Process any new words
             if words.count > lastProcessedWordCount {
                 for i in lastProcessedWordCount..<words.count {
+                    print("[SPEECH] → SEND (new): \"\(words[i])\"")
                     delegate?.speechRecognition(didRecognizeWord: words[i], isFinal: false)
                 }
                 lastProcessedWordCount = words.count
@@ -221,6 +227,7 @@ final class SpeechRecognitionService: NSObject {
                 let currentLastWord = words[words.count - 1]
                 if currentLastWord != lastProcessedWord && !lastProcessedWord.isEmpty {
                     // Last word changed - reprocess it (handles partial word completion)
+                    print("[SPEECH] → SEND (revision): \"\(currentLastWord)\" (was \"\(lastProcessedWord)\")")
                     delegate?.speechRecognition(didRecognizeWord: currentLastWord, isFinal: false)
                     lastProcessedWord = currentLastWord
                 }
