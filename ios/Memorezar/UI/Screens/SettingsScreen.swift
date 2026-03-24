@@ -3,8 +3,12 @@ import SwiftUI
 struct SettingsScreen: View {
     @EnvironmentObject var settingsStore: SettingsStore
     @EnvironmentObject var quoteStore: QuoteStore
+    @EnvironmentObject var tutorialStore: TutorialStore
+    @EnvironmentObject var authService: AuthService
     @State private var showingResetAlert = false
     @State private var showingDeleteDataAlert = false
+    @State private var showFlash = false
+    @State private var showAuthSheet = false
 
     var body: some View {
         NavigationStack {
@@ -16,53 +20,12 @@ struct SettingsScreen: View {
                     }
 
                     if settingsStore.settings.audioAlertEnabled {
-                        // Mistake Sound
-                        Picker(selection: $settingsStore.settings.mistakeSound) {
-                            ForEach(MistakeSound.allCases, id: \.self) { sound in
-                                Text(sound.displayName).tag(sound)
+                        Picker(selection: $settingsStore.settings.soundTheme) {
+                            ForEach(SoundTheme.allCases, id: \.self) { theme in
+                                Text(theme.displayName).tag(theme)
                             }
                         } label: {
-                            Label("Mistake Sound", systemImage: "xmark.circle")
-                        }
-
-                        Button {
-                            AlertManager.shared.previewSound(settingsStore.settings.mistakeSound)
-                        } label: {
-                            Label("Preview Mistake Sound", systemImage: "play.circle")
-                        }
-
-                        // Correct Word Sound
-                        Picker(selection: $settingsStore.settings.correctWordSound) {
-                            ForEach(CorrectWordSound.allCases, id: \.self) { sound in
-                                Text(sound.displayName).tag(sound)
-                            }
-                        } label: {
-                            Label("Correct Word Sound", systemImage: "checkmark.circle")
-                        }
-
-                        if settingsStore.settings.correctWordSound != .none {
-                            Button {
-                                AlertManager.shared.previewCorrectSound(settingsStore.settings.correctWordSound)
-                            } label: {
-                                Label("Preview Correct Sound", systemImage: "play.circle")
-                            }
-                        }
-
-                        // Completion Sound
-                        Picker(selection: $settingsStore.settings.completionSound) {
-                            ForEach(CompletionSound.allCases, id: \.self) { sound in
-                                Text(sound.displayName).tag(sound)
-                            }
-                        } label: {
-                            Label("Completion Sound", systemImage: "party.popper")
-                        }
-
-                        if settingsStore.settings.completionSound != .none {
-                            Button {
-                                AlertManager.shared.previewCompletionSound(settingsStore.settings.completionSound)
-                            } label: {
-                                Label("Preview Completion Sound", systemImage: "play.circle")
-                            }
+                            Label("Sound Theme", systemImage: "music.note.list")
                         }
                     }
 
@@ -74,14 +37,6 @@ struct SettingsScreen: View {
                         Label("Haptic Feedback", systemImage: "iphone.radiowaves.left.and.right")
                     }
 
-                    if settingsStore.settings.hapticAlertEnabled {
-                        Button {
-                            AlertManager.shared.testHaptic()
-                        } label: {
-                            Label("Test Haptic Feedback", systemImage: "hand.tap")
-                        }
-                    }
-
                     // Test alert button
                     Button {
                         AlertManager.shared.triggerMistakeAlert()
@@ -91,60 +46,17 @@ struct SettingsScreen: View {
                 } header: {
                     Text("Alerts")
                 } footer: {
-                    Text("Choose how you want to be notified during recitation. Mistake sounds play when you say the wrong word, correct sounds play after you fix a mistake, and completion sounds play when you finish.")
-                }
-
-                // Comparison Settings
-                Section {
-                    Toggle(isOn: $settingsStore.settings.caseSensitive) {
-                        Label("Case Sensitive", systemImage: "textformat")
-                    }
-
-                    Toggle(isOn: $settingsStore.settings.ignorePunctuation) {
-                        Label("Ignore Punctuation", systemImage: "textformat.abc.dottedunderline")
-                    }
-
-                    Toggle(isOn: $settingsStore.settings.ignoreFillerWords) {
-                        Label("Ignore Filler Words", systemImage: "bubble.left.and.bubble.right")
-                    }
-
-                    Toggle(isOn: $settingsStore.settings.allowContractions) {
-                        Label("Allow Contractions", systemImage: "arrow.right.arrow.left")
-                    }
-                } header: {
-                    Text("Comparison")
-                } footer: {
-                    Text("Adjust how strictly words are compared. Filler words include \"um\", \"uh\", \"like\", etc.")
+                    Text("Choose how you want to be notified during recitation. Default plays clean tones, Memes plays random funny sounds.")
                 }
 
                 // Display Settings
                 Section {
-                    Toggle(isOn: $settingsStore.settings.showWordHighlighting) {
-                        Label("Word Highlighting", systemImage: "highlighter")
-                    }
-
-                    Toggle(isOn: $settingsStore.settings.showProgressBar) {
-                        Label("Progress Bar", systemImage: "chart.bar.fill")
-                    }
-
-                    Picker(selection: $settingsStore.settings.wordVisibility) {
-                        ForEach(WordVisibility.allCases, id: \.self) { visibility in
-                            Text(visibility.rawValue).tag(visibility)
+                    Picker(selection: $settingsStore.settings.defaultMemorizationMode) {
+                        ForEach([MemorizationMode.voice, .typing, .firstLetter, .multipleChoice], id: \.self) { mode in
+                            Label(mode.rawValue, systemImage: mode.icon).tag(mode)
                         }
                     } label: {
-                        Label("Word Visibility", systemImage: "eye")
-                    }
-
-                    if settingsStore.settings.wordVisibility == .partial {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Label("Reveal Percentage", systemImage: "percent")
-                                Spacer()
-                                Text("\(Int(settingsStore.settings.wordRevealPercentage))%")
-                                    .foregroundColor(.secondary)
-                            }
-                            Slider(value: $settingsStore.settings.wordRevealPercentage, in: 0...100, step: 5)
-                        }
+                        Label("Default Mode", systemImage: "rectangle.3.group")
                     }
 
                     Picker(selection: $settingsStore.settings.fontSize) {
@@ -164,38 +76,6 @@ struct SettingsScreen: View {
                     }
                 } header: {
                     Text("Display")
-                } footer: {
-                    Text("Word Visibility controls whether words are shown before you speak them. Use 'Hide Until Spoken' for a memory challenge or 'Partial Reveal' to show a percentage of words.")
-                }
-
-                // Practice Settings
-                Section {
-                    Toggle(isOn: $settingsStore.settings.requireCorrectWord) {
-                        Label("Require Correct Word", systemImage: "checkmark.circle")
-                    }
-
-                    Toggle(isOn: $settingsStore.settings.showHints) {
-                        Label("Show Hints", systemImage: "lightbulb.max.fill")
-                    }
-
-                    if settingsStore.settings.showHints {
-                        Stepper(value: $settingsStore.settings.hintDelay, in: 1...10, step: 0.5) {
-                            HStack {
-                                Label("Hint Delay", systemImage: "clock")
-                                Spacer()
-                                Text("\(settingsStore.settings.hintDelay, specifier: "%.1f")s")
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                    }
-
-                    Toggle(isOn: $settingsStore.settings.autoRestartOnCompletion) {
-                        Label("Auto-Restart", systemImage: "arrow.counterclockwise")
-                    }
-                } header: {
-                    Text("Practice")
-                } footer: {
-                    Text("When 'Require Correct Word' is enabled, you must say the correct word before moving on. Hints show the next expected word after a delay.")
                 }
 
                 // Statistics
@@ -208,7 +88,7 @@ struct SettingsScreen: View {
                     }
 
                     HStack {
-                        Label("Quotes Mastered", systemImage: "star.fill")
+                        Label("Quotes Mastered", systemImage: "crown.fill")
                         Spacer()
                         Text("\(quoteStore.masteredQuotesCount)")
                             .foregroundColor(.secondary)
@@ -229,6 +109,36 @@ struct SettingsScreen: View {
                     }
                 } header: {
                     Text("Statistics")
+                }
+
+                // Account
+                Section {
+                    if authService.isSignedIn {
+                        HStack {
+                            Label(authService.currentUser?.displayName ?? "Account", systemImage: "person.crop.circle.fill")
+                            Spacer()
+                            Text(authService.currentUser?.email ?? "")
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        Button(role: .destructive) {
+                            authService.signOut()
+                        } label: {
+                            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    } else {
+                        Button {
+                            showAuthSheet = true
+                        } label: {
+                            Label("Sign In", systemImage: "person.crop.circle")
+                        }
+                    }
+                } header: {
+                    Text("Account")
+                } footer: {
+                    if !authService.isSignedIn {
+                        Text("Sign in to share recordings with the community.")
+                    }
                 }
 
                 // Data Management
@@ -254,22 +164,40 @@ struct SettingsScreen: View {
                     HStack {
                         Label("Version", systemImage: "info.circle")
                         Spacer()
-                        Text("1.0.0")
+                        Text("v50.4")
                             .foregroundColor(.secondary)
                     }
 
-                    Link(destination: URL(string: "https://github.com/memorezar")!) {
-                        Label("Source Code", systemImage: "chevron.left.forwardslash.chevron.right")
-                    }
-
-                    Link(destination: URL(string: "mailto:support@memorezar.app")!) {
+                    Link(destination: URL(string: "mailto:support@memorezar.com")!) {
                         Label("Contact Support", systemImage: "envelope")
                     }
                 } header: {
                     Text("About")
                 }
             }
+            .sheet(isPresented: $showAuthSheet) {
+                AuthSheet()
+                    .environmentObject(authService)
+            }
+            .onChange(of: settingsStore.settings.soundTheme) { _, newValue in
+                AlertManager.shared.previewTheme(newValue)
+            }
+            .overlay(
+                showFlash ?
+                    Color.red.opacity(0.3)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                    : nil
+            )
             .navigationTitle("Settings")
+            .onAppear {
+                AlertManager.shared.onVisualAlert = {
+                    showFlash = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        showFlash = false
+                    }
+                }
+            }
             .alert("Reset Settings", isPresented: $showingResetAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Reset", role: .destructive) {
@@ -282,6 +210,7 @@ struct SettingsScreen: View {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
                     quoteStore.clearAllData()
+                    tutorialStore.resetAll()
                 }
             } message: {
                 Text("This will delete all your quotes, practice history, and statistics. This action cannot be undone.")
@@ -305,4 +234,5 @@ struct SettingsScreen: View {
     SettingsScreen()
         .environmentObject(SettingsStore())
         .environmentObject(QuoteStore())
+        .environmentObject(AuthService.shared)
 }
