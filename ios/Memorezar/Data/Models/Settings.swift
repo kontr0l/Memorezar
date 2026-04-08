@@ -7,31 +7,56 @@ struct AppSettings: Codable {
     var audioAlertEnabled: Bool = true
     var visualAlertEnabled: Bool = true
     var hapticAlertEnabled: Bool = true
+    var soundTheme: SoundTheme = .default
+    // Legacy — kept for backward-compatible decoding only
     var mistakeSound: MistakeSound = .explosion1
     var correctWordSound: CorrectWordSound = .none
     var completionSound: CompletionSound = .applause
-
-    // Comparison settings
-    var caseSensitive: Bool = false
-    var ignorePunctuation: Bool = true
-    var ignoreFillerWords: Bool = true
-    var allowContractions: Bool = true
 
     // Display settings
     var showWordHighlighting: Bool = true
     var showProgressBar: Bool = true
     var fontSize: FontSize = .medium
-    var theme: AppTheme = .system
+    var theme: AppTheme = .light
     var wordVisibility: WordVisibility = .showAll
     var wordRevealPercentage: Double = 0.0 // 0-100%, used when visibility is .partial
-
-    // Practice settings
-    var autoRestartOnCompletion: Bool = false
-    var showHints: Bool = true
-    var hintDelay: Double = 5.0 // Seconds before showing hint
-    var requireCorrectWord: Bool = true // Stay on word until spoken correctly
+    var defaultMemorizationMode: MemorizationMode = .voice
+    var firstLetterModeEnabled: Bool = false
 
     static let `default` = AppSettings()
+
+    // Custom decoder so new properties added in updates don't crash
+    // when decoding settings saved by older versions of the app.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        audioAlertEnabled = (try? c.decode(Bool.self, forKey: .audioAlertEnabled)) ?? true
+        visualAlertEnabled = (try? c.decode(Bool.self, forKey: .visualAlertEnabled)) ?? true
+        hapticAlertEnabled = (try? c.decode(Bool.self, forKey: .hapticAlertEnabled)) ?? true
+        soundTheme = (try? c.decode(SoundTheme.self, forKey: .soundTheme)) ?? .default
+        mistakeSound = (try? c.decode(MistakeSound.self, forKey: .mistakeSound)) ?? .explosion1
+        correctWordSound = (try? c.decode(CorrectWordSound.self, forKey: .correctWordSound)) ?? .none
+        completionSound = (try? c.decode(CompletionSound.self, forKey: .completionSound)) ?? .applause
+        showWordHighlighting = (try? c.decode(Bool.self, forKey: .showWordHighlighting)) ?? true
+        showProgressBar = (try? c.decode(Bool.self, forKey: .showProgressBar)) ?? true
+        fontSize = ((try? c.decode(FontSize.self, forKey: .fontSize)) ?? .medium).normalized
+        theme = (try? c.decode(AppTheme.self, forKey: .theme)) ?? .light
+        wordVisibility = (try? c.decode(WordVisibility.self, forKey: .wordVisibility)) ?? .showAll
+        wordRevealPercentage = (try? c.decode(Double.self, forKey: .wordRevealPercentage)) ?? 0.0
+        // Handle legacy "Image" → .audio, "Normal" → .voice, "Choice" → .multipleChoice
+        if let modeStr = try? c.decode(String.self, forKey: .defaultMemorizationMode) {
+            switch modeStr {
+            case "Image": defaultMemorizationMode = .audio
+            case "Normal": defaultMemorizationMode = .voice
+            case "Choice": defaultMemorizationMode = .multipleChoice
+            default: defaultMemorizationMode = MemorizationMode(rawValue: modeStr) ?? .voice
+            }
+        } else {
+            defaultMemorizationMode = .voice
+        }
+        firstLetterModeEnabled = (try? c.decode(Bool.self, forKey: .firstLetterModeEnabled)) ?? false
+    }
+
+    init() {}
 }
 
 /// Sound options for mistake alerts
@@ -48,7 +73,20 @@ enum MistakeSound: String, Codable, CaseIterable {
     case airHorn = "Air Horn"
 
     /// Display name for UI
-    var displayName: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .explosion1: return String(localized: "Explosion")
+        case .bomb: return String(localized: "Bomb")
+        case .buzzer: return String(localized: "Buzzer")
+        case .bullhorn: return String(localized: "Bullhorn")
+        case .cricket: return String(localized: "Cricket")
+        case .softChime: return String(localized: "Soft Chime")
+        case .drumHit: return String(localized: "Drum Hit")
+        case .glassBreak: return String(localized: "Glass Break")
+        case .thunder: return String(localized: "Thunder")
+        case .airHorn: return String(localized: "Air Horn")
+        }
+    }
 
     /// System sound ID or custom sound parameters
     var soundParameters: (frequency: Double, duration: Double, waveform: SoundWaveform) {
@@ -85,7 +123,15 @@ enum CorrectWordSound: String, Codable, CaseIterable {
     case pop = "Pop"
     case chime = "Chime"
 
-    var displayName: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .none: return String(localized: "None")
+        case .softClick: return String(localized: "Soft Click")
+        case .ding: return String(localized: "Ding")
+        case .pop: return String(localized: "Pop")
+        case .chime: return String(localized: "Chime")
+        }
+    }
 
     var soundParameters: (frequency: Double, duration: Double, waveform: SoundWaveform)? {
         switch self {
@@ -111,7 +157,15 @@ enum CompletionSound: String, Codable, CaseIterable {
     case chime = "Success Chime"
     case none = "None"
 
-    var displayName: String { rawValue }
+    var displayName: String {
+        switch self {
+        case .applause: return String(localized: "Applause")
+        case .fanfare: return String(localized: "Fanfare")
+        case .celebration: return String(localized: "Celebration")
+        case .chime: return String(localized: "Success Chime")
+        case .none: return String(localized: "None")
+        }
+    }
 
     var soundParameters: (frequency: Double, duration: Double, waveform: SoundWaveform)? {
         switch self {
@@ -136,37 +190,112 @@ enum SoundWaveform: String, Codable {
     case noise
 }
 
+/// Sound theme — determines which sound files are played for each event
+enum SoundTheme: String, Codable, CaseIterable {
+    case `default` = "Default"
+    case memes = "Memes"
+
+    var displayName: String {
+        switch self {
+        case .default: return String(localized: "Default")
+        case .memes: return String(localized: "Memes")
+        }
+    }
+
+    /// Subfolder name within Resources/Sounds for themed sounds (nil = use root WAV files)
+    var isRandom: Bool { self != .default }
+
+    /// Sound categories that map to files/folders
+    enum SoundEvent: String {
+        case error
+        case success
+        case resultFail = "result fail"
+        case resultWin = "result win"
+
+        /// Default WAV filename (for .default theme)
+        var defaultFile: String {
+            switch self {
+            case .error: return "error.wav"
+            case .success: return "success.wav"
+            case .resultFail: return "result_fail.wav"
+            case .resultWin: return "result_win.wav"
+            }
+        }
+
+        /// Folder name for meme sounds
+        var folderName: String { rawValue }
+    }
+}
+
+/// How each word is rendered in the word grid
+enum WordDisplayMode {
+    case full            // "Four" — normal text
+    case hidden          // placeholder box (existing behavior)
+    case firstLetter     // "F___" — first letter + underscores
+    case firstTwoLetters // "Fo__" — current word gets extra hint
+    case letters(Int)    // Show N letters + underscores (0 = hidden box, 4+ = full)
+}
+
 /// Word visibility modes during recitation
 enum WordVisibility: String, Codable, CaseIterable {
     case showAll = "Show All Words"
     case hideUntilSpoken = "Hide Until Spoken"
     case partial = "Partial Reveal"
 
+    var localizedName: String {
+        switch self {
+        case .showAll: return String(localized: "Show All Words")
+        case .hideUntilSpoken: return String(localized: "Hide Until Spoken")
+        case .partial: return String(localized: "Partial Reveal")
+        }
+    }
+
     var description: String {
         switch self {
         case .showAll:
-            return "All words visible"
+            return String(localized: "All words visible")
         case .hideUntilSpoken:
-            return "Words appear after speaking"
+            return String(localized: "Words appear after speaking")
         case .partial:
-            return "Show percentage of words"
+            return String(localized: "Show percentage of words")
         }
     }
 }
 
 /// Font size options
-enum FontSize: String, Codable, CaseIterable {
+enum FontSize: String, Codable {
+    // Legacy cases kept for backward-compatible decoding
     case small = "Small"
-    case medium = "Medium"
     case large = "Large"
+    // Active cases
+    case medium = "Medium"
     case extraLarge = "Extra Large"
+
+    /// Only Normal and Large are shown in the UI
+    static var allCases: [FontSize] { [.medium, .extraLarge] }
+
+    var localizedName: String {
+        switch self {
+        case .medium: return String(localized: "Normal")
+        case .extraLarge: return String(localized: "Large")
+        case .small, .large: return String(localized: "Normal")
+        }
+    }
 
     var pointSize: CGFloat {
         switch self {
-        case .small: return 14
-        case .medium: return 18
+        case .small, .medium: return 18
         case .large: return 22
         case .extraLarge: return 28
+        }
+    }
+
+    /// Migrate legacy values to active cases
+    var normalized: FontSize {
+        switch self {
+        case .small: return .medium
+        case .large: return .extraLarge
+        default: return self
         }
     }
 }
@@ -176,4 +305,12 @@ enum AppTheme: String, Codable, CaseIterable {
     case system = "System"
     case light = "Light"
     case dark = "Dark"
+
+    var localizedName: String {
+        switch self {
+        case .system: return String(localized: "System")
+        case .light: return String(localized: "Light")
+        case .dark: return String(localized: "Dark")
+        }
+    }
 }

@@ -44,29 +44,9 @@ final class SettingsStore: ObservableObject {
         set { settings.hapticAlertEnabled = newValue }
     }
 
-    var mistakeSound: MistakeSound {
-        get { settings.mistakeSound }
-        set { settings.mistakeSound = newValue }
-    }
-
-    var caseSensitive: Bool {
-        get { settings.caseSensitive }
-        set { settings.caseSensitive = newValue }
-    }
-
-    var ignorePunctuation: Bool {
-        get { settings.ignorePunctuation }
-        set { settings.ignorePunctuation = newValue }
-    }
-
-    var ignoreFillerWords: Bool {
-        get { settings.ignoreFillerWords }
-        set { settings.ignoreFillerWords = newValue }
-    }
-
-    var allowContractions: Bool {
-        get { settings.allowContractions }
-        set { settings.allowContractions = newValue }
+    var soundTheme: SoundTheme {
+        get { settings.soundTheme }
+        set { settings.soundTheme = newValue }
     }
 
     var showWordHighlighting: Bool {
@@ -99,31 +79,22 @@ final class SettingsStore: ObservableObject {
         set { settings.wordRevealPercentage = newValue }
     }
 
-    var requireCorrectWord: Bool {
-        get { settings.requireCorrectWord }
-        set { settings.requireCorrectWord = newValue }
+    var defaultMemorizationMode: MemorizationMode {
+        get { settings.defaultMemorizationMode }
+        set { settings.defaultMemorizationMode = newValue }
     }
 
-    var showHints: Bool {
-        get { settings.showHints }
-        set { settings.showHints = newValue }
+    var firstLetterModeEnabled: Bool {
+        get { settings.firstLetterModeEnabled }
+        set { settings.firstLetterModeEnabled = newValue }
     }
 
-    var hintDelay: Double {
-        get { settings.hintDelay }
-        set { settings.hintDelay = newValue }
-    }
-
-    // MARK: - Comparator Options
-
-    var comparatorOptions: ComparatorOptions {
-        ComparatorOptions(
-            caseSensitive: settings.caseSensitive,
-            ignorePunctuation: settings.ignorePunctuation,
-            ignoreFillerWords: settings.ignoreFillerWords,
-            allowContractions: settings.allowContractions,
-            requireCorrectWord: settings.requireCorrectWord
-        )
+    var colorScheme: ColorScheme? {
+        switch settings.theme {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
     }
 
     // MARK: - Reset
@@ -155,28 +126,13 @@ final class SettingsStore: ObservableObject {
         }
     }
 
-    // MARK: - Sound Settings Accessors
-
-    var correctWordSound: CorrectWordSound {
-        get { settings.correctWordSound }
-        set { settings.correctWordSound = newValue }
-    }
-
-    var completionSound: CompletionSound {
-        get { settings.completionSound }
-        set { settings.completionSound = newValue }
-    }
-
     // MARK: - Apply Settings
 
     private func applySettings() {
-        // Apply alert settings to AlertManager
         let alertManager = AlertManager.shared
         alertManager.audioAlertEnabled = settings.audioAlertEnabled
         alertManager.visualAlertEnabled = settings.visualAlertEnabled
         alertManager.hapticAlertEnabled = settings.hapticAlertEnabled
-        alertManager.mistakeSound = settings.mistakeSound
-        alertManager.correctWordSound = settings.correctWordSound
-        alertManager.completionSound = settings.completionSound
+        alertManager.soundTheme = settings.soundTheme
     }
 }

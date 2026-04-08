@@ -45,3 +45,4 @@ ios/*.xcodeproj/project.xcworkspace/xcuserdata/
 
 # EAS
 .eas/
+supabase/.temp/

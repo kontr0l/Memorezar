@@ -278,6 +278,46 @@ Track and maintain these metrics:
 
 ---
 
+## Suggestion Packs
+
+Suggestion packs are curated collections of quotes users can browse and add to their library from the home screen.
+
+### Architecture: Supabase-Only
+
+**Supabase is the single source of truth.** All packs are served from the `suggestion_packs` table. There is no cache or bundled fallback for browsing — if the server is unreachable, the Browse section is hidden.
+
+- **`PackService.fetchPacks()`**: Returns packs from Supabase, or `[]` if offline
+- **`QuoteCategory.sourcePackId`**: Links a local category back to its Supabase pack ID for sync
+- **`PackService.syncInstalledPacks()`**: Fires on every launch; updates installed packs when server `version` > local version, matching by `sourcePackId`
+
+Bundled packs in `SuggestionPack.swift` are **seed data only** — kept as a reference for the Supabase table, never read at runtime.
+
+See `KNOWN_ISSUES.md` → PACK-001 for full rules, schema, and admin workflow.
+
+### Adding a New Pack
+
+1. Insert a row into the `suggestion_packs` Supabase table with `version: 1`
+2. Add a bundled cover image to `ios/Memorezar/Resources/Assets.xcassets/` as a new `.imageset` (JPEG or PNG only — Xcode does not support WebP). Set `cover_asset` to match the asset name. Or use `cover_url` for a remote image.
+3. **Do not include the quote count in the `description`** — the count is already displayed under the pack title in the UI.
+
+### Preview Snippets
+
+The pack detail page shows the first 3 quotes as italic preview snippets. Snippets are generated automatically by `PackDetailView.fallbackSnippet()` — no manual work needed when adding new packs. The algorithm:
+
+1. **If the quote is 7 words or fewer**, the full text is shown as-is (no "..." appended).
+2. **First pass — sentence boundaries**: Looks for a word ending with `.`, `!`, or `?` at positions 5-7. Prefers completing a sentence over mid-sentence breaks.
+3. **Second pass — function words**: Breaks right **after** a function word (is, are, can, has, have, will, would, which, that, with, of, to, for, lest, not, etc.) at positions 5-7. This creates a natural hook. Examples:
+   - "The betterment of the world **can**..."
+   - "The secret of getting ahead **is**..."
+   - "Life is like riding a bicycle." (full sentence, no "...")
+4. **Fallback**: If no natural break is found, takes the first 6 words.
+
+### Button Styling
+
+The "Add to Library" button on the pack detail page uses `.buttonStyle(.borderedProminent)` with `.tint(.indigo)` and no `.controlSize` modifier — matching the same height and rounded corners as the split/merge modal buttons. The label uses `HStack { Text(...) Image(...) }` (text first, icon after).
+
+---
+
 ## For AI Assistants
 
 ### CRITICAL: Known Issues Document
@@ -311,6 +351,15 @@ This ensures continuity across sessions and prevents re-investigating the same i
 - Check if the change affects the critical path (audio → comparison → alert)
 - Review existing normalization rules before adding new ones
 
+### Version Tracking
+
+**MANDATORY: Bump the version of the app you are actively working on with EVERY change, no matter how small.** Even a single-line tweak, icon swap, or config change requires a version bump. Do NOT bump the version of an app you are not working on.
+
+- **iOS version:** `ios/Memorezar/UI/Screens/SettingsScreen.swift` (the `Text("vX.X")` line). Increment the minor version (35.3 → 35.4 → 35.5, etc.).
+- **Android version:** `memorezar-android/app/src/main/java/com/memorezar/app/ui/screens/SettingsScreen.kt` (the `Text("vX.X.X")` line).
+
+**Never skip this — there are no exceptions.**
+
 ### Key Files (Once Created)
 - `src/core/speech/streaming.ts` - Heart of real-time processing
 - `src/core/comparison/comparator.ts` - Word matching logic
@@ -318,4 +367,4 @@ This ensures continuity across sessions and prevents re-investigating the same i
 
 ---
 
-*Last Updated: January 2026*
+*Last Updated: March 2026*

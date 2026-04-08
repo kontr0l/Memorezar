@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Memorezar</string>
+
+    <!-- Tab bar -->
+    <string name="tab_home">Inicio</string>
+    <string name="tab_library">Biblioteca</string>
+    <string name="tab_settings">Ajustes</string>
+
+    <!-- Home -->
+    <string name="continue_practicing">Seguir Practicando</string>
+    <string name="get_started">Empezar</string>
+    <string name="add_first_quote">Agrega tu primera cita para empezar a practicar</string>
+    <string name="your_progress">Tu Progreso</string>
+    <string name="mastered">Dominadas</string>
+    <string name="day_streak">Racha</string>
+    <string name="accuracy">Precisión</string>
+    <string name="browse_quote_packs">Explorar Paquetes de Citas</string>
+    <string name="add_quote">Agregar Cita</string>
+
+    <!-- Library -->
+    <string name="library">Biblioteca</string>
+    <string name="no_quotes_yet">Aún no hay citas.\nToca + para agregar una.</string>
+    <string name="delete_category">Eliminar Categoría</string>
+    <string name="delete_quote">Eliminar Cita</string>
+    <string name="cancel">Cancelar</string>
+    <string name="delete">Eliminar</string>
+    <string name="quotes_format">%d citas</string>
+    <string name="sessions_format">%d sesiones</string>
+
+    <!-- Settings -->
+    <string name="settings">Ajustes</string>
+    <string name="alerts">Alertas</string>
+    <string name="sound_alerts">Alertas de Sonido</string>
+    <string name="sound_theme">Tema de Sonido</string>
+    <string name="visual_flash">Destello Visual</string>
+    <string name="haptic_feedback">Retroalimentación Háptica</string>
+    <string name="test_mistake_alert">Probar Alerta de Error</string>
+    <string name="alert_footer">Elige cómo quieres ser notificado durante la recitación.</string>
+    <string name="display">Pantalla</string>
+    <string name="default_mode">Modo Predeterminado</string>
+    <string name="first_letter_mode">Modo Primera Letra</string>
+    <string name="font_size">Tamaño de Fuente</string>
+    <string name="theme">Tema</string>
+    <string name="statistics">Estadísticas</string>
+    <string name="total_sessions">Sesiones Totales</string>
+    <string name="quotes_mastered">Citas Dominadas</string>
+    <string name="average_accuracy">Precisión Promedio</string>
+    <string name="total_practice_time">Tiempo Total de Práctica</string>
+    <string name="account">Cuenta</string>
+    <string name="sign_in">Iniciar Sesión</string>
+    <string name="sign_out">Cerrar Sesión</string>
+    <string name="sign_in_footer">Inicia sesión para compartir grabaciones con la comunidad.</string>
+    <string name="data">Datos</string>
+    <string name="reset_settings">Restablecer Ajustes</string>
+    <string name="delete_all_data">Eliminar Todos los Datos</string>
+    <string name="about">Acerca de</string>
+    <string name="version">Versión</string>
+    <string name="contact_support">Contactar Soporte</string>
+
+    <!-- Recitation -->
+    <string name="practice">Practicar</string>
+    <string name="start">Iniciar</string>
+    <string name="stop">Detener</string>
+    <string name="pause">Pausar</string>
+    <string name="resume">Reanudar</string>
+    <string name="done">Listo</string>
+    <string name="try_again">Intentar de Nuevo</string>
+    <string name="great_job">¡Buen trabajo!</string>
+    <string name="keep_practicing">¡Sigue practicando!</string>
+    <string name="mistakes_format">%1$d error%2$s de %3$d palabras</string>
+
+    <!-- Onboarding -->
+    <string name="how_practice">¿Cómo te gustaría practicar?</string>
+    <string name="change_later">Puedes cambiarlo después en Ajustes</string>
+    <string name="voice">Voz</string>
+    <string name="recite_out_loud">Recita en voz alta</string>
+    <string name="typing">Escritura</string>
+    <string name="type_from_memory">Escribe de memoria</string>
+    <string name="how_hidden">¿Cómo se deben ocultar las palabras?</string>
+    <string name="normal">Normal</string>
+    <string name="words_fully_hidden">Las palabras están completamente ocultas</string>
+    <string name="first_letter">Primera Letra</string>
+    <string name="show_first_letter_hint">Muestra la primera letra como pista</string>
+    <string name="back">Atrás</string>
+
+    <!-- Auth -->
+    <string name="create_account">Crear Cuenta</string>
+    <string name="sign_in_google">Iniciar sesión con Google</string>
+    <string name="or">o</string>
+    <string name="name">Nombre</string>
+    <string name="email">Correo electrónico</string>
+    <string name="password">Contraseña</string>
+    <string name="already_have_account">¿Ya tienes cuenta? Inicia Sesión</string>
+    <string name="no_account">¿No tienes cuenta? Regístrate</string>
+
+    <!-- Quote Input -->
+    <string name="edit_quote">Editar Cita</string>
+    <string name="title">Título</string>
+    <string name="category">Categoría</string>
+    <string name="quote_text">Texto de la Cita</string>
+    <string name="preview">Vista Previa</string>
+    <string name="save_changes">Guardar Cambios</string>
+    <string name="words_format">%d palabras</string>
+    <string name="tip_short_quotes">Empieza con citas cortas (1-2 oraciones)</string>
+    <string name="tip_longer_texts">Avanza a textos más largos a medida que mejores</string>
+    <string name="tip_practice_regularly">Practica regularmente para mejores resultados</string>
+
+    <!-- Streak -->
+    <string name="current_streak">Racha Actual</string>
+    <string name="total_days">Días Totales</string>
+    <string name="this_week">Esta Semana</string>
+    <string name="last_30_days">Últimos 30 Días</string>
+
+    <!-- Accuracy -->
+    <string name="overall_accuracy">Precisión General</string>
+    <string name="per_quote_breakdown">Desglose por Cita</string>
+    <string name="recent_sessions">Sesiones Recientes</string>
+
+    <!-- Contact Support -->
+    <string name="reason">Razón</string>
+    <string name="message">Mensaje</string>
+    <string name="send">Enviar</string>
+    <string name="message_sent">¡Mensaje Enviado!</string>
+    <string name="thanks_reaching_out">Gracias por contactarnos. Te responderemos pronto.</string>
+    <string name="ok">OK</string>
+    <string name="feature_request">Solicitud de Función</string>
+    <string name="quote_pack_request">Solicitud de Paquete</string>
+    <string name="bug_report">Reporte de Error</string>
+    <string name="just_saying_hi">¡Solo saludando!</string>
+    <string name="other">Otro</string>
+
+    <!-- Paywall -->
+    <string name="unlock_pro">Desbloquear Memorezar Pro</string>
+    <string name="pro_subtitle">Aprovecha al máximo tu práctica de memorización</string>
+    <string name="unlimited_quotes">Citas personalizadas ilimitadas</string>
+    <string name="all_sound_themes">Todos los temas de sonido</string>
+    <string name="tts_feature">Texto a voz para cualquier cita</string>
+    <string name="community_recordings">Grabaciones de la comunidad</string>
+    <string name="all_quote_packs">Acceso a todos los paquetes</string>
+    <string name="yearly">Anual</string>
+    <string name="best_value">Mejor Valor — Ahorra 44%</string>
+    <string name="monthly">Mensual</string>
+    <string name="lifetime">De por Vida</string>
+    <string name="one_time_purchase">Pago único</string>
+    <string name="restore_purchases">Restaurar Compras</string>
+
+    <!-- Mastery -->
+    <string name="learning">Aprendiendo</string>
+    <string name="familiar">Familiar</string>
+    <string name="proficient">Competente</string>
+
+    <!-- Reset/Delete alerts -->
+    <string name="reset_settings_message">Esto restablecerá todos los ajustes a sus valores predeterminados.</string>
+    <string name="reset">Restablecer</string>
+    <string name="delete_all_data_message">Esto eliminará todas tus citas, historial de práctica y estadísticas. Esta acción no se puede deshacer.</string>
+</resources>

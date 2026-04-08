@@ -24,7 +24,7 @@ struct AuthSheet: View {
                         Image(systemName: "person.crop.circle.fill")
                             .font(.system(size: 56))
                             .foregroundStyle(.indigo)
-                        Text(isSignUp ? "Create Account" : "Sign In")
+                        Text(isSignUp ? String(localized: "Create Account") : String(localized: "Sign In"))
                             .font(.title2.bold())
                         Text("Sign in to share recordings with the community")
                             .font(.subheadline)
@@ -42,7 +42,7 @@ struct AuthSheet: View {
                     } onCompletion: { result in
                         handleAppleSignIn(result)
                     }
-                    .signInWithAppleButtonStyle(.whiteOutline)
+                    .signInWithAppleButtonStyle(.black)
                     .frame(height: 50)
                     .cornerRadius(12)
 
@@ -117,7 +117,7 @@ struct AuthSheet: View {
                                 ProgressView()
                                     .tint(.white)
                             } else {
-                                Text(isSignUp ? "Create Account" : "Sign In")
+                                Text(isSignUp ? String(localized: "Create Account") : String(localized: "Sign In"))
                                     .fontWeight(.semibold)
                             }
                         }
@@ -134,7 +134,7 @@ struct AuthSheet: View {
                         withAnimation { isSignUp.toggle() }
                         errorMessage = nil
                     } label: {
-                        Text(isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up")
+                        Text(isSignUp ? String(localized: "Already have an account? Sign In") : String(localized: "Don't have an account? Sign Up"))
                             .font(.footnote)
                             .foregroundColor(.indigo)
                     }
@@ -178,7 +178,7 @@ struct AuthSheet: View {
                 try await authService.signUpWithEmail(email: email, password: password, name: displayName)
             } catch AuthError.confirmationRequired {
                 await MainActor.run {
-                    errorMessage = "Check your email to confirm your account, then sign in."
+                    errorMessage = String(localized: "Check your email to confirm your account, then sign in.")
                     isSignUp = false
                 }
             } catch {
@@ -196,7 +196,7 @@ struct AuthSheet: View {
             guard let credential = auth.credential as? ASAuthorizationAppleIDCredential,
                   let identityToken = credential.identityToken,
                   let tokenString = String(data: identityToken, encoding: .utf8) else {
-                errorMessage = "Could not get Apple ID token."
+                errorMessage = String(localized: "Could not get Apple ID token.")
                 return
             }
             isLoading = true

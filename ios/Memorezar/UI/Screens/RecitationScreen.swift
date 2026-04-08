@@ -10,8 +10,11 @@ struct RecitationScreen: View {
     @EnvironmentObject var userEquivalencesStore: UserEquivalencesStore
     @EnvironmentObject var localRecordingStore: LocalRecordingStore
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var purchaseService: PurchaseService
+    @EnvironmentObject var tutorialStore: TutorialStore
 
     let quote: Quote
+    var isTutorialMode: Bool = false
 
     @StateObject private var viewModel: RecitationViewModel
     @State private var communityRecordings: [Recording] = []
@@ -34,7 +37,12 @@ struct RecitationScreen: View {
     @State private var playbackRepeat = true
     @State private var showPlaybackFlagAlert = false
     @State private var showMasterInfoPopup = false
+    @State private var showRecitationTutorial = false
+    @State private var showSpotlightTutorial = false
+    @State private var spotlightStep = 0
     @State private var showQuoteAccuracy = false
+    @State private var showSplitOverlay = false
+    @State private var splitCount: Int = 3
     @State private var showLiquidFill = false
     @State private var liquidFillProgress: CGFloat = 0
     @State private var liquidWavePhase: CGFloat = 0
@@ -64,9 +72,11 @@ struct RecitationScreen: View {
     @State private var showAuthSheet = false
     @State private var showReplaceRecordingAlert = false
     @State private var existingRecording: Recording?
+    @State private var showPaywall = false
 
-    init(quote: Quote) {
+    init(quote: Quote, isTutorialMode: Bool = false) {
         self.quote = quote
+        self.isTutorialMode = isTutorialMode
         _viewModel = StateObject(wrappedValue: RecitationViewModel(quote: quote))
     }
 
@@ -114,30 +124,36 @@ struct RecitationScreen: View {
                 .allowsHitTesting(false)
 
                 VStack(spacing: 0) {
-                    // Mode picker + exit button
-                    HStack(spacing: 20) {
-                        modePicker
-                        Button {
-                            exitPlaybackMode()
-                            viewModel.saveSplitState()
-                            viewModel.stop()
-                            dismiss()
-                        } label: {
-                            Image("IconExit")
-                                .renderingMode(.original)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(height: 32)
+                    if !isTutorialMode {
+                        // Mode picker + exit button
+                        HStack(spacing: 20) {
+                            modePicker
+                            Button {
+                                exitPlaybackMode()
+                                viewModel.saveSplitState()
+                                viewModel.stop()
+                                dismiss()
+                            } label: {
+                                Image("IconExit")
+                                    .renderingMode(.original)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(height: 32)
+                            }
+                            .disabled(viewModel.showSplitPopup)
                         }
-                        .disabled(viewModel.showSplitPopup)
+                        .padding(.horizontal)
+                        .padding(.vertical, 4)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 4)
 
                     // Progress bar
-                    if isPlaybackMode {
-                        playbackProgressBar
-                    } else if settingsStore.showProgressBar {
+                    if !isTutorialMode {
+                        if isPlaybackMode {
+                            playbackProgressBar
+                        } else if settingsStore.showProgressBar {
+                            progressBar
+                        }
+                    } else {
                         progressBar
                     }
 
@@ -179,7 +195,7 @@ struct RecitationScreen: View {
                                                 }
                                                 .disabled(viewModel.activeChunkIndex <= 0)
 
-                                                Text("\(viewModel.activeChunkIndex + 1) of \(chunks.count)")
+                                                Text(String(localized: "\(viewModel.activeChunkIndex + 1) of \(chunks.count)", comment: "Chunk X of Y navigation"))
                                                     .font(.title2.bold())
 
                                                 Button {
@@ -202,7 +218,7 @@ struct RecitationScreen: View {
                                                 .font(.title2.bold())
                                                 .lineLimit(1)
 
-                                            if viewModel.hasTranslations {
+                                            if !isTutorialMode && viewModel.hasTranslations {
                                                 languageTogglePill
                                             }
                                         }
@@ -229,7 +245,9 @@ struct RecitationScreen: View {
 
 
                         // Control bar overlaid at bottom
-                        if isPlaybackMode {
+                        if isTutorialMode {
+                            tutorialControlBar
+                        } else if isPlaybackMode {
                             playbackControlBar
                         } else {
                             controlBar
@@ -256,17 +274,45 @@ struct RecitationScreen: View {
                 viewModel.settingsStore = settingsStore
                 viewModel.userEquivalencesStore = userEquivalencesStore
                 viewModel.quoteStore = quoteStore
-                viewModel.applyDefaultMode()
-                viewModel.restoreSavedSplit()
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    if viewModel.applyDefaultMode() {
+                        isPlaybackMode = true
+                        autoSelectOrShowPicker()
+                    }
+                    if !isTutorialMode {
+                        // Restore last practiced language if user practiced in a translation
+                        if let savedLang = quote.lastPracticedLanguage {
+                            viewModel.switchLanguage(savedLang)
+                        }
+                        viewModel.restoreSavedSplit()
+                    }
+                    if isTutorialMode {
+                        viewModel.isTutorialMode = true
+                        let isVoiceFirstLetter = viewModel.currentMode == .voice && viewModel.isFirstLetterToggle
+                        if !isVoiceFirstLetter {
+                            // All tutorial modes except voice+first letter: hide "Happy" (0) and "to" (2)
+                            viewModel.displayLevel = 2
+                            viewModel.revealPercentage = 50
+                            viewModel.applyTutorialReveal(revealedIndices: [1, 3])
+                        }
+                    }
+                }
                 viewModel.requestPermissions()
+                if !isTutorialMode {
+                    // SHELVED: spotlight walkthrough — re-enable when ready (see KNOWN_ISSUES.md TUTORIAL-001)
+                    // showRecitationTutorial = true
+                    // showSpotlightTutorial = true
+                }
             }
             .onDisappear {
-                viewModel.saveSplitState()
+                if !isTutorialMode { viewModel.saveSplitState() }
                 viewModel.stop()
                 exitPlaybackMode()
             }
-            .alert("Microphone Access Required", isPresented: $viewModel.showPermissionAlert) {
-                Button("Open Settings") {
+            .alert(String(localized: "Microphone Access Required"), isPresented: $viewModel.showPermissionAlert) {
+                Button(String(localized: "Open Settings")) {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
                     }
@@ -275,12 +321,12 @@ struct RecitationScreen: View {
                     dismiss()
                 }
             } message: {
-                Text("Memorezar needs microphone access to hear your recitation. Please enable it in Settings.")
+                Text(String(localized: "Memorezar needs microphone access to hear your recitation. Please enable it in Settings."))
             }
-            .alert("Audio Unavailable", isPresented: $viewModel.audioSessionFailed) {
+            .alert(String(localized: "Audio Unavailable"), isPresented: $viewModel.audioSessionFailed) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("The microphone is being used by another app (e.g. a phone call). Please end the other call and try again.")
+                Text(String(localized: "The microphone is being used by another app (e.g. a phone call). Please end the other call and try again."))
             }
             .overlay {
                 if viewModel.showMasterModeHintBlock {
@@ -297,7 +343,7 @@ struct RecitationScreen: View {
                                 .aspectRatio(contentMode: .fit)
                                 .frame(width: 100, height: 100)
 
-                            Text("No help — prove you know it!")
+                            Text(String(localized: "No help — prove you know it!"))
                                 .font(.headline)
                                 .multilineTextAlignment(.center)
 
@@ -324,6 +370,36 @@ struct RecitationScreen: View {
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: showMasterInfoPopup)
+            .overlay {
+                if showRecitationTutorial {
+                    recitationTutorialPopup
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: showRecitationTutorial)
+            .overlay {
+                if showSplitOverlay {
+                    splitMergeOverlay
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: showSplitOverlay)
+            .overlayPreferenceValue(SpotlightPreferenceKey.self) { anchors in
+                if showSpotlightTutorial {
+                    SpotlightOverlay(
+                        steps: spotlightTutorialSteps,
+                        anchors: anchors,
+                        currentStep: $spotlightStep,
+                        onDismiss: {
+                            showSpotlightTutorial = false
+                            spotlightStep = 0
+                            tutorialStore.completeTip(TipDefinition.recitationIntro.id)
+                        }
+                    )
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: showSpotlightTutorial)
             .onChange(of: viewModel.isMasterMode) { _, isMaster in
                 if isMaster {
                     wasMasterMode = true
@@ -349,7 +425,7 @@ struct RecitationScreen: View {
                 NavigationStack {
                     Form {
                         Section {
-                            TextField("Recording name", text: $recordingName)
+                            TextField(String(localized: "Recording name"), text: $recordingName)
                         } header: {
                             Text("Name")
                         } footer: {
@@ -363,7 +439,7 @@ struct RecitationScreen: View {
                             if authService.isSignedIn {
                                 Toggle(isOn: $shareWithCommunity) {
                                     Label(
-                                        shareWithCommunity ? "Public" : "Private",
+                                        shareWithCommunity ? String(localized: "Public") : String(localized: "Private"),
                                         systemImage: shareWithCommunity ? "globe" : "lock.fill"
                                     )
                                 }
@@ -371,7 +447,7 @@ struct RecitationScreen: View {
                                 Button {
                                     showAuthSheet = true
                                 } label: {
-                                    Label("Sign in to share", systemImage: "lock.fill")
+                                    Label(String(localized: "Sign in to share"), systemImage: "lock.fill")
                                         .foregroundColor(.secondary)
                                 }
                             }
@@ -380,10 +456,10 @@ struct RecitationScreen: View {
                         } footer: {
                             if authService.isSignedIn {
                                 Text(shareWithCommunity
-                                    ? "This recording will be shared with the community."
-                                    : "Only you can see this recording.")
+                                    ? String(localized: "This recording will be shared with the community.")
+                                    : String(localized: "Only you can see this recording."))
                             } else {
-                                Text("Sign in to share recordings with the community.")
+                                Text(String(localized: "Sign in to share recordings with the community."))
                             }
                         }
 
@@ -408,7 +484,7 @@ struct RecitationScreen: View {
                             }
                         }
                     }
-                    .navigationTitle(isEditingExistingRecording ? "Edit Recording" : "Save Recording")
+                    .navigationTitle(isEditingExistingRecording ? String(localized: "Edit Recording") : String(localized: "Save Recording"))
                     .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
@@ -466,23 +542,23 @@ struct RecitationScreen: View {
                         }
                     }
                 }
+                .sheet(isPresented: $showAuthSheet) {
+                    AuthSheet()
+                        .environmentObject(authService)
+                }
                 .presentationDetents([.medium])
             }
             .sheet(isPresented: $showRecordingPicker) {
                 recordingPickerSheet
                     .presentationDetents([.medium, .large])
             }
-            .sheet(isPresented: $showAuthSheet) {
-                AuthSheet()
-                    .environmentObject(authService)
-            }
-            .alert("Replace Recording?", isPresented: $showReplaceRecordingAlert) {
+            .alert(String(localized: "Replace Recording?"), isPresented: $showReplaceRecordingAlert) {
                 Button("Replace", role: .destructive) {
                     Task { await performUpload() }
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("You already have a recording for this quote in this language. Uploading will replace it.")
+                Text(String(localized: "You already have a recording for this quote in this language. Uploading will replace it."))
             }
             .onChange(of: showRecordingPicker) { _, showing in
                 if !showing {
@@ -495,7 +571,21 @@ struct RecitationScreen: View {
             }
             .sheet(isPresented: $showQuoteAccuracy) {
                 NavigationStack {
-                    QuoteAccuracyDetailView(quote: viewModel.quote)
+                    QuoteAccuracyDetailView(
+                        quoteId: viewModel.quote.id,
+                        onScissors: {
+                            splitCount = max(2, viewModel.splitCount)
+                            showQuoteAccuracy = false
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showSplitOverlay = true
+                                }
+                            }
+                        },
+                        onReset: {
+                            viewModel.displayLevel = 1
+                        }
+                    )
                         .environmentObject(quoteStore)
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
@@ -506,7 +596,10 @@ struct RecitationScreen: View {
                 }
                 .presentationDetents([.large])
             }
-            .alert("Delete Recording", isPresented: $showDeleteRecordingAlert) {
+            .sheet(isPresented: $showPaywall) {
+                PaywallSheet()
+            }
+            .alert(String(localized: "Delete Recording"), isPresented: $showDeleteRecordingAlert) {
                 Button("Delete", role: .destructive) {
                     if case .local(let recording) = playbackSource {
                         playbackPlayer?.stop()
@@ -525,10 +618,10 @@ struct RecitationScreen: View {
                 }
                 Button("Cancel", role: .cancel) { }
             } message: {
-                Text("Are you sure you want to delete this recording? This cannot be undone.")
+                Text(String(localized: "Are you sure you want to delete this recording? This cannot be undone."))
             }
-            .alert("Flag Recording", isPresented: $showPlaybackFlagAlert) {
-                TextField("Reason (optional)", text: $playbackFlagReason)
+            .alert(String(localized: "Flag Recording"), isPresented: $showPlaybackFlagAlert) {
+                TextField(String(localized: "Reason (optional)"), text: $playbackFlagReason)
                 Button("Flag", role: .destructive) {
                     flagCurrentRecording()
                 }
@@ -536,7 +629,7 @@ struct RecitationScreen: View {
                     playbackFlagReason = ""
                 }
             } message: {
-                Text("Report this recording as inappropriate?")
+                Text(String(localized: "Report this recording as inappropriate?"))
             }
             .task(id: viewModel.quote.id) {
                 let hash = RecordingService.shared.hashQuoteText(viewModel.activeText)
@@ -635,6 +728,7 @@ struct RecitationScreen: View {
                 if tts.isSpeaking {
                     tts.stop()
                 } else {
+                    guard purchaseService.canUseTTS else { showPaywall = true; return }
                     tts.speak(viewModel.activeText, language: lang)
                 }
             } label: {
@@ -663,7 +757,7 @@ struct RecitationScreen: View {
         }
         .onAppear {
             tts.onFinish = { [self] in
-                if playbackRepeat && isTTSActive {
+                if playbackRepeat && isTTSActive && purchaseService.canUseTTS {
                     let lang = viewModel.activeLanguage ?? viewModel.primaryLanguageCode
                     tts.speak(viewModel.activeText, language: lang)
                 }
@@ -1200,6 +1294,7 @@ struct RecitationScreen: View {
 
             // Text-to-Speech button
             Button {
+                guard purchaseService.canUseTTS else { showPaywall = true; return }
                 playbackPlayer?.stop()
                 playbackPlayer = nil
                 isPlaying = false
@@ -1312,7 +1407,7 @@ struct RecitationScreen: View {
             if isLoadingRecordings {
                 HStack {
                     Spacer()
-                    ProgressView("Loading...")
+                    ProgressView(String(localized: "Loading..."))
                         .padding(.vertical, 30)
                     Spacer()
                 }
@@ -1390,7 +1485,7 @@ struct RecitationScreen: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
-                            Text(recording.isFavorite ? (recording.uploaderName ?? "Community") : (recording.name ?? "Your recording"))
+                            Text(recording.isFavorite ? (recording.uploaderName ?? String(localized: "Community")) : (recording.name ?? String(localized: "Your recording")))
                                 .font(.body.weight(isSelected ? .semibold : .regular))
                                 .foregroundColor(isSelected ? .blue : .primary)
                             if let langLabel {
@@ -1815,6 +1910,13 @@ struct RecitationScreen: View {
 
     private func saveNewRecording(name: String) async {
         guard let data = recorder.getRecordingData() else { return }
+
+        // Enforce 3-recording cap for free users
+        guard purchaseService.canAddRecording(recordingStore: localRecordingStore) else {
+            await MainActor.run { showPaywall = true }
+            return
+        }
+
         let quoteHash = RecordingService.shared.hashQuoteText(viewModel.activeText)
 
         // Always save locally
@@ -1961,7 +2063,7 @@ struct RecitationScreen: View {
                         fontSize: settingsStore.fontSize.pointSize,
                         isVisible: viewModel.shouldShowWord(at: index),
                         displayMode: viewModel.wordDisplayMode(at: index),
-                        hideProgress: viewModel.currentMode == .multipleChoice,
+                        hideProgress: false,
                         isFlashing: index == viewModel.flashingWordIndex,
                         onTap: viewModel.isWordTappable(at: index)
                             ? { viewModel.tapWord(at: index, countAsHint: !isPlaybackMode) }
@@ -1973,6 +2075,7 @@ struct RecitationScreen: View {
             .padding()
             .background(Color(.secondarySystemBackground))
             .clipShape(cornerShape)
+            .spotlightAnchor("wordGrid")
 
         }
         .onChange(of: viewModel.currentPosition) { _, newPosition in
@@ -1997,7 +2100,6 @@ struct RecitationScreen: View {
         [
             (.mode(.voice), MemorizationMode.voice.icon),
             (.mode(.typing), MemorizationMode.typing.icon),
-            (.mode(.firstLetter), MemorizationMode.firstLetter.icon),
             (.mode(.multipleChoice), MemorizationMode.multipleChoice.icon),
             (.music, "music.note"),
         ]
@@ -2058,6 +2160,7 @@ struct RecitationScreen: View {
         .background(Color(.systemGray5))
         .clipShape(RoundedRectangle(cornerRadius: 9))
         .disabled(viewModel.showSplitPopup)
+        .spotlightAnchor("modeTabs")
     }
 
     // MARK: - Reveal Slider
@@ -2164,6 +2267,7 @@ struct RecitationScreen: View {
         let primary = viewModel.primaryLanguageCode
         return Menu {
             Button {
+                guard purchaseService.canUseTTS else { showPaywall = true; return }
                 viewModel.switchLanguage(nil)
                 let lang = viewModel.primaryLanguageCode
                 tts.stop()
@@ -2173,6 +2277,7 @@ struct RecitationScreen: View {
             }
             ForEach(viewModel.availableLanguages, id: \.self) { lang in
                 Button {
+                    guard purchaseService.canUseTTS else { showPaywall = true; return }
                     viewModel.switchLanguage(lang)
                     tts.stop()
                     tts.speak(viewModel.activeText, language: lang)
@@ -2225,26 +2330,22 @@ struct RecitationScreen: View {
             .padding(.vertical, 4)
             .background(Self.languageColor(viewModel.activeLanguage ?? primary))
             .cornerRadius(12)
+            .spotlightAnchor("languageButton")
         }
     }
 
     private var revealSlider: some View {
-        Group {
-            if viewModel.currentMode == .firstLetter {
-                // Stepped slider for letter reveal: 0/1/2/3/full
-                SteppedLetterSlider(step: $viewModel.letterRevealStep)
-            } else {
-                // Continuous slider for word reveal
-                CustomRevealSlider(
-                    value: $viewModel.revealPercentage,
-                    onEditingChanged: { editing in
-                        if !editing {
-                            viewModel.applyRevealPercentage()
-                        }
-                    }
-                )
-            }
-        }
+        let isLetterMode = viewModel.currentMode == .firstLetter || (viewModel.isFirstLetterToggle && viewModel.currentMode == .voice)
+        return LevelRevealSlider(
+            level: Binding(
+                get: { viewModel.displayLevel },
+                set: { newLevel in
+                    viewModel.setLevel(newLevel)
+                }
+            ),
+            isLetterMode: isLetterMode
+        )
+        .spotlightAnchor("revealSlider")
         .padding(.horizontal, 4)
         .disabled(viewModel.isMasterMode)
         .opacity(viewModel.isMasterMode ? 0.3 : 1)
@@ -2280,19 +2381,23 @@ struct RecitationScreen: View {
             }
             .frame(width: 44, height: 44)
             .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+            .spotlightAnchor("crownButton")
         }
     }
 
-    /// Shows streak counter in master mode, info button otherwise — crossfades between them
+    /// First letter toggle button (left of mic) — shows streak counter in master mode
     private var infoOrStreakButton: some View {
         Button {
-            if !viewModel.isMasterMode {
-                showQuoteAccuracy = true
+            if viewModel.isMasterMode { return }
+            withAnimation(.easeInOut(duration: 0.35)) {
+                viewModel.toggleFirstLetterMode()
             }
         } label: {
             ZStack {
                 Circle()
-                    .fill(Color(.systemGray4))
+                    .fill(viewModel.isFirstLetterToggle && !viewModel.isMasterMode
+                          ? Color.indigo.opacity(0.8)
+                          : Color(.systemGray4))
                     .frame(width: 44, height: 44)
 
                 LiquidWaveShape(
@@ -2304,15 +2409,15 @@ struct RecitationScreen: View {
                 .frame(width: 44, height: 44)
                 .clipShape(Circle())
 
-                // Info icon — fades out in master mode
-                Image(systemName: "info.circle")
+                // First letter icon — fades out in master mode
+                Image(systemName: "a.square")
                     .font(.system(size: 20))
                     .foregroundColor(.white)
                     .opacity(viewModel.isMasterMode ? 0 : 1)
                     .scaleEffect(viewModel.isMasterMode ? 0.5 : 1)
 
                 // Streak text — fades in for master mode
-                Text("\(viewModel.quote.masteryStreak)/3")
+                Text(String(localized: "\(viewModel.quote.masteryStreak)/3", comment: "Mastery streak progress X/3"))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.black)
                     .opacity(viewModel.isMasterMode ? 1 : 0)
@@ -2323,6 +2428,85 @@ struct RecitationScreen: View {
             .animation(.easeInOut(duration: 0.35), value: viewModel.isMasterMode)
         }
         .allowsHitTesting(!viewModel.isMasterMode)
+        .spotlightAnchor("firstLetterButton")
+    }
+
+    // MARK: - Spotlight Tutorial Steps
+
+    private var spotlightTutorialSteps: [TutorialStep] {
+        [
+            TutorialStep(anchorId: "modeTabs", text: "Switch between **Voice**, **Typing**, and other practice modes", position: .below, cornerRadius: 9),
+            TutorialStep(anchorId: "revealSlider", text: "Slide to **reveal or hide** words as you memorize", position: .below),
+            TutorialStep(anchorId: "wordGrid", text: "Tap any **hidden word** to peek — it counts as a hint", position: .below, cornerRadius: 16),
+            TutorialStep(anchorId: "firstLetterButton", text: "Toggle **first letter mode** — shows just the first letter of each word", position: .above, padding: 4, cornerRadius: 22),
+            TutorialStep(anchorId: "crownButton", text: "Enter **mastery mode** — get 3 perfect recitations in a row", position: .above, padding: 4, cornerRadius: 22),
+            TutorialStep(anchorId: "languageButton", text: "Practice in a **different language**", position: .below, padding: 4, cornerRadius: 12),
+            TutorialStep(anchorId: "infoBar", text: "Track your **correct words**, **mistakes**, and **hints** used", position: .above, cornerRadius: 36),
+            TutorialStep(anchorId: "micButton", text: "Tap to **start reciting** — speak loud and clear!", position: .above, padding: 4, cornerRadius: 40),
+        ]
+    }
+
+    // MARK: - Recitation Tutorial Popup
+
+    private var recitationTutorialPopup: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    showRecitationTutorial = false
+                    tutorialStore.completeTip(TipDefinition.recitationIntro.id)
+                }
+
+            VStack(spacing: 16) {
+                BrainCharacterView(
+                    character: .speech,
+                    size: 140
+                )
+                .offset(x: 12)
+
+                Text("Speak Clearly")
+                    .font(.title3.bold())
+
+                Text("Tap the **microphone button** to start, then recite **loud and clear**.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+
+                Button {
+                    showRecitationTutorial = false
+                    tutorialStore.completeTip(TipDefinition.recitationIntro.id)
+                } label: {
+                    HStack {
+                        Text("Got it")
+                        Image(systemName: "checkmark")
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.indigo)
+                .padding(.horizontal)
+            }
+            .padding(24)
+            .background(Color(.systemBackground))
+            .cornerRadius(20)
+            .shadow(radius: 20)
+            .padding(.horizontal, 32)
+        }
+    }
+
+    private func tutorialStep(number: String, icon: String, text: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(.indigo)
+                .frame(width: 28)
+            Text(.init(text))
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
     }
 
     private var masterInfoPopup: some View {
@@ -2388,6 +2572,115 @@ struct RecitationScreen: View {
         }
     }
 
+    // MARK: - Split/Merge Overlay
+
+    private var splitMergeOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeInOut(duration: 0.2)) { showSplitOverlay = false }
+                }
+
+            VStack(spacing: 16) {
+                Text("Quote Splitting")
+                    .font(.headline)
+
+                if viewModel.isSplit {
+                    VStack(spacing: 10) {
+                        Button {
+                            viewModel.mergeChunks(at: viewModel.activeChunkIndex - 1)
+                            withAnimation(.easeInOut(duration: 0.2)) { showSplitOverlay = false }
+                        } label: {
+                            HStack {
+                                Text("Merge with previous part")
+                                Image(systemName: "arrow.merge")
+                            }
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.indigo)
+                        .disabled(viewModel.activeChunkIndex <= 0)
+
+                        Button {
+                            viewModel.unsplit()
+                            withAnimation(.easeInOut(duration: 0.2)) { showSplitOverlay = false }
+                        } label: {
+                            HStack {
+                                Text("Back to full quote")
+                                Image(systemName: "text.quote")
+                            }
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                    }
+                } else {
+                    let wordsPerSection = max(1, viewModel.quote.wordCount / splitCount)
+
+                    VStack(spacing: 16) {
+                        Text("How many parts?")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        HStack(spacing: 20) {
+                            Button {
+                                if splitCount > 2 { splitCount -= 1 }
+                            } label: {
+                                Image(systemName: "minus")
+                                    .font(.title2.bold())
+                                    .foregroundColor(splitCount > 2 ? .primary : .secondary)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color(.systemGray5))
+                                    .cornerRadius(10)
+                            }
+
+                            Text("\(splitCount)")
+                                .font(.system(size: 42, weight: .bold))
+                                .monospacedDigit()
+
+                            Button {
+                                if splitCount < 10 { splitCount += 1 }
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.title2.bold())
+                                    .foregroundColor(splitCount < 10 ? .primary : .secondary)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color(.systemGray5))
+                                    .cornerRadius(10)
+                            }
+                        }
+
+                        Text(String(localized: "~\(wordsPerSection) words each", comment: "Approximate words per section"))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Button {
+                            viewModel.splitActiveChunk(into: splitCount)
+                            withAnimation(.easeInOut(duration: 0.2)) { showSplitOverlay = false }
+                        } label: {
+                            HStack {
+                                Text("Split")
+                                Image(systemName: "scissors")
+                            }
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.indigo)
+                    }
+                }
+            }
+            .padding(24)
+            .background(Color(.systemBackground))
+            .cornerRadius(20)
+            .shadow(radius: 20)
+            .padding(.horizontal, 32)
+        }
+    }
+
     // MARK: - Liquid Fill Animation
 
     private func triggerLiquidFillAnimation() {
@@ -2444,12 +2737,17 @@ struct RecitationScreen: View {
     @State private var mistakeCharacters: [Int: BrainCharacter] = [:]
 
     private var resultsSheet: some View {
-        let session = viewModel.isSplit ? viewModel.createChunkSession() : viewModel.createSession()
+        // In master mode with split, show aggregate stats across all chunks
+        let session = (viewModel.isSplit && !viewModel.isMasterMode) ? viewModel.createChunkSession() : viewModel.createSession()
         let usedChars = Set(mistakeCharacters.values)
         return ResultsView(
             session: session,
             quote: viewModel.quote,
             onDismiss: {
+                if isTutorialMode {
+                    dismiss()
+                    return
+                }
                 if viewModel.isSplit {
                     DispatchQueue.main.async {
                         viewModel.saveSplitState()
@@ -2473,7 +2771,9 @@ struct RecitationScreen: View {
             usedMistakeCharacters: usedChars,
             onMasteryResult: viewModel.isMasterMode ? { passed in
                 viewModel.recordMasteryResult(passed: passed)
-            } : nil
+            } : nil,
+            activeLanguage: viewModel.activeLanguage,
+            isTutorialMode: isTutorialMode
         )
         .presentationDetents([.fraction(0.68)])
     }
@@ -2493,7 +2793,6 @@ struct RecitationScreen: View {
     }
 
     private func mistakeDisputePopup(spokenWord: String) -> some View {
-        let isUncertain = viewModel.isTappedMistakeUncertain
         let expectedWord = viewModel.tappedMistakeIndex.flatMap { idx in
             idx < viewModel.words.count ? viewModel.words[idx].word : nil
         }
@@ -2510,30 +2809,17 @@ struct RecitationScreen: View {
             VStack(spacing: 16) {
                 BrainCharacterView(character: character, size: 150)
 
-                if isUncertain {
-                    if let expected = expectedWord {
-                        Text("Did you mean \"\(expected)\"?")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    (Text("I heard you say ")
-                        .foregroundColor(.secondary)
-                    + Text("\"\(spokenWord)\"")
-                        .font(.headline)
-                        .foregroundColor(.orange))
-                } else {
-                    (Text("I heard you say ")
-                        .foregroundColor(.secondary)
-                    + Text("\"\(spokenWord)\"")
-                        .font(.headline)
-                        .foregroundColor(.red))
-                }
+                (Text(String(localized: "I heard you say "))
+                    .foregroundColor(.secondary)
+                + Text("\"\(spokenWord)\"")
+                    .font(.headline)
+                    .foregroundColor(.red))
 
                 Button {
                     viewModel.overrideMistake()
                 } label: {
                     HStack {
-                        Text(isUncertain ? "Yes, I said it right" : "No, I said the right word")
+                        Text(String(localized: "No, I said the right word"))
                         Image(systemName: "checkmark")
                     }
                     .font(.headline)
@@ -2559,6 +2845,130 @@ struct RecitationScreen: View {
         }
     }
 
+    // MARK: - Tutorial Control Bar (simplified — no crown, no info, no reset)
+
+    private var tutorialControlBar: some View {
+        VStack(spacing: 8) {
+            VStack(spacing: 4) {
+                if viewModel.currentMode == .typing {
+                    if viewModel.isFirstLetterToggle {
+                        Text("Type the first letter of each word in")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Complete the blanks in the phrase")
+                            .font(.callout)
+                            .foregroundColor(.secondary)
+                    }
+                    Text("\"\(quote.text)\"")
+                        .font(.callout.bold().italic())
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("Tap the microphone and try saying")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                    Text("\"\(quote.text)\"")
+                        .font(.callout.bold().italic())
+                        .foregroundColor(.secondary)
+                }
+            }
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
+
+            if viewModel.currentMode == .typing {
+                TypingInputField(
+                    text: $viewModel.typingInput,
+                    onSubmitWord: { viewModel.submitTypingInput() },
+                    isMasterMode: false,
+                    isFirstLetterMode: viewModel.isFirstLetterToggle
+                )
+                .padding(.horizontal)
+            } else {
+                Button {
+                    if viewModel.isListening {
+                        viewModel.pause()
+                    } else {
+                        viewModel.start()
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.blue)
+                            .frame(width: 80, height: 80)
+                        Group {
+                            if viewModel.isListening {
+                                VoiceWaveformView(level: viewModel.audioLevel, showPause: viewModel.showPauseIcon)
+                            } else {
+                                Image(systemName: "mic.fill")
+                                    .font(.system(size: 34))
+                            }
+                        }
+                        .foregroundColor(.white)
+                    }
+                    .frame(width: 80, height: 80)
+                    .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                }
+            }
+
+            // Dark stats pill (no INFO or RESET in tutorial)
+            HStack(spacing: 0) {
+                Spacer()
+
+                HStack(spacing: 20) {
+                    VStack(spacing: 3) {
+                        Text("\(viewModel.correctCount)")
+                            .font(.system(size: 20, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundColor(.green)
+                            .frame(height: 24)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.green.opacity(0.7))
+                            .frame(height: 14)
+                    }
+                    .frame(width: 40)
+
+                    VStack(spacing: 3) {
+                        Text("\(viewModel.mistakeCount)")
+                            .font(.system(size: 20, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundColor(.red)
+                            .frame(height: 24)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.red.opacity(0.7))
+                            .frame(height: 14)
+                    }
+                    .frame(width: 40)
+
+                    VStack(spacing: 3) {
+                        Text("\(viewModel.hintCount)")
+                            .font(.system(size: 20, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundColor(.yellow)
+                            .frame(height: 24)
+                        Image(systemName: "lightbulb.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.yellow.opacity(0.7))
+                            .frame(height: 14)
+                    }
+                    .frame(width: 40)
+                }
+
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 36)
+                    .fill(Color(hex: 0x333333))
+            )
+            .padding(.horizontal, 8)
+
+            Spacer().frame(height: 0)
+        }
+    }
+
     // MARK: - Control Bar
 
     private var controlBar: some View {
@@ -2577,7 +2987,8 @@ struct RecitationScreen: View {
                         TypingInputField(
                             text: $viewModel.typingInput,
                             onSubmitWord: { viewModel.submitTypingInput() },
-                            isMasterMode: viewModel.isMasterMode
+                            isMasterMode: viewModel.isMasterMode,
+                            isFirstLetterMode: viewModel.isFirstLetterToggle
                         )
                         masterCrownButton
                     }
@@ -2623,6 +3034,7 @@ struct RecitationScreen: View {
                             }
                             .frame(width: 80, height: 80)
                             .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                            .spotlightAnchor("micButton")
                         }
 
                         // Crown button
@@ -2634,15 +3046,14 @@ struct RecitationScreen: View {
 
             // Dark pill
             HStack(spacing: 0) {
-                // Left: Split / Merge
+                // Left: Info
                 Button {
-                    viewModel.pause()
-                    viewModel.showSplitPopup = true
+                    showQuoteAccuracy = true
                 } label: {
                     VStack(spacing: 3) {
-                        Image(systemName: viewModel.isSplit ? "arrow.merge" : "scissors")
+                        Image(systemName: "info.circle")
                             .font(.system(size: 18))
-                        Text(viewModel.isSplit ? "MERGE" : "SPLIT")
+                        Text("INFO")
                             .font(.system(size: 9, weight: .semibold))
                     }
                     .foregroundColor(.white.opacity(0.7))
@@ -2678,21 +3089,6 @@ struct RecitationScreen: View {
                             .frame(height: 14)
                     }
                     .frame(width: 40)
-
-                    if viewModel.uncertainCount > 0 {
-                        VStack(spacing: 3) {
-                            Text("\(viewModel.uncertainCount)")
-                                .font(.system(size: 20, weight: .bold))
-                                .monospacedDigit()
-                                .foregroundColor(.orange)
-                                .frame(height: 24)
-                            Image(systemName: "questionmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.orange.opacity(0.7))
-                                .frame(height: 14)
-                        }
-                        .frame(width: 40)
-                    }
 
                     VStack(spacing: 3) {
                         Text("\(viewModel.hintCount)")
@@ -2731,6 +3127,7 @@ struct RecitationScreen: View {
                     .fill(Color(hex: 0x333333))
             )
             .padding(.horizontal, 8)
+            .spotlightAnchor("infoBar")
             .offset(y: viewModel.isMasterMode ? 60 : 0)
             .animation(.easeInOut(duration: 0.4), value: viewModel.isMasterMode)
 
@@ -2843,7 +3240,7 @@ struct RecitationScreen: View {
                 }
             }
 
-            Text("~\(wordsPerSection) words each")
+            Text(String(localized: "~\(wordsPerSection) words each", comment: "Approximate words per section"))
                 .font(.caption)
                 .foregroundColor(.secondary)
 
@@ -2944,10 +3341,9 @@ struct RecitationScreen: View {
         }
         // In-session completion
         let totalWords = chunk.words.count
-        let completedWords = chunk.words.filter { $0.state == .correct || $0.state == .incorrect || $0.state == .uncertain }.count
+        let completedWords = chunk.words.filter { $0.state == .correct || $0.state == .incorrect }.count
         if completedWords >= totalWords && totalWords > 0 {
-            let definiteMistakeCount = chunk.mistakes.filter { $0.certainty == .definite }.count
-            return Double(max(0, totalWords - definiteMistakeCount)) / Double(totalWords)
+            return Double(max(0, totalWords - chunk.mistakes.count)) / Double(totalWords)
         }
         return nil
     }
@@ -3023,11 +3419,13 @@ struct VoiceWaveformView: View {
     }
 }
 
-// MARK: - Custom Reveal Slider
+// MARK: - Level Reveal Slider
 
-struct CustomRevealSlider: View {
-    @Binding var value: Double
-    var onEditingChanged: (Bool) -> Void
+/// 3-step slider that looks like the old unified slider (eye icon, same track)
+/// but snaps to 3 discrete levels. Level 1 (90%) on the RIGHT, level 3 (10%) on the LEFT.
+struct LevelRevealSlider: View {
+    @Binding var level: Int  // 1, 2, or 3
+    var isLetterMode: Bool
 
     @State private var isDragging = false
     @State private var showNumber = false
@@ -3035,12 +3433,17 @@ struct CustomRevealSlider: View {
 
     private let trackHeight: CGFloat = 4
     private let thumbSize: CGFloat = 26
+    private let stepCount = 3
+
+    /// Normalized thumb position 0-1 (level 1 = right, level 3 = left)
+    private var normalizedPosition: CGFloat {
+        CGFloat(stepCount - level) / CGFloat(stepCount - 1)
+    }
 
     var body: some View {
         GeometryReader { geometry in
-            let range = 0.0...100.0
             let width = geometry.size.width - thumbSize
-            let offsetX = width * (value - range.lowerBound) / (range.upperBound - range.lowerBound)
+            let offsetX = normalizedPosition * width
 
             ZStack(alignment: .leading) {
                 // Track background
@@ -3049,21 +3452,15 @@ struct CustomRevealSlider: View {
                     .frame(height: trackHeight)
                     .padding(.horizontal, thumbSize / 2)
 
-                // Filled track
-                Capsule()
-                    .fill(Color(.systemGray4))
-                    .frame(width: offsetX + thumbSize / 2, height: trackHeight)
-                    .padding(.leading, thumbSize / 2)
-
-                // Thumb with percentage / eye icon
+                // Thumb
                 ZStack {
                     Circle()
                         .fill(Color.blue)
                         .frame(width: thumbSize, height: thumbSize)
                         .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
 
-                    if showNumber && Int(value) > 0 {
-                        Text("\(Int(value))")
+                    if showNumber {
+                        Text(thumbLabel)
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.white)
                             .monospacedDigit()
@@ -3077,6 +3474,7 @@ struct CustomRevealSlider: View {
                 }
                 .animation(.easeInOut(duration: 0.3), value: showNumber)
                 .offset(x: offsetX)
+                .animation(.easeInOut(duration: 0.35), value: normalizedPosition)
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { drag in
@@ -3084,19 +3482,24 @@ struct CustomRevealSlider: View {
                                 isDragging = true
                                 showNumber = true
                                 hideTimer?.invalidate()
-                                onEditingChanged(true)
                             }
-                            let newValue = ((drag.location.x - thumbSize / 2) / width) * (range.upperBound - range.lowerBound) + range.lowerBound
-                            let stepped = (newValue / 5).rounded() * 5
-                            value = min(max(stepped, range.lowerBound), range.upperBound)
+                            let raw = (drag.location.x - thumbSize / 2) / width
+                            let clamped = min(max(raw, 0), 1)
+                            // Invert: left = level 3, right = level 1
+                            let snapped = stepCount - Int(round(clamped * CGFloat(stepCount - 1)))
+                            let newLevel = min(max(snapped, 1), stepCount)
+                            if newLevel != level {
+                                level = newLevel
+                            }
                         }
                         .onEnded { _ in
                             isDragging = false
-                            onEditingChanged(false)
                             hideTimer?.invalidate()
                             hideTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    showNumber = false
+                                DispatchQueue.main.async {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        showNumber = false
+                                    }
                                 }
                             }
                         }
@@ -3106,9 +3509,27 @@ struct CustomRevealSlider: View {
         }
         .frame(height: 26)
     }
-}
 
-// MARK: - Stepped Letter Slider
+    private var thumbLabel: String {
+        if isLetterMode {
+            // Show letter count for this level
+            switch level {
+            case 1: return "3"
+            case 2: return "2"
+            case 3: return "1"
+            default: return "3"
+            }
+        } else {
+            // Show reveal percentage for this level
+            switch level {
+            case 1: return "90"
+            case 2: return "50"
+            case 3: return "20"
+            default: return "90"
+            }
+        }
+    }
+}
 
 // MARK: - Typing Input Field
 
@@ -3116,10 +3537,11 @@ struct TypingInputField: View {
     @Binding var text: String
     let onSubmitWord: () -> Void
     var isMasterMode: Bool = false
+    var isFirstLetterMode: Bool = false
     @FocusState private var isFocused: Bool
 
     var body: some View {
-        TextField("Type the word...", text: $text)
+        TextField(isFirstLetterMode ? String(localized: "Type the first letter...") : String(localized: "Type the word..."), text: $text)
             .textFieldStyle(.plain)
             .font(.subheadline.weight(.semibold))
             .foregroundColor(.primary)
@@ -3141,6 +3563,14 @@ struct TypingInputField: View {
                 isFocused = true
             }
             .onChange(of: text) { _, newValue in
+                if isFirstLetterMode {
+                    // In first-letter mode, submit immediately on any character
+                    let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty {
+                        onSubmitWord()
+                    }
+                    return
+                }
                 if newValue.hasSuffix(" ") {
                     onSubmitWord()
                 }
@@ -3163,6 +3593,9 @@ struct TypingInputField: View {
 struct SteppedLetterSlider: View {
     @Binding var step: Int  // 0=hidden, 1-5=number of letters revealed
 
+    @State private var showNumber = false
+    @State private var hideTimer: Timer?
+
     private let maxStep = 5
     private let trackHeight: CGFloat = 4
     private let thumbSize: CGFloat = 26
@@ -3180,30 +3613,45 @@ struct SteppedLetterSlider: View {
                     .frame(height: trackHeight)
                     .padding(.horizontal, thumbSize / 2)
 
-                // Filled track
-                Capsule()
-                    .fill(Color.blue)
-                    .frame(width: offsetX + thumbSize / 2, height: trackHeight)
-                    .padding(.leading, thumbSize / 2)
-
-                // Thumb
+                // Thumb with number / eye icon
                 ZStack {
                     Circle()
                         .fill(Color.blue)
                         .frame(width: thumbSize, height: thumbSize)
                         .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
 
-                    Image(systemName: "eye")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
+                    if showNumber && step > 0 {
+                        Text("\(step)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .monospacedDigit()
+                            .transition(.opacity)
+                    } else {
+                        Image(systemName: "eye")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .transition(.opacity)
+                    }
                 }
+                .animation(.easeInOut(duration: 0.3), value: showNumber)
                 .offset(x: offsetX)
+                .animation(.easeInOut(duration: 0.35), value: step)
                 .gesture(
                     DragGesture()
                         .onChanged { gesture in
+                            showNumber = true
+                            hideTimer?.invalidate()
                             let newX = gesture.location.x - thumbSize / 2
                             let rawStep = Int(round(newX / width * CGFloat(maxStep)))
                             step = min(max(rawStep, 0), maxStep)
+                        }
+                        .onEnded { _ in
+                            hideTimer?.invalidate()
+                            hideTimer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: false) { _ in
+                                DispatchQueue.main.async {
+                                    showNumber = false
+                                }
+                            }
                         }
                 )
             }
@@ -3231,7 +3679,7 @@ struct WordView: View {
         // Flashing hint — always show the word
         if isFlashing { return true }
         // Already spoken words are always revealed
-        if state == .correct || state == .incorrect || state == .uncertain { return true }
+        if state == .correct || state == .incorrect { return true }
         // In letter reveal modes, the letter count controls display — not isVisible
         switch displayMode {
         case .firstLetter, .firstTwoLetters, .letters: return false
@@ -3245,7 +3693,7 @@ struct WordView: View {
         Text(word)
             .font(.system(size: fontSize, weight: .regular))
             .foregroundColor(showWordText ? foregroundColor : .clear)
-            .overlay {
+            .overlay(alignment: .leading) {
                 if !showWordText {
                     switch displayMode {
                     case .firstLetter:
@@ -3259,6 +3707,8 @@ struct WordView: View {
                         RoundedRectangle(cornerRadius: 4)
                             .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                             .background(Color(.systemGray5).cornerRadius(4))
+                            .padding(.horizontal, -4)
+                            .padding(.vertical, -2)
                     }
                 }
             }
@@ -3307,14 +3757,13 @@ struct WordView: View {
     }
 
     private var foregroundColor: Color {
-        if hideProgress && (state == .correct || state == .incorrect || state == .uncertain) {
+        if hideProgress && (state == .correct || state == .incorrect) {
             return .primary
         }
         switch state {
         case .pending: return .primary.opacity(0.5)
         case .correct: return .green
         case .incorrect: return .red
-        case .uncertain: return .orange
         case .current: return .primary
         }
     }
@@ -3323,14 +3772,13 @@ struct WordView: View {
         if !isVisible && state == .pending {
             return .clear
         }
-        if hideProgress && (state == .correct || state == .incorrect || state == .uncertain) {
+        if hideProgress && (state == .correct || state == .incorrect) {
             return .clear
         }
         switch state {
         case .pending: return .clear
         case .correct: return .green.opacity(0.2)
         case .incorrect: return .red.opacity(0.2)
-        case .uncertain: return .orange.opacity(0.2)
         case .current: return .blue.opacity(0.2)
         }
     }
@@ -3459,6 +3907,18 @@ struct ResultsView: View {
     var isMasterMode: Bool = false
     var usedMistakeCharacters: Set<BrainCharacter> = []
     var onMasteryResult: ((Bool) -> Void)? = nil
+    var activeLanguage: String? = nil
+    var isTutorialMode: Bool = false
+
+    private func dismiss() {
+        AlertManager.shared.stopResultSound()
+        onDismiss()
+    }
+
+    private func retry() {
+        AlertManager.shared.stopResultSound()
+        onRetry()
+    }
 
     @EnvironmentObject var quoteStore: QuoteStore
     @State private var resultCharacter: BrainCharacter = .random(from: BrainCharacter.success)
@@ -3494,8 +3954,16 @@ struct ResultsView: View {
             let available = BrainCharacter.mistakes.filter { !usedMistakeCharacters.contains($0) }
             failCharacter = available.randomElement() ?? .random(from: BrainCharacter.mistakes)
 
-            if !sessionRecorded {
+            if !sessionRecorded && !isTutorialMode {
                 quoteStore.recordSession(session)
+                // Save the language the user practiced in as their preference
+                if var updated = quoteStore.getQuote(byId: quote.id) {
+                    let practicedLang = activeLanguage
+                    if updated.lastPracticedLanguage != practicedLang {
+                        updated.lastPracticedLanguage = practicedLang
+                        quoteStore.updateQuote(updated)
+                    }
+                }
                 sessionRecorded = true
             }
         }
@@ -3545,7 +4013,7 @@ struct ResultsView: View {
                 }
 
                 VStack {
-                    Text("\(max(0, tested - session.definiteMistakeCount))")
+                    Text("\(max(0, tested - session.mistakes.count))")
                         .font(.title3.bold())
                         .foregroundColor(.green)
                     Text("Correct")
@@ -3554,7 +4022,7 @@ struct ResultsView: View {
                 }
 
                 VStack {
-                    Text("\(session.definiteMistakeCount)")
+                    Text("\(session.mistakes.count)")
                         .font(.title3.bold())
                         .foregroundColor(.red)
                     Text("Mistakes")
@@ -3562,16 +4030,6 @@ struct ResultsView: View {
                         .foregroundColor(.secondary)
                 }
 
-                if session.uncertainMistakeCount > 0 {
-                    VStack {
-                        Text("\(session.uncertainMistakeCount)")
-                            .font(.title3.bold())
-                            .foregroundColor(.orange)
-                        Text("Uncertain")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
             }
             .padding(.bottom, 28)
 
@@ -3581,39 +4039,35 @@ struct ResultsView: View {
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 28)
 
-            // Possible Mismatches section (uncertain mistakes)
-            if session.uncertainMistakeCount > 0 {
-                possibleMismatchesSection
-                    .padding(.bottom, 8)
-            }
-
             // Buttons
             VStack(spacing: 10) {
-                Button {
-                    onRetry()
-                } label: {
-                    HStack {
-                        Text("Try Again")
-                        Image(systemName: "arrow.counterclockwise")
+                if !isTutorialMode {
+                    Button {
+                        retry()
+                    } label: {
+                        HStack {
+                            Text("Try Again")
+                            Image(systemName: "arrow.counterclockwise")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 50)
                     }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .buttonStyle(.borderedProminent)
+                    .tint(.indigo)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.indigo)
 
                 Button {
-                    onDismiss()
+                    dismiss()
                 } label: {
                     HStack {
-                        Text("Done")
-                        Image(systemName: "checkmark")
+                        Text(isTutorialMode ? String(localized: "Continue") : String(localized: "Done"))
+                        Image(systemName: isTutorialMode ? "arrow.right" : "checkmark")
                     }
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 50)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Color(.systemGray4))
+                .tint(isTutorialMode ? .indigo : Color(.systemGray4))
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
@@ -3709,7 +4163,7 @@ struct ResultsView: View {
             VStack(spacing: 10) {
                 Button {
                     onMasteryResult?(false)
-                    onRetry()
+                    retry()
                 } label: {
                     HStack {
                         Text("Try Again")
@@ -3724,7 +4178,7 @@ struct ResultsView: View {
 
                 Button {
                     onMasteryResult?(false)
-                    onDismiss()
+                    dismiss()
                 } label: {
                     HStack {
                         Text("Done")
@@ -3791,7 +4245,7 @@ struct ResultsView: View {
                 }
             }
 
-            Text("\(3 - newStreak) more to go!")
+            Text(String(localized: "\(3 - newStreak) more to go!"))
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
@@ -3800,7 +4254,7 @@ struct ResultsView: View {
             VStack(spacing: 10) {
                 Button {
                     onMasteryResult?(true)
-                    onRetry()
+                    retry()
                 } label: {
                     HStack {
                         Text("Try Again")
@@ -3815,7 +4269,7 @@ struct ResultsView: View {
 
                 Button {
                     onMasteryResult?(true)
-                    onDismiss()
+                    dismiss()
                 } label: {
                     HStack {
                         Text("Done")
@@ -3870,7 +4324,7 @@ struct ResultsView: View {
 
             Button {
                 onMasteryResult?(true)
-                onDismiss()
+                dismiss()
             } label: {
                 HStack {
                     Text("Done")
@@ -3895,47 +4349,6 @@ struct ResultsView: View {
         }
     }
 
-    @State private var showPossibleMismatches = false
-
-    private var possibleMismatchesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button {
-                withAnimation { showPossibleMismatches.toggle() }
-            } label: {
-                HStack {
-                    Image(systemName: showPossibleMismatches ? "chevron.down" : "chevron.right")
-                        .font(.caption)
-                    Text("Possible Mismatches (\(session.uncertainMistakeCount))")
-                        .font(.subheadline.bold())
-                    Spacer()
-                }
-                .foregroundColor(.orange)
-            }
-
-            if showPossibleMismatches {
-                let uncertainMistakes = session.mistakes.filter { $0.certainty == .uncertain }
-                ForEach(uncertainMistakes.indices, id: \.self) { idx in
-                    let mistake = uncertainMistakes[idx]
-                    HStack {
-                        Text(mistake.expectedWord)
-                            .font(.subheadline)
-                        Image(systemName: "arrow.right")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                        Text(mistake.spokenWord)
-                            .font(.subheadline)
-                            .foregroundColor(.orange)
-                        Spacer()
-                        Text(String(format: "%.0f%%", mistake.confidence * 100))
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
-        }
-        .padding(.horizontal)
-    }
 
     private var scoreColor: Color {
         if session.accuracy >= 0.9 { return .green }
@@ -3944,21 +4357,21 @@ struct ResultsView: View {
     }
 
     private var motivationalMessage: String {
-        if session.accuracy >= 0.95 { return "Perfect! Outstanding recall!" }
-        if session.accuracy >= 0.9 { return "Excellent work! Almost perfect!" }
-        if session.accuracy >= 0.8 { return "Great job! Keep practicing!" }
-        if session.accuracy >= 0.7 { return "Good progress! You're getting there!" }
-        if session.accuracy >= 0.5 { return "Nice effort! Practice makes perfect!" }
-        return "Keep trying! Every attempt helps!"
+        if session.accuracy >= 0.95 { return String(localized: "Perfect! Outstanding recall!") }
+        if session.accuracy >= 0.9 { return String(localized: "Excellent work! Almost perfect!") }
+        if session.accuracy >= 0.8 { return String(localized: "Great job! Keep practicing!") }
+        if session.accuracy >= 0.7 { return String(localized: "Good progress! You're getting there!") }
+        if session.accuracy >= 0.5 { return String(localized: "Nice effort! Practice makes perfect!") }
+        return String(localized: "Keep trying! Every attempt helps!")
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {
         let minutes = Int(duration) / 60
         let seconds = Int(duration) % 60
         if minutes > 0 {
-            return "\(minutes):\(String(format: "%02d", seconds))"
+            return String(localized: "\(minutes):\(String(format: "%02d", seconds))", comment: "Duration in minutes:seconds format")
         }
-        return "\(seconds)s"
+        return String(localized: "\(seconds)s", comment: "Duration in seconds")
     }
 }
 

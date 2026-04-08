@@ -22,6 +22,10 @@ enum SupabaseConfig {
         URL(string: "\(projectURL)/rest/v1/equivalences")!
     }
 
+    static var supportTicketsURL: URL {
+        URL(string: "\(projectURL)/rest/v1/support_tickets")!
+    }
+
     static var storageURL: URL {
         URL(string: "\(projectURL)/storage/v1/object/recordings")!
     }

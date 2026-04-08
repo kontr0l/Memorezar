@@ -232,6 +232,7 @@ class AuthService: NSObject, ObservableObject {
         refreshTimer = nil
         currentUser = nil
         errorMessage = nil
+        PurchaseService.shared.logOutUser()
     }
 
     // MARK: - Token Refresh
@@ -288,6 +289,11 @@ class AuthService: NSObject, ObservableObject {
 
         if let userData = try? JSONEncoder().encode(user) {
             KeychainHelper.save(key: "user_data", data: userData)
+        }
+
+        // Link RevenueCat to this user for purchase syncing
+        if !userId.isEmpty {
+            PurchaseService.shared.identifyUser(userId: userId)
         }
 
         DispatchQueue.main.async {

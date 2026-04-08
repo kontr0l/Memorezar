@@ -1,29 +1,59 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject var quoteStore: QuoteStore
+    @EnvironmentObject var tutorialStore: TutorialStore
     @State private var selectedTab = 0
 
+    private static let iconHeight: CGFloat = 28
+
     var body: some View {
-        TabView(selection: $selectedTab) {
-            HomeScreen()
-                .tabItem {
-                    Label("Home", systemImage: "house.fill")
+        if !tutorialStore.hasCompletedOnboarding {
+            OnboardingFlow()
+        } else {
+            VStack(spacing: 0) {
+                // Content area
+                Group {
+                    switch selectedTab {
+                    case 0: HomeScreen()
+                    case 1: QuoteLibraryScreen()
+                    case 2: SettingsScreen()
+                    default: HomeScreen()
+                    }
                 }
-                .tag(0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            QuoteLibraryScreen()
-                .tabItem {
-                    Label("Library", systemImage: "books.vertical.fill")
+                // Custom tab bar
+                Divider()
+                HStack {
+                    tabButton(icon: "IconHome", tag: 0)
+                    tabButton(icon: "IconLibrary", tag: 1)
+                    tabButton(icon: "IconSettings", tag: 2)
                 }
-                .tag(1)
-
-            SettingsScreen()
-                .tabItem {
-                    Label("Settings", systemImage: "gearshape.fill")
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+                .background(Color(.systemBackground))
+            }
+            .onChange(of: quoteStore.pendingCategoryNavigation) { category in
+                if category != nil {
+                    selectedTab = 1
                 }
-                .tag(2)
+            }
         }
-        .tint(.blue)
+    }
+
+    private func tabButton(icon: String, tag: Int) -> some View {
+        Button {
+            selectedTab = tag
+        } label: {
+            Image(icon)
+                .renderingMode(.original)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(height: Self.iconHeight)
+                .opacity(selectedTab == tag ? 1.0 : 0.4)
+                .frame(maxWidth: .infinity)
+        }
     }
 }
 
@@ -31,4 +61,5 @@ struct ContentView: View {
     ContentView()
         .environmentObject(QuoteStore())
         .environmentObject(SettingsStore())
+        .environmentObject(TutorialStore())
 }

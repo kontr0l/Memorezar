@@ -8,6 +8,7 @@ struct MemorezerApp: App {
     @StateObject private var localRecordingStore = LocalRecordingStore()
     @StateObject private var tutorialStore = TutorialStore()
     @StateObject private var authService = AuthService.shared
+    @StateObject private var purchaseService = PurchaseService.shared
 
     var body: some Scene {
         WindowGroup {
@@ -18,8 +19,10 @@ struct MemorezerApp: App {
                 .environmentObject(localRecordingStore)
                 .environmentObject(tutorialStore)
                 .environmentObject(authService)
+                .environmentObject(purchaseService)
                 .preferredColorScheme(settingsStore.colorScheme)
                 .onAppear {
+                    purchaseService.configure()
                     authService.restoreSession()
                 }
         }

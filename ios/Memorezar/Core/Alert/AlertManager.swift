@@ -13,39 +13,25 @@ final class AlertManager {
 
     // MARK: - Properties
 
-    private var audioPlayer: AVAudioPlayer?
-    private var correctWordPlayer: AVAudioPlayer?
-    private var completionPlayer: AVAudioPlayer?
-    private var previewPlayer: AVAudioPlayer?  // Retained for preview playback (ARC protection)
+    private var errorPlayer: AVAudioPlayer?
+    private var successPlayer: AVAudioPlayer?
+    private var resultPlayer: AVAudioPlayer?
+    private var previewPlayer: AVAudioPlayer?
     private var hapticEngine: CHHapticEngine?
-    private var systemSoundID: SystemSoundID = 0
-    private var cachedMistakeSoundData: [MistakeSound: Data] = [:]
-    private var cachedCorrectSoundData: [CorrectWordSound: Data] = [:]
-    private var cachedCompletionSoundData: [CompletionSound: Data] = [:]
-    private var currentSound: MistakeSound = .explosion1
+
+    // Cached default theme sounds (loaded once)
+    private var defaultSounds: [SoundTheme.SoundEvent: Data] = [:]
+    // Cached meme theme sounds (arrays of Data per category)
+    private var memeSounds: [SoundTheme.SoundEvent: [Data]] = [:]
 
     // Alert configuration
     var audioAlertEnabled = true
     var visualAlertEnabled = true
     var hapticAlertEnabled = true
-    var mistakeSound: MistakeSound = .explosion1 {
+    var soundTheme: SoundTheme = .default {
         didSet {
-            if mistakeSound != oldValue {
-                prepareSound(mistakeSound)
-            }
-        }
-    }
-    var correctWordSound: CorrectWordSound = .none {
-        didSet {
-            if correctWordSound != oldValue {
-                prepareCorrectWordSound(correctWordSound)
-            }
-        }
-    }
-    var completionSound: CompletionSound = .applause {
-        didSet {
-            if completionSound != oldValue {
-                prepareCompletionSound(completionSound)
+            if soundTheme != oldValue {
+                prepareCurrentSounds()
             }
         }
     }
@@ -53,27 +39,22 @@ final class AlertManager {
     // Callback for visual alerts (UI must handle this)
     var onVisualAlert: (() -> Void)?
 
-    // Pre-loaded audio for minimal latency
-    private var isAudioPrepared = false
-    private var isCorrectSoundPrepared = false
-    private var isCompletionSoundPrepared = false
+    private var isErrorPrepared = false
+    private var isSuccessPrepared = false
 
     // MARK: - Initialization
 
     private init() {
         configureAudioSession()
-        prepareAllSounds()
+        loadAllSounds()
         prepareHaptics()
-        prepareSound(mistakeSound)
-        prepareCorrectWordSound(correctWordSound)
-        prepareCompletionSound(completionSound)
+        prepareCurrentSounds()
     }
 
     /// Configure the audio session so sounds play even when recording
     private func configureAudioSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            // Use .playAndRecord to allow both alert sounds and speech recognition
             try session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker])
             try session.setActive(true)
         } catch {
@@ -81,18 +62,103 @@ final class AlertManager {
         }
     }
 
+    // MARK: - Sound Loading
+
+    /// Load all sound files from bundle into memory
+    private func loadAllSounds() {
+        // Load default theme WAV files
+        for event in [SoundTheme.SoundEvent.error, .success, .resultFail, .resultWin] {
+            if let url = Bundle.main.url(forResource: event.defaultFile, withExtension: nil, subdirectory: "Sounds"),
+               let data = try? Data(contentsOf: url) {
+                defaultSounds[event] = data
+            } else {
+                print("[AlertManager] Missing default sound: Sounds/\(event.defaultFile)")
+            }
+        }
+
+        // Load meme theme sounds from folders
+        for event in [SoundTheme.SoundEvent.error, .success, .resultFail, .resultWin] {
+            var sounds: [Data] = []
+            let folderName = event.folderName
+
+            if let folderURL = Bundle.main.url(forResource: folderName, withExtension: nil, subdirectory: "Sounds") {
+                if let files = try? FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil) {
+                    for file in files {
+                        let ext = file.pathExtension.lowercased()
+                        guard ["mp3", "wav", "m4a", "aac"].contains(ext) else { continue }
+                        if let data = try? Data(contentsOf: file) {
+                            sounds.append(data)
+                        }
+                    }
+                }
+            }
+            if !sounds.isEmpty {
+                memeSounds[event] = sounds
+            } else {
+                print("[AlertManager] No meme sounds found for: Sounds/\(folderName)/")
+            }
+        }
+    }
+
+    /// Get sound data for the current theme and event
+    private func soundData(for event: SoundTheme.SoundEvent) -> Data? {
+        switch soundTheme {
+        case .default:
+            return defaultSounds[event]
+        case .memes:
+            guard let sounds = memeSounds[event], !sounds.isEmpty else {
+                // Fallback to default
+                return defaultSounds[event]
+            }
+            return sounds.randomElement()
+        }
+    }
+
+    /// Prepare error and success sounds for low-latency playback
+    private func prepareCurrentSounds() {
+        // Prepare error sound
+        if let data = soundData(for: .error) {
+            do {
+                errorPlayer = try AVAudioPlayer(data: data)
+                errorPlayer?.prepareToPlay()
+                errorPlayer?.volume = 0.8
+                isErrorPrepared = true
+            } catch {
+                print("Failed to prepare error sound: \(error)")
+                isErrorPrepared = false
+            }
+        }
+
+        // Prepare success sound
+        if let data = soundData(for: .success) {
+            do {
+                successPlayer = try AVAudioPlayer(data: data)
+                successPlayer?.prepareToPlay()
+                successPlayer?.volume = 0.5
+                isSuccessPrepared = true
+            } catch {
+                print("Failed to prepare success sound: \(error)")
+                isSuccessPrepared = false
+            }
+        }
+    }
+
     // MARK: - Alert Triggering
 
-    /// Trigger all enabled alerts immediately
-    /// Called when user speaks wrong word
-    func triggerMistakeAlert() {
-        // Run all alerts in parallel for minimum latency
+    /// Trigger all enabled alerts when user speaks wrong word
+    func triggerMistakeAlert(audioPauseHandler: (pause: () -> Void, resume: () -> Void)? = nil) {
         if hapticAlertEnabled {
+            audioPauseHandler?.pause()
             triggerHaptic()
+            if let resume = audioPauseHandler?.resume {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    resume()
+                }
+            }
         }
 
         if audioAlertEnabled {
-            triggerAudio()
+            triggerErrorSound()
         }
 
         if visualAlertEnabled {
@@ -102,220 +168,117 @@ final class AlertManager {
         }
     }
 
-    // MARK: - Audio Alert
-
-    /// Pre-generate all sound effects for instant playback
-    private func prepareAllSounds() {
-        // Mistake sounds
-        for sound in MistakeSound.allCases {
-            if let data = generateMistakeSoundData(for: sound) {
-                cachedMistakeSoundData[sound] = data
-            }
-        }
-
-        // Correct word sounds
-        for sound in CorrectWordSound.allCases {
-            if let params = sound.soundParameters,
-               let data = generateSound(frequency: params.frequency, duration: params.duration, waveform: params.waveform) {
-                cachedCorrectSoundData[sound] = data
-            }
-        }
-
-        // Completion sounds
-        for sound in CompletionSound.allCases {
-            if let params = sound.soundParameters,
-               let data = generateSound(frequency: params.frequency, duration: params.duration, waveform: params.waveform) {
-                cachedCompletionSoundData[sound] = data
-            }
-        }
-    }
-
-    /// Prepare a specific mistake sound for playback
-    private func prepareSound(_ sound: MistakeSound) {
-        currentSound = sound
-
-        guard let data = cachedMistakeSoundData[sound] else {
-            // Fallback to system sound
-            systemSoundID = 1057
-            return
-        }
-
-        do {
-            audioPlayer = try AVAudioPlayer(data: data)
-            audioPlayer?.prepareToPlay()
-            audioPlayer?.volume = 0.8
-            isAudioPrepared = true
-        } catch {
-            print("Failed to prepare sound: \(error)")
-            // Fallback to system sound
-            systemSoundID = 1057
-        }
-    }
-
-    /// Prepare correct word sound for playback
-    private func prepareCorrectWordSound(_ sound: CorrectWordSound) {
-        guard sound != .none, let data = cachedCorrectSoundData[sound] else {
-            isCorrectSoundPrepared = false
-            return
-        }
-
-        do {
-            correctWordPlayer = try AVAudioPlayer(data: data)
-            correctWordPlayer?.prepareToPlay()
-            correctWordPlayer?.volume = 0.5  // Softer than mistake sound
-            isCorrectSoundPrepared = true
-        } catch {
-            print("Failed to prepare correct word sound: \(error)")
-            isCorrectSoundPrepared = false
-        }
-    }
-
-    /// Prepare completion sound for playback
-    private func prepareCompletionSound(_ sound: CompletionSound) {
-        guard sound != .none, let data = cachedCompletionSoundData[sound] else {
-            isCompletionSoundPrepared = false
-            return
-        }
-
-        do {
-            completionPlayer = try AVAudioPlayer(data: data)
-            completionPlayer?.prepareToPlay()
-            completionPlayer?.volume = 0.9
-            isCompletionSoundPrepared = true
-        } catch {
-            print("Failed to prepare completion sound: \(error)")
-            isCompletionSoundPrepared = false
-        }
-    }
-
-    private func triggerAudio() {
-        if isAudioPrepared, let player = audioPlayer {
+    /// Play error sound (mistake during recitation)
+    private func triggerErrorSound() {
+        if soundTheme == .memes {
+            // Memes: pick random each time
+            playRandomSound(for: .error, volume: 0.8)
+        } else if isErrorPrepared, let player = errorPlayer {
             player.currentTime = 0
             player.play()
-            // Re-prepare for next play (non-blocking)
             DispatchQueue.global(qos: .userInitiated).async { [weak player] in
                 player?.prepareToPlay()
             }
-        } else {
-            // Fallback: system sound
-            AudioServicesPlaySystemSound(systemSoundID)
         }
     }
 
-    /// Trigger correct word sound
+    /// Play success sound (correct word after a mistake)
     func triggerCorrectWordSound() {
-        guard audioAlertEnabled, correctWordSound != .none, isCorrectSoundPrepared,
-              let player = correctWordPlayer else { return }
+        guard audioAlertEnabled else { return }
 
-        player.currentTime = 0
-        player.play()
-        // Re-prepare for next play
-        DispatchQueue.global(qos: .userInitiated).async { [weak player] in
-            player?.prepareToPlay()
+        if soundTheme == .memes {
+            playRandomSound(for: .success, volume: 0.5)
+        } else if isSuccessPrepared, let player = successPlayer {
+            player.currentTime = 0
+            player.play()
+            DispatchQueue.global(qos: .userInitiated).async { [weak player] in
+                player?.prepareToPlay()
+            }
         }
     }
 
-    /// Trigger completion sound (applause, fanfare, etc.)
-    func triggerCompletionSound() {
-        guard audioAlertEnabled, completionSound != .none, isCompletionSoundPrepared,
-              let player = completionPlayer else { return }
-
-        player.currentTime = 0
-        player.play()
+    /// Play result win sound (accuracy >= 70% or master mode pass)
+    func triggerResultWinSound() {
+        guard audioAlertEnabled else { return }
+        playSound(for: .resultWin, volume: 0.9)
     }
 
-    /// Generate sound data for a specific mistake sound
-    private func generateMistakeSoundData(for sound: MistakeSound) -> Data? {
-        let params = sound.soundParameters
-        return generateSound(
-            frequency: params.frequency,
-            duration: params.duration,
-            waveform: params.waveform
-        )
+    /// Play result fail sound (accuracy < 70% or master mode fail)
+    func triggerResultFailSound() {
+        guard audioAlertEnabled else { return }
+        playSound(for: .resultFail, volume: 0.9)
     }
 
-    /// Generate a sound with specified parameters
-    private func generateSound(frequency: Double, duration: Double, waveform: SoundWaveform) -> Data? {
-        let sampleRate: Double = 44100
-        let frameCount = Int(sampleRate * duration)
-        var samples = [Float](repeating: 0, count: frameCount)
-
-        // Generate waveform
-        for i in 0..<frameCount {
-            let t = Double(i) / sampleRate
-            var sample: Float
-
-            switch waveform {
-            case .sine:
-                sample = Float(sin(2 * .pi * frequency * t))
-            case .square:
-                sample = Float(sin(2 * .pi * frequency * t) > 0 ? 1 : -1)
-            case .noise:
-                // Filtered noise with frequency-based envelope
-                let noise = Float.random(in: -1...1)
-                let envelope = Float(exp(-t * (frequency / 20)))
-                sample = noise * envelope
-            }
-
-            // Apply envelope (attack/decay for punchier sound)
-            let attackFrames = Int(sampleRate * 0.005) // 5ms attack
-            let releaseStart = frameCount - Int(sampleRate * duration * 0.3) // 30% release
-
-            let envelope: Float
-            if i < attackFrames {
-                envelope = Float(i) / Float(attackFrames)
-            } else if i > releaseStart {
-                let releaseProgress = Float(i - releaseStart) / Float(frameCount - releaseStart)
-                envelope = 1.0 - releaseProgress
-            } else {
-                envelope = 1.0
-            }
-
-            samples[i] = sample * envelope * 0.85
+    /// Convenience: play the right result sound based on accuracy
+    func triggerResultSound(accuracy: Double) {
+        if accuracy >= 0.7 {
+            triggerResultWinSound()
+        } else {
+            triggerResultFailSound()
         }
-
-        return Self.createWAVData(samples: samples, sampleRate: Int(sampleRate))
     }
 
-    /// Preview a mistake sound (for settings screen)
-    func previewSound(_ sound: MistakeSound) {
-        guard let data = cachedMistakeSoundData[sound] else { return }
-        configureAudioSession()
+    /// Stop any currently playing result sound
+    func stopResultSound() {
+        resultPlayer?.stop()
+        resultPlayer = nil
+    }
+
+    // MARK: - Sound Playback Helpers
+
+    /// Play a sound for the given event (creates a new player each time — for result sounds)
+    private func playSound(for event: SoundTheme.SoundEvent, volume: Float) {
+        guard let data = soundData(for: event) else { return }
         do {
-            previewPlayer = try AVAudioPlayer(data: data)
+            resultPlayer = try AVAudioPlayer(data: data)
+            resultPlayer?.volume = volume
+            resultPlayer?.prepareToPlay()
+            resultPlayer?.play()
+        } catch {
+            print("Failed to play \(event) sound: \(error)")
+        }
+    }
+
+    /// Play a random meme sound for the given event
+    private func playRandomSound(for event: SoundTheme.SoundEvent, volume: Float) {
+        guard let data = soundData(for: event) else { return }
+        do {
+            let player = try AVAudioPlayer(data: data)
+            player.volume = volume
+            player.prepareToPlay()
+            player.play()
+            // Keep a strong reference so it doesn't get deallocated mid-play
+            if event == .error {
+                errorPlayer = player
+            } else if event == .success {
+                successPlayer = player
+            } else {
+                resultPlayer = player
+            }
+        } catch {
+            print("Failed to play random \(event) sound: \(error)")
+        }
+    }
+
+    /// Preview a sound theme (plays the error sound as sample)
+    func previewTheme(_ theme: SoundTheme) {
+        configureAudioSession()
+        let event = SoundTheme.SoundEvent.error
+        let data: Data?
+        switch theme {
+        case .default:
+            data = defaultSounds[event]
+        case .memes:
+            data = memeSounds[event]?.randomElement() ?? defaultSounds[event]
+        }
+        guard let soundData = data else { return }
+        do {
+            previewPlayer = try AVAudioPlayer(data: soundData)
             previewPlayer?.volume = 0.8
             previewPlayer?.prepareToPlay()
             previewPlayer?.play()
         } catch {
-            print("Failed to preview sound: \(error)")
-        }
-    }
-
-    /// Preview a correct word sound (for settings screen)
-    func previewCorrectSound(_ sound: CorrectWordSound) {
-        guard sound != .none, let data = cachedCorrectSoundData[sound] else { return }
-        configureAudioSession()
-        do {
-            previewPlayer = try AVAudioPlayer(data: data)
-            previewPlayer?.volume = 0.5
-            previewPlayer?.prepareToPlay()
-            previewPlayer?.play()
-        } catch {
-            print("Failed to preview sound: \(error)")
-        }
-    }
-
-    /// Preview a completion sound (for settings screen)
-    func previewCompletionSound(_ sound: CompletionSound) {
-        guard sound != .none, let data = cachedCompletionSoundData[sound] else { return }
-        configureAudioSession()
-        do {
-            previewPlayer = try AVAudioPlayer(data: data)
-            previewPlayer?.volume = 0.9
-            previewPlayer?.prepareToPlay()
-            previewPlayer?.play()
-        } catch {
-            print("Failed to preview sound: \(error)")
+            print("Failed to preview theme: \(error)")
         }
     }
 
@@ -330,10 +293,8 @@ final class AlertManager {
             hapticEngine = try CHHapticEngine()
             hapticEngine?.playsHapticsOnly = true
 
-            // Start and stop to prepare
             try hapticEngine?.start()
 
-            // Set up auto-restart handler
             hapticEngine?.stoppedHandler = { [weak self] reason in
                 print("Haptic engine stopped: \(reason)")
                 self?.restartHapticEngine()
@@ -358,14 +319,11 @@ final class AlertManager {
     }
 
     private func triggerHaptic() {
-        // Method 1: Core Haptics (most precise, ~5ms latency)
         if let engine = hapticEngine, CHHapticEngine.capabilitiesForHardware().supportsHaptics {
             do {
-                // Create a sharp, noticeable pattern
                 let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: 1.0)
                 let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: 1.0)
 
-                // Double tap pattern for clear feedback
                 let event1 = CHHapticEvent(
                     eventType: .hapticTransient,
                     parameters: [sharpness, intensity],
@@ -399,89 +357,8 @@ final class AlertManager {
 
     // MARK: - Visual Alert Helpers
 
-    /// Create a visual flash effect
-    /// Returns the animation parameters for SwiftUI
     static func flashAnimation() -> (duration: Double, color: Color) {
         return (duration: 0.15, color: .red)
-    }
-}
-
-// MARK: - Audio Generation
-
-extension AlertManager {
-
-    /// Generate a simple beep sound programmatically
-    /// (Used if no audio file is bundled)
-    static func generateBeepSound() -> Data? {
-        let sampleRate: Double = 44100
-        let duration: Double = 0.05 // 50ms
-        let frequency: Double = 880  // A5 note
-
-        let frameCount = Int(sampleRate * duration)
-        var samples = [Float](repeating: 0, count: frameCount)
-
-        // Generate sine wave with envelope
-        for i in 0..<frameCount {
-            let t = Double(i) / sampleRate
-            let amplitude = Float(sin(2 * .pi * frequency * t))
-
-            // Apply envelope (quick attack, quick decay)
-            let envelope: Float
-            let attackFrames = Int(sampleRate * 0.005) // 5ms attack
-            let releaseFrames = Int(sampleRate * 0.01) // 10ms release
-
-            if i < attackFrames {
-                envelope = Float(i) / Float(attackFrames)
-            } else if i > frameCount - releaseFrames {
-                envelope = Float(frameCount - i) / Float(releaseFrames)
-            } else {
-                envelope = 1.0
-            }
-
-            samples[i] = amplitude * envelope * 0.7
-        }
-
-        // Convert to WAV data
-        return Self.createWAVData(samples: samples, sampleRate: Int(sampleRate))
-    }
-
-    private static func createWAVData(samples: [Float], sampleRate: Int) -> Data? {
-        var data = Data()
-
-        // WAV header
-        let numChannels: Int16 = 1
-        let bitsPerSample: Int16 = 16
-        let byteRate = Int32(sampleRate * Int(numChannels) * Int(bitsPerSample / 8))
-        let blockAlign = Int16(numChannels * (bitsPerSample / 8))
-        let dataSize = Int32(samples.count * Int(bitsPerSample / 8))
-        let fileSize = Int32(36 + dataSize)
-
-        // RIFF header
-        data.append(contentsOf: "RIFF".utf8)
-        data.append(contentsOf: withUnsafeBytes(of: fileSize.littleEndian) { Array($0) })
-        data.append(contentsOf: "WAVE".utf8)
-
-        // fmt chunk
-        data.append(contentsOf: "fmt ".utf8)
-        data.append(contentsOf: withUnsafeBytes(of: Int32(16).littleEndian) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: Int16(1).littleEndian) { Array($0) }) // PCM
-        data.append(contentsOf: withUnsafeBytes(of: numChannels.littleEndian) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: Int32(sampleRate).littleEndian) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: byteRate.littleEndian) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: blockAlign.littleEndian) { Array($0) })
-        data.append(contentsOf: withUnsafeBytes(of: bitsPerSample.littleEndian) { Array($0) })
-
-        // data chunk
-        data.append(contentsOf: "data".utf8)
-        data.append(contentsOf: withUnsafeBytes(of: dataSize.littleEndian) { Array($0) })
-
-        // Convert float samples to Int16
-        for sample in samples {
-            let intSample = Int16(max(-1, min(1, sample)) * Float(Int16.max))
-            data.append(contentsOf: withUnsafeBytes(of: intSample.littleEndian) { Array($0) })
-        }
-
-        return data
     }
 }
 

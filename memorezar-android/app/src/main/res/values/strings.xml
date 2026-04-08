@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Memorezar</string>
+
+    <!-- Tab bar -->
+    <string name="tab_home">Home</string>
+    <string name="tab_library">Library</string>
+    <string name="tab_settings">Settings</string>
+
+    <!-- Home -->
+    <string name="continue_practicing">Continue Practicing</string>
+    <string name="get_started">Get Started</string>
+    <string name="add_first_quote">Add your first quote to start practicing</string>
+    <string name="your_progress">Your Progress</string>
+    <string name="mastered">Mastered</string>
+    <string name="day_streak">Day Streak</string>
+    <string name="accuracy">Accuracy</string>
+    <string name="browse_quote_packs">Browse Quote Packs</string>
+    <string name="add_quote">Add Quote</string>
+
+    <!-- Library -->
+    <string name="library">Library</string>
+    <string name="no_quotes_yet">No quotes yet.\nTap + to add one.</string>
+    <string name="delete_category">Delete Category</string>
+    <string name="delete_quote">Delete Quote</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="quotes_format">%d quotes</string>
+    <string name="sessions_format">%d sessions</string>
+
+    <!-- Settings -->
+    <string name="settings">Settings</string>
+    <string name="alerts">Alerts</string>
+    <string name="sound_alerts">Sound Alerts</string>
+    <string name="sound_theme">Sound Theme</string>
+    <string name="visual_flash">Visual Flash</string>
+    <string name="haptic_feedback">Haptic Feedback</string>
+    <string name="test_mistake_alert">Test Mistake Alert</string>
+    <string name="alert_footer">Choose how you want to be notified during recitation.</string>
+    <string name="display">Display</string>
+    <string name="default_mode">Default Mode</string>
+    <string name="first_letter_mode">First Letter Mode</string>
+    <string name="font_size">Font Size</string>
+    <string name="theme">Theme</string>
+    <string name="statistics">Statistics</string>
+    <string name="total_sessions">Total Sessions</string>
+    <string name="quotes_mastered">Quotes Mastered</string>
+    <string name="average_accuracy">Average Accuracy</string>
+    <string name="total_practice_time">Total Practice Time</string>
+    <string name="account">Account</string>
+    <string name="sign_in">Sign In</string>
+    <string name="sign_out">Sign Out</string>
+    <string name="sign_in_footer">Sign in to share recordings with the community.</string>
+    <string name="data">Data</string>
+    <string name="reset_settings">Reset Settings</string>
+    <string name="delete_all_data">Delete All Data</string>
+    <string name="about">About</string>
+    <string name="version">Version</string>
+    <string name="contact_support">Contact Support</string>
+
+    <!-- Recitation -->
+    <string name="practice">Practice</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="done">Done</string>
+    <string name="try_again">Try Again</string>
+    <string name="great_job">Great job!</string>
+    <string name="keep_practicing">Keep practicing!</string>
+    <string name="mistakes_format">%1$d mistake%2$s out of %3$d words</string>
+
+    <!-- Onboarding -->
+    <string name="how_practice">How would you like to practice?</string>
+    <string name="change_later">You can change this later in Settings</string>
+    <string name="voice">Voice</string>
+    <string name="recite_out_loud">Recite out loud</string>
+    <string name="typing">Typing</string>
+    <string name="type_from_memory">Type from memory</string>
+    <string name="how_hidden">How should words be hidden?</string>
+    <string name="normal">Normal</string>
+    <string name="words_fully_hidden">Words are fully hidden</string>
+    <string name="first_letter">First Letter</string>
+    <string name="show_first_letter_hint">Show first letter as a hint</string>
+    <string name="back">Back</string>
+
+    <!-- Auth -->
+    <string name="create_account">Create Account</string>
+    <string name="sign_in_google">Sign in with Google</string>
+    <string name="or">or</string>
+    <string name="name">Name</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="already_have_account">Already have an account? Sign In</string>
+    <string name="no_account">Don\'t have an account? Sign Up</string>
+
+    <!-- Quote Input -->
+    <string name="edit_quote">Edit Quote</string>
+    <string name="title">Title</string>
+    <string name="category">Category</string>
+    <string name="quote_text">Quote Text</string>
+    <string name="preview">Preview</string>
+    <string name="save_changes">Save Changes</string>
+    <string name="words_format">%d words</string>
+    <string name="tip_short_quotes">Start with short quotes (1-2 sentences)</string>
+    <string name="tip_longer_texts">Work up to longer texts as you improve</string>
+    <string name="tip_practice_regularly">Practice regularly for best results</string>
+
+    <!-- Streak -->
+    <string name="current_streak">Current Streak</string>
+    <string name="total_days">Total Days</string>
+    <string name="this_week">This Week</string>
+    <string name="last_30_days">Last 30 Days</string>
+
+    <!-- Accuracy -->
+    <string name="overall_accuracy">Overall Accuracy</string>
+    <string name="per_quote_breakdown">Per-Quote Breakdown</string>
+    <string name="recent_sessions">Recent Sessions</string>
+
+    <!-- Contact Support -->
+    <string name="reason">Reason</string>
+    <string name="message">Message</string>
+    <string name="send">Send</string>
+    <string name="message_sent">Message Sent!</string>
+    <string name="thanks_reaching_out">Thanks for reaching out. We\'ll get back to you soon.</string>
+    <string name="ok">OK</string>
+    <string name="feature_request">Feature Request</string>
+    <string name="quote_pack_request">Quote Pack Request</string>
+    <string name="bug_report">Bug Report</string>
+    <string name="just_saying_hi">Just Saying Hi!</string>
+    <string name="other">Other</string>
+
+    <!-- Paywall -->
+    <string name="unlock_pro">Unlock Memorezar Pro</string>
+    <string name="pro_subtitle">Get the most out of your memorization practice</string>
+    <string name="unlimited_quotes">Unlimited custom quotes</string>
+    <string name="all_sound_themes">All sound themes</string>
+    <string name="tts_feature">Text-to-speech for any quote</string>
+    <string name="community_recordings">Community recordings</string>
+    <string name="all_quote_packs">Access all quote packs</string>
+    <string name="yearly">Yearly</string>
+    <string name="best_value">Best Value — Save 44%</string>
+    <string name="monthly">Monthly</string>
+    <string name="lifetime">Lifetime</string>
+    <string name="one_time_purchase">One-time purchase</string>
+    <string name="restore_purchases">Restore Purchases</string>
+
+    <!-- Mastery -->
+    <string name="learning">Learning</string>
+    <string name="familiar">Familiar</string>
+    <string name="proficient">Proficient</string>
+
+    <!-- Reset/Delete alerts -->
+    <string name="reset_settings_message">This will reset all settings to their default values.</string>
+    <string name="reset">Reset</string>
+    <string name="delete_all_data_message">This will delete all your quotes, practice history, and statistics. This action cannot be undone.</string>
+</resources>

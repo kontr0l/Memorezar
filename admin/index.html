@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memorezar Admin</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Login -->
+  <div id="login-screen" class="screen">
+    <div class="login-box">
+      <h1>Memorezar Admin</h1>
+      <p>Sign in to manage suggestion packs.</p>
+      <input type="email" id="email" placeholder="Email" autocomplete="email">
+      <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+      <button id="login-btn">Sign In</button>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+  </div>
+
+  <!-- Main App -->
+  <div id="app-screen" class="screen hidden">
+    <header>
+      <h1>Memorezar Admin</h1>
+      <nav class="admin-tabs">
+        <button class="tab-btn active" data-tab="packs">Packs</button>
+        <button class="tab-btn" data-tab="recordings">Recordings</button>
+        <button class="tab-btn" data-tab="equivalences">Equivalences</button>
+        <button class="tab-btn" data-tab="support">Support</button>
+      </nav>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="user-email" class="hint" style="font-size:0.8125rem"></span>
+        <button id="logout-btn" class="btn-text">Sign Out</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- Pack List -->
+      <div id="pack-list-view">
+        <div class="toolbar">
+          <h2>Suggestion Packs</h2>
+          <button id="add-pack-btn" class="btn-primary">+ New Pack</button>
+        </div>
+        <div class="search-bar">
+          <input type="text" id="pack-search" placeholder="Search packs...">
+        </div>
+        <div id="pack-list" class="pack-grid"></div>
+      </div>
+
+      <!-- Pack Editor (hidden by default) -->
+      <div id="pack-editor" class="hidden">
+        <div class="toolbar">
+          <button id="back-btn" class="btn-text">&larr; Back</button>
+          <div class="toolbar-actions">
+            <button id="delete-pack-btn" class="btn-danger hidden">Delete Pack</button>
+            <button id="save-pack-btn" class="btn-primary">Save Pack</button>
+          </div>
+        </div>
+
+        <div class="editor-grid">
+          <div class="editor-meta">
+            <h3 id="editor-title">New Pack</h3>
+
+            <label>ID <span class="hint">(slug, immutable after creation)</span></label>
+            <input type="text" id="pack-id" placeholder="e.g. my-quotes-pack">
+
+            <label>Name</label>
+            <input type="text" id="pack-name" placeholder="Pack display name">
+
+            <label>Description</label>
+            <textarea id="pack-description" rows="3" placeholder="Short description (don't include quote count)"></textarea>
+
+            <label>Cover Asset <span class="hint">(Xcode asset name)</span></label>
+            <input type="text" id="pack-cover-asset" placeholder="e.g. PackCoverMyPack">
+
+            <label>Cover URL <span class="hint">(remote image, optional)</span></label>
+            <input type="text" id="pack-cover-url" placeholder="https://...">
+
+            <label>Sort Order</label>
+            <input type="number" id="pack-sort-order" value="0" min="0">
+
+            <label>Version <span class="hint">(auto-increments on save)</span></label>
+            <input type="number" id="pack-version" value="1" min="1" disabled>
+
+            <label class="checkbox-label">
+              <input type="checkbox" id="pack-is-free" checked>
+              Free pack <span class="hint">(unchecked = Pro subscribers only)</span>
+            </label>
+
+            <div class="translations-section" style="margin-top:16px">
+              <div class="translations-header">
+                <span>Pack Translations</span>
+                <button class="btn-icon" id="add-pack-translation" title="Add translation">+ lang</button>
+              </div>
+              <div id="pack-translations-container"></div>
+            </div>
+          </div>
+
+          <div class="editor-quotes">
+            <div class="toolbar">
+              <h3>Quotes <span id="quote-count" class="badge">0</span></h3>
+              <div class="quotes-toolbar">
+                <button id="toggle-all-quotes" class="btn-expand-collapse">Collapse All</button>
+                <button id="add-lang-all-btn" class="btn-secondary">+ Lang to All</button>
+                <button id="add-quote-btn" class="btn-secondary">+ Add Quote</button>
+              </div>
+            </div>
+
+            <div id="quotes-list"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Equivalences (hidden by default) -->
+      <div id="equivalences-view" class="hidden">
+        <div class="toolbar">
+          <h2>Word Equivalences <span id="equiv-total" class="badge">0</span></h2>
+          <button id="add-equiv-btn" class="btn-primary">+ Add Equivalence</button>
+        </div>
+        <div class="recordings-filters">
+          <div class="search-bar" style="margin-bottom:0">
+            <input type="text" id="equiv-search" placeholder="Search by expected or spoken word...">
+          </div>
+          <select id="equiv-sort" class="equiv-sort-select">
+            <option value="created_at">Newest First</option>
+            <option value="report_count">Most Reported</option>
+            <option value="expected_word">A-Z (Expected)</option>
+          </select>
+        </div>
+        <table class="equiv-table">
+          <thead>
+            <tr>
+              <th>Expected Word</th>
+              <th>Spoken Word</th>
+              <th>Reports</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="equiv-tbody"></tbody>
+        </table>
+        <div id="equiv-empty" class="empty-state hidden">
+          <p>No equivalences yet.</p>
+        </div>
+      </div>
+
+      <!-- Add Equivalence Modal -->
+      <div id="add-equiv-modal" class="modal hidden">
+        <div class="modal-content">
+          <h3>Add Equivalence</h3>
+          <p>Add a manual word equivalence. This will apply to all users.</p>
+          <label style="display:block;font-size:0.8125rem;font-weight:500;color:var(--text2);margin-bottom:4px">Expected Word</label>
+          <input type="text" id="new-equiv-expected" placeholder="e.g. thou" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;font-size:0.875rem">
+          <label style="display:block;font-size:0.8125rem;font-weight:500;color:var(--text2);margin-bottom:4px">Spoken Word</label>
+          <input type="text" id="new-equiv-spoken" placeholder="e.g. you" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;font-size:0.875rem">
+          <div class="modal-actions">
+            <button id="add-equiv-cancel" class="btn-secondary">Cancel</button>
+            <button id="add-equiv-save" class="btn-primary">Add</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recordings List (hidden by default) -->
+      <div id="recordings-list-view" class="hidden">
+        <div class="toolbar">
+          <h2>Community Recordings <span id="recordings-total" class="badge">0</span></h2>
+        </div>
+        <div class="recordings-filters">
+          <div class="search-bar" style="margin-bottom:0">
+            <input type="text" id="recording-search" placeholder="Search by quote title, uploader...">
+          </div>
+          <div class="filter-pills">
+            <button class="filter-pill active" data-filter="all">All</button>
+            <button class="filter-pill" data-filter="flagged">Flagged</button>
+            <button class="filter-pill" data-filter="unreviewed">Unreviewed Flags</button>
+          </div>
+        </div>
+        <div id="recordings-list"></div>
+        <div id="recordings-load-more" class="hidden" style="text-align:center;padding:16px">
+          <button id="load-more-btn" class="btn-secondary">Load More</button>
+        </div>
+      </div>
+
+      <!-- Support Tickets (hidden by default) -->
+      <div id="support-view" class="hidden">
+        <div class="toolbar">
+          <h2>Support Tickets <span id="support-total" class="badge">0</span></h2>
+        </div>
+        <div class="recordings-filters">
+          <div class="search-bar" style="margin-bottom:0">
+            <input type="text" id="support-search" placeholder="Search by email, message...">
+          </div>
+          <div class="filter-pills">
+            <button class="filter-pill active" data-support-filter="all">All</button>
+            <button class="filter-pill" data-support-filter="unread">Unread</button>
+            <button class="filter-pill" data-support-filter="read">Read</button>
+          </div>
+          <select id="support-reason-filter" class="equiv-sort-select">
+            <option value="all">All Reasons</option>
+            <option value="feature_request">Feature Request</option>
+            <option value="quote_pack_request">Quote Pack Request</option>
+            <option value="bug_report">Bug Report</option>
+            <option value="awesome">Hey You're Awesome</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div id="support-list"></div>
+        <div id="support-empty" class="empty-state hidden">
+          <p>No support tickets yet.</p>
+        </div>
+      </div>
+
+      <!-- Support Ticket Detail (hidden by default) -->
+      <div id="support-detail" class="hidden">
+        <div class="toolbar">
+          <button id="support-back-btn" class="btn-text">&larr; Back</button>
+          <div class="toolbar-actions">
+            <button id="toggle-read-btn" class="btn-secondary">Mark as Read</button>
+            <button id="reply-ticket-btn" class="btn-primary">Reply via Email</button>
+            <button id="delete-ticket-btn" class="btn-danger">Delete</button>
+          </div>
+        </div>
+        <div class="editor-meta" style="max-width:700px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <h3 id="ticket-reason-title">Ticket</h3>
+            <span id="ticket-read-badge"></span>
+          </div>
+          <label>Email</label>
+          <input type="text" id="ticket-email" disabled>
+          <label>Reason</label>
+          <input type="text" id="ticket-reason" disabled>
+          <label>Message</label>
+          <textarea id="ticket-message" rows="6" disabled></textarea>
+          <label>App Version</label>
+          <input type="text" id="ticket-app-version" disabled>
+          <label>Device</label>
+          <input type="text" id="ticket-device" disabled>
+          <label>User ID</label>
+          <input type="text" id="ticket-user-id" disabled>
+          <label>Submitted</label>
+          <input type="text" id="ticket-created-at" disabled>
+        </div>
+      </div>
+
+      <!-- Recording Detail (hidden by default) -->
+      <div id="recording-detail" class="hidden">
+        <div class="toolbar">
+          <button id="recording-back-btn" class="btn-text">&larr; Back</button>
+          <div class="toolbar-actions">
+            <button id="delete-recording-btn" class="btn-danger">Delete Recording</button>
+            <button id="save-recording-btn" class="btn-primary">Save Changes</button>
+          </div>
+        </div>
+        <div class="recording-detail-grid">
+          <div class="editor-meta">
+            <h3 id="recording-detail-title">Recording</h3>
+            <label>ID</label>
+            <input type="text" id="rec-id" disabled>
+            <label>Quote Title</label>
+            <input type="text" id="rec-quote-title">
+            <label>Uploader</label>
+            <input type="text" id="rec-uploader">
+            <label>Language</label>
+            <input type="text" id="rec-language">
+            <label>Duration</label>
+            <input type="text" id="rec-duration" disabled>
+            <label>Uploaded</label>
+            <input type="text" id="rec-created-at" disabled>
+            <label>User ID</label>
+            <input type="text" id="rec-user-id" disabled>
+
+            <div style="margin-top:16px">
+              <label>Audio</label>
+              <audio id="rec-audio" controls style="width:100%;margin-top:4px"></audio>
+            </div>
+          </div>
+
+          <div class="recording-flags-panel">
+            <h3>Flags <span id="rec-flag-count" class="badge">0</span></h3>
+            <div id="rec-flags-list"></div>
+            <div id="rec-no-flags" class="empty-state" style="padding:24px">
+              <p>No flags on this recording.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Delete confirmation modal -->
+  <div id="confirm-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3 id="confirm-title">Confirm</h3>
+      <p id="confirm-message"></p>
+      <div class="modal-actions">
+        <button id="confirm-cancel" class="btn-secondary">Cancel</button>
+        <button id="confirm-ok" class="btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

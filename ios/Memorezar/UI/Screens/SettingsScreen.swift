@@ -5,181 +5,42 @@ struct SettingsScreen: View {
     @EnvironmentObject var quoteStore: QuoteStore
     @EnvironmentObject var tutorialStore: TutorialStore
     @EnvironmentObject var authService: AuthService
+    @EnvironmentObject var purchaseService: PurchaseService
     @State private var showingResetAlert = false
     @State private var showingDeleteDataAlert = false
     @State private var showFlash = false
     @State private var showAuthSheet = false
+    @State private var showPaywall = false
+    @State private var showContactSupport = false
 
     var body: some View {
         NavigationStack {
             List {
-                // Alert Settings
-                Section {
-                    Toggle(isOn: $settingsStore.settings.audioAlertEnabled) {
-                        Label("Sound Alerts", systemImage: "speaker.wave.2.fill")
-                    }
-
-                    if settingsStore.settings.audioAlertEnabled {
-                        Picker(selection: $settingsStore.settings.soundTheme) {
-                            ForEach(SoundTheme.allCases, id: \.self) { theme in
-                                Text(theme.displayName).tag(theme)
-                            }
-                        } label: {
-                            Label("Sound Theme", systemImage: "music.note.list")
-                        }
-                    }
-
-                    Toggle(isOn: $settingsStore.settings.visualAlertEnabled) {
-                        Label("Visual Flash", systemImage: "lightbulb.fill")
-                    }
-
-                    Toggle(isOn: $settingsStore.settings.hapticAlertEnabled) {
-                        Label("Haptic Feedback", systemImage: "iphone.radiowaves.left.and.right")
-                    }
-
-                    // Test alert button
-                    Button {
-                        AlertManager.shared.triggerMistakeAlert()
-                    } label: {
-                        Label("Test Mistake Alert", systemImage: "bell.badge")
-                    }
-                } header: {
-                    Text("Alerts")
-                } footer: {
-                    Text("Choose how you want to be notified during recitation. Default plays clean tones, Memes plays random funny sounds.")
-                }
-
-                // Display Settings
-                Section {
-                    Picker(selection: $settingsStore.settings.defaultMemorizationMode) {
-                        ForEach([MemorizationMode.voice, .typing, .firstLetter, .multipleChoice], id: \.self) { mode in
-                            Label(mode.rawValue, systemImage: mode.icon).tag(mode)
-                        }
-                    } label: {
-                        Label("Default Mode", systemImage: "rectangle.3.group")
-                    }
-
-                    Picker(selection: $settingsStore.settings.fontSize) {
-                        ForEach(FontSize.allCases, id: \.self) { size in
-                            Text(size.rawValue).tag(size)
-                        }
-                    } label: {
-                        Label("Font Size", systemImage: "textformat.size")
-                    }
-
-                    Picker(selection: $settingsStore.settings.theme) {
-                        ForEach(AppTheme.allCases, id: \.self) { theme in
-                            Text(theme.rawValue).tag(theme)
-                        }
-                    } label: {
-                        Label("Theme", systemImage: "paintbrush.fill")
-                    }
-                } header: {
-                    Text("Display")
-                }
-
-                // Statistics
-                Section {
-                    HStack {
-                        Label("Total Sessions", systemImage: "repeat.circle")
-                        Spacer()
-                        Text("\(quoteStore.totalPracticeSessions)")
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack {
-                        Label("Quotes Mastered", systemImage: "crown.fill")
-                        Spacer()
-                        Text("\(quoteStore.masteredQuotesCount)")
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack {
-                        Label("Average Accuracy", systemImage: "target")
-                        Spacer()
-                        Text(String(format: "%.1f%%", quoteStore.averageAccuracy * 100))
-                            .foregroundColor(.secondary)
-                    }
-
-                    HStack {
-                        Label("Total Practice Time", systemImage: "clock.fill")
-                        Spacer()
-                        Text(formatDuration(quoteStore.totalPracticeTime))
-                            .foregroundColor(.secondary)
-                    }
-                } header: {
-                    Text("Statistics")
-                }
-
-                // Account
-                Section {
-                    if authService.isSignedIn {
-                        HStack {
-                            Label(authService.currentUser?.displayName ?? "Account", systemImage: "person.crop.circle.fill")
-                            Spacer()
-                            Text(authService.currentUser?.email ?? "")
-                                .foregroundColor(.secondary)
-                                .lineLimit(1)
-                        }
-                        Button(role: .destructive) {
-                            authService.signOut()
-                        } label: {
-                            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
-                        }
-                    } else {
-                        Button {
-                            showAuthSheet = true
-                        } label: {
-                            Label("Sign In", systemImage: "person.crop.circle")
-                        }
-                    }
-                } header: {
-                    Text("Account")
-                } footer: {
-                    if !authService.isSignedIn {
-                        Text("Sign in to share recordings with the community.")
-                    }
-                }
-
-                // Data Management
-                Section {
-                    Button {
-                        showingResetAlert = true
-                    } label: {
-                        Label("Reset Settings", systemImage: "arrow.counterclockwise")
-                    }
-
-                    Button(role: .destructive) {
-                        showingDeleteDataAlert = true
-                    } label: {
-                        Label("Delete All Data", systemImage: "trash")
-                            .foregroundColor(.red)
-                    }
-                } header: {
-                    Text("Data")
-                }
-
-                // About
-                Section {
-                    HStack {
-                        Label("Version", systemImage: "info.circle")
-                        Spacer()
-                        Text("v50.4")
-                            .foregroundColor(.secondary)
-                    }
-
-                    Link(destination: URL(string: "mailto:support@memorezar.com")!) {
-                        Label("Contact Support", systemImage: "envelope")
-                    }
-                } header: {
-                    Text("About")
-                }
+                alertsSection
+                displaySection
+                statisticsSection
+                accountSection
+                dataSection
+                aboutSection
             }
             .sheet(isPresented: $showAuthSheet) {
                 AuthSheet()
                     .environmentObject(authService)
             }
+            .sheet(isPresented: $showPaywall) {
+                PaywallSheet()
+            }
+            .sheet(isPresented: $showContactSupport) {
+                ContactSupportView()
+                    .environmentObject(authService)
+            }
             .onChange(of: settingsStore.settings.soundTheme) { _, newValue in
+                // Gate meme theme behind Pro
+                if newValue == .memes && !purchaseService.canUseSoundTheme(.memes) {
+                    settingsStore.settings.soundTheme = .default
+                    showPaywall = true
+                    return
+                }
                 AlertManager.shared.previewTheme(newValue)
             }
             .overlay(
@@ -211,6 +72,7 @@ struct SettingsScreen: View {
                 Button("Delete", role: .destructive) {
                     quoteStore.clearAllData()
                     tutorialStore.resetAll()
+                    tutorialStore.hasCompletedOnboarding = false
                 }
             } message: {
                 Text("This will delete all your quotes, practice history, and statistics. This action cannot be undone.")
@@ -218,14 +80,219 @@ struct SettingsScreen: View {
         }
     }
 
+    // MARK: - Sections
+
+    private var alertsSection: some View {
+        Section {
+            Toggle(isOn: $settingsStore.settings.audioAlertEnabled) {
+                Label("Sound Alerts", systemImage: "speaker.wave.2.fill")
+            }
+
+            if settingsStore.settings.audioAlertEnabled {
+                Picker(selection: $settingsStore.settings.soundTheme) {
+                    ForEach(SoundTheme.allCases, id: \.self) { theme in
+                        Text(theme.displayName)
+                        .tag(theme)
+                    }
+                } label: {
+                    Label("Sound Theme", systemImage: "music.note.list")
+                }
+            }
+
+            Toggle(isOn: $settingsStore.settings.visualAlertEnabled) {
+                Label("Visual Flash", systemImage: "lightbulb.fill")
+            }
+
+            Toggle(isOn: $settingsStore.settings.hapticAlertEnabled) {
+                Label("Haptic Feedback", systemImage: "iphone.radiowaves.left.and.right")
+            }
+
+            Button {
+                AlertManager.shared.triggerMistakeAlert()
+            } label: {
+                Label("Test Mistake Alert", systemImage: "bell.badge")
+            }
+        } header: {
+            Text("Alerts")
+        } footer: {
+            Text("Choose how you want to be notified during recitation. Default plays clean tones, Memes plays random funny sounds.")
+        }
+    }
+
+    private var displaySection: some View {
+        Section {
+            Picker(selection: $settingsStore.settings.defaultMemorizationMode) {
+                ForEach(MemorizationMode.settingsOptions, id: \.self) { mode in
+                    Label(mode.localizedName, systemImage: mode.icon).tag(mode)
+                }
+            } label: {
+                Label("Default Mode", systemImage: "rectangle.3.group")
+            }
+
+            if settingsStore.settings.defaultMemorizationMode == .voice || settingsStore.settings.defaultMemorizationMode == .typing {
+                Toggle(isOn: $settingsStore.settings.firstLetterModeEnabled) {
+                    Label("First Letter Mode", systemImage: "a.square")
+                }
+            }
+
+            Picker(selection: $settingsStore.settings.fontSize) {
+                ForEach(FontSize.allCases, id: \.self) { size in
+                    Text(size.localizedName).tag(size)
+                }
+            } label: {
+                Label("Font Size", systemImage: "textformat.size")
+            }
+
+            Picker(selection: $settingsStore.settings.theme) {
+                ForEach(AppTheme.allCases, id: \.self) { theme in
+                    Text(theme.localizedName).tag(theme)
+                }
+            } label: {
+                Label("Theme", systemImage: "paintbrush.fill")
+            }
+        } header: {
+            Text("Display")
+        }
+    }
+
+    private var statisticsSection: some View {
+        Section {
+            HStack {
+                Label("Total Sessions", systemImage: "repeat.circle")
+                Spacer()
+                Text("\(quoteStore.totalPracticeSessions)")
+                    .foregroundColor(.secondary)
+            }
+
+            HStack {
+                Label("Quotes Mastered", systemImage: "crown.fill")
+                Spacer()
+                Text("\(quoteStore.masteredQuotesCount)")
+                    .foregroundColor(.secondary)
+            }
+
+            HStack {
+                Label("Average Accuracy", systemImage: "target")
+                Spacer()
+                Text(String(format: "%.1f%%", quoteStore.averageAccuracy * 100))
+                    .foregroundColor(.secondary)
+            }
+
+            HStack {
+                Label("Total Practice Time", systemImage: "clock.fill")
+                Spacer()
+                Text(formatDuration(quoteStore.totalPracticeTime))
+                    .foregroundColor(.secondary)
+            }
+        } header: {
+            Text("Statistics")
+        }
+    }
+
+    private var accountSection: some View {
+        Section {
+            if authService.isSignedIn {
+                HStack {
+                    Label(accountDisplayName, systemImage: "person.crop.circle.fill")
+                    Spacer()
+                    Text(accountDetailText)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+                Button(role: .destructive) {
+                    authService.signOut()
+                } label: {
+                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                }
+            } else {
+                Button {
+                    showAuthSheet = true
+                } label: {
+                    Label("Sign In", systemImage: "person.crop.circle")
+                }
+            }
+        } header: {
+            Text("Account")
+        } footer: {
+            if !authService.isSignedIn {
+                Text("Sign in to share recordings with the community.")
+            }
+        }
+    }
+
+    private var dataSection: some View {
+        Section {
+            Button {
+                showingResetAlert = true
+            } label: {
+                Label("Reset Settings", systemImage: "arrow.counterclockwise")
+            }
+
+            Button(role: .destructive) {
+                showingDeleteDataAlert = true
+            } label: {
+                Label("Delete All Data", systemImage: "trash")
+                    .foregroundColor(.red)
+            }
+        } header: {
+            Text("Data")
+        }
+    }
+
+    private var aboutSection: some View {
+        Section {
+            HStack {
+                Label("Version", systemImage: "info.circle")
+                Spacer()
+                Text("v71.2")
+                    .foregroundColor(.secondary)
+            }
+
+            Button {
+                showContactSupport = true
+            } label: {
+                Label("Contact Support", systemImage: "envelope")
+            }
+        } header: {
+            Text("About")
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var isApplePrivateRelay: Bool {
+        authService.currentUser?.email?.contains("@privaterelay.appleid.com") == true
+    }
+
+    private var accountDisplayName: String {
+        if let name = authService.currentUser?.displayName, !name.isEmpty {
+            return name
+        }
+        if isApplePrivateRelay {
+            return String(localized: "Apple Account")
+        }
+        // Use part before @ as fallback
+        if let email = authService.currentUser?.email, let at = email.firstIndex(of: "@") {
+            return String(email[email.startIndex..<at])
+        }
+        return String(localized: "Account")
+    }
+
+    private var accountDetailText: String {
+        if isApplePrivateRelay {
+            return String(localized: "Signed in with Apple")
+        }
+        return authService.currentUser?.email ?? ""
+    }
+
     private func formatDuration(_ duration: TimeInterval) -> String {
         let hours = Int(duration) / 3600
         let minutes = (Int(duration) % 3600) / 60
 
         if hours > 0 {
-            return "\(hours)h \(minutes)m"
+            return String(localized: "\(hours)h \(minutes)m")
         } else {
-            return "\(minutes)m"
+            return String(localized: "\(minutes)m")
         }
     }
 }
@@ -235,4 +302,5 @@ struct SettingsScreen: View {
         .environmentObject(SettingsStore())
         .environmentObject(QuoteStore())
         .environmentObject(AuthService.shared)
+        .environmentObject(PurchaseService.shared)
 }
