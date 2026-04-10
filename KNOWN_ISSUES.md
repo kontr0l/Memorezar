@@ -597,7 +597,6 @@ CREATE TABLE suggestion_packs (
   description TEXT NOT NULL,
   cover_search_query TEXT,
   cover_url TEXT,
-  cover_asset TEXT,
   version INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
   quotes JSONB NOT NULL

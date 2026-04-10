@@ -71,11 +71,15 @@
             <label>Description</label>
             <textarea id="pack-description" rows="3" placeholder="Short description (don't include quote count)"></textarea>
 
-            <label>Cover Asset <span class="hint">(Xcode asset name)</span></label>
-            <input type="text" id="pack-cover-asset" placeholder="e.g. PackCoverMyPack">
-
-            <label>Cover URL <span class="hint">(remote image, optional)</span></label>
-            <input type="text" id="pack-cover-url" placeholder="https://...">
+            <label>Cover Image</label>
+            <div class="cover-upload-group">
+              <div id="cover-preview-wrapper" class="cover-preview hidden">
+                <img id="cover-preview-img" alt="Cover preview">
+              </div>
+              <input type="file" id="pack-cover-file" accept="image/jpeg,image/png,image/webp">
+              <input type="text" id="pack-cover-url" placeholder="https://..." class="cover-url-input">
+              <span class="hint">Upload an image or paste a URL</span>
+            </div>
 
             <label>Sort Order</label>
             <input type="number" id="pack-sort-order" value="0" min="0">

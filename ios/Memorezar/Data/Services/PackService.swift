@@ -96,7 +96,6 @@ private struct RemotePackRow: Codable {
     let description: String
     let cover_search_query: String?
     let cover_url: String?
-    let cover_asset: String?
     let version: Int?
     let translations: [String: TranslatedPack]?
     let is_free: Bool?
@@ -114,7 +113,6 @@ private struct RemotePackRow: Codable {
             name: name,
             description: description,
             coverSearchQuery: cover_search_query ?? "",
-            coverAsset: cover_asset,
             coverURL: cover_url,
             version: version ?? 1,
             translations: translations,

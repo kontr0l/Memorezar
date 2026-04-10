@@ -516,16 +516,8 @@ final class QuoteStore: ObservableObject {
         let localizedName = pack.localizedName(for: preferredLanguage)
         var category = QuoteCategory(name: localizedName, gradientIndex: nextAvailableGradientIndex(), sourcePackId: pack.id)
 
-        // Use the pack's bundled cover image if available
-        if let assetName = pack.coverAsset,
-           let image = UIImage(named: assetName),
-           let jpegData = image.jpegData(compressionQuality: 0.85),
-           let filename = saveCategoryImage(jpegData, for: category.id) {
-            category.imageSource = .local(filename)
-        }
-
-        // Try remote cover URL if no bundled asset
-        if category.imageSource == .none, let coverURL = pack.coverURL {
+        // Download cover image from remote URL
+        if let coverURL = pack.coverURL {
             downloadAndSaveCoverImage(from: coverURL, for: &category)
         }
 

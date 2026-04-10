@@ -37,19 +37,17 @@ struct SuggestionPack: Identifiable, Hashable, Codable {
     let name: String
     let description: String
     let coverSearchQuery: String
-    let coverAsset: String?         // bundled asset catalog image name
     let coverURL: String?           // remote cover image URL
     let version: Int                // bump on server to push updates to installed packs
     let translations: [String: TranslatedPack]?
     let isFree: Bool                // true = available to all, false = Pro only
     let quotes: [SuggestionQuote]
 
-    init(id: String, name: String, description: String, coverSearchQuery: String, coverAsset: String? = nil, coverURL: String? = nil, version: Int = 1, translations: [String: TranslatedPack]? = nil, isFree: Bool = true, quotes: [SuggestionQuote]) {
+    init(id: String, name: String, description: String, coverSearchQuery: String, coverURL: String? = nil, version: Int = 1, translations: [String: TranslatedPack]? = nil, isFree: Bool = true, quotes: [SuggestionQuote]) {
         self.id = id
         self.name = name
         self.description = description
         self.coverSearchQuery = coverSearchQuery
-        self.coverAsset = coverAsset
         self.coverURL = coverURL
         self.version = version
         self.translations = translations

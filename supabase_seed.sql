@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS suggestion_packs (
   description TEXT NOT NULL,
   cover_search_query TEXT,
   cover_url TEXT,
-  cover_asset TEXT,
   version INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
   translations JSONB,
@@ -18,14 +17,13 @@ CREATE TABLE IF NOT EXISTS suggestion_packs (
 -- ALTER TABLE suggestion_packs ADD COLUMN IF NOT EXISTS translations JSONB;
 
 -- Pack 1: Ruhi Book 1 Unit 1
-INSERT INTO suggestion_packs (id, name, description, cover_search_query, cover_url, cover_asset, version, sort_order, quotes)
+INSERT INTO suggestion_packs (id, name, description, cover_search_query, cover_url, version, sort_order, quotes)
 VALUES (
   'ruhi-book1-unit1',
   'Ruhi Book 1: Reflections on the Life of the Spirit — Unit 1',
   'Quotations on the spiritual life, truthfulness, kindness, and backbiting.',
   'spiritual meditation light',
   'https://tcaaozzijpgbaqzpnahl.supabase.co/storage/v1/object/public/pack-covers/ruhi_book1.jpg',
-  'PackCoverRuhiBook1',
   1,
   0,
   $$[
@@ -233,14 +231,13 @@ VALUES (
 );
 
 -- Pack 2: Mark Twain
-INSERT INTO suggestion_packs (id, name, description, cover_search_query, cover_url, cover_asset, version, sort_order, quotes)
+INSERT INTO suggestion_packs (id, name, description, cover_search_query, cover_url, version, sort_order, quotes)
 VALUES (
   'mark-twain-quotes',
   'Mark Twain: Wit & Wisdom',
   'The most memorable quotes from America''s greatest humorist.',
   'mark twain vintage literature',
   'https://tcaaozzijpgbaqzpnahl.supabase.co/storage/v1/object/public/pack-covers/mark_twain.jpg',
-  'PackCoverMarkTwain',
   1,
   1,
   $$[
@@ -258,14 +255,13 @@ VALUES (
 );
 
 -- Pack 3: Einstein
-INSERT INTO suggestion_packs (id, name, description, cover_search_query, cover_url, cover_asset, version, sort_order, quotes)
+INSERT INTO suggestion_packs (id, name, description, cover_search_query, cover_url, version, sort_order, quotes)
 VALUES (
   'einstein-quotes',
   'Albert Einstein: Genius & Imagination',
   'Iconic quotes from the mind that reshaped our understanding of the universe.',
   'albert einstein physics science',
   'https://tcaaozzijpgbaqzpnahl.supabase.co/storage/v1/object/public/pack-covers/einstein.jpg',
-  'PackCoverEinstein',
   1,
   2,
   $$[

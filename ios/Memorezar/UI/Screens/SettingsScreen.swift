@@ -244,7 +244,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v71.2")
+                Text("v71.3")
                     .foregroundColor(.secondary)
             }
 

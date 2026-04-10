@@ -341,14 +341,8 @@ struct SuggestionPackCard: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            // Cover image — bundled asset, remote URL, or gradient fallback
-            if let asset = pack.coverAsset, UIImage(named: asset) != nil {
-                Image(asset)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 200)
-                    .clipped()
-            } else if let urlString = pack.coverURL, let url = URL(string: urlString) {
+            // Cover image — remote URL or gradient fallback
+            if let urlString = pack.coverURL, let url = URL(string: urlString) {
                 AsyncImage(url: url) { image in
                     image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
@@ -523,13 +517,7 @@ struct PackDetailView: View {
 
     @ViewBuilder
     private func packCoverImage(height: CGFloat) -> some View {
-        if let asset = pack.coverAsset, UIImage(named: asset) != nil {
-            Image(asset)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: height)
-                .clipped()
-        } else if let urlString = pack.coverURL, let url = URL(string: urlString) {
+        if let urlString = pack.coverURL, let url = URL(string: urlString) {
             AsyncImage(url: url) { image in
                 image.resizable().aspectRatio(contentMode: .fill)
             } placeholder: {

@@ -297,7 +297,7 @@ See `KNOWN_ISSUES.md` → PACK-001 for full rules, schema, and admin workflow.
 ### Adding a New Pack
 
 1. Insert a row into the `suggestion_packs` Supabase table with `version: 1`
-2. Add a bundled cover image to `ios/Memorezar/Resources/Assets.xcassets/` as a new `.imageset` (JPEG or PNG only — Xcode does not support WebP). Set `cover_asset` to match the asset name. Or use `cover_url` for a remote image.
+2. Upload a cover image to the `pack-covers` Supabase Storage bucket and set `cover_url` to the public URL (e.g. `https://tcaaozzijpgbaqzpnahl.supabase.co/storage/v1/object/public/pack-covers/my_image.jpg`).
 3. **Do not include the quote count in the `description`** — the count is already displayed under the pack title in the UI.
 
 ### Preview Snippets

@@ -30,8 +30,6 @@ data class SuggestionPack(
     val description: String,
     @SerialName("cover_search_query")
     val coverSearchQuery: String,
-    @SerialName("cover_asset")
-    val coverAsset: String? = null,
     @SerialName("cover_url")
     val coverURL: String? = null,
     val version: Int = 1,

@@ -53,6 +53,42 @@ async function deletePack(id) {
   if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }
 
+// ── Cover Image Upload ──
+
+const COVERS_BUCKET = 'pack-covers';
+
+async function uploadCoverImage(file) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const filename = `${Date.now()}.${ext}`;
+  const res = await fetch(
+    `${SUPABASE_URL}/storage/v1/object/${COVERS_BUCKET}/${filename}`,
+    {
+      method: 'POST',
+      headers: {
+        'apikey': ANON_KEY,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': file.type,
+      },
+      body: file,
+    }
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Upload failed: ${err}`);
+  }
+  return `${SUPABASE_URL}/storage/v1/object/public/${COVERS_BUCKET}/${filename}`;
+}
+
+function updateCoverPreview(url) {
+  if (url) {
+    coverPreviewImg.src = url;
+    coverPreviewWrapper.classList.remove('hidden');
+  } else {
+    coverPreviewWrapper.classList.add('hidden');
+    coverPreviewImg.src = '';
+  }
+}
+
 // ── Dirty tracking ──
 
 function markDirty() { dirty = true; }
@@ -273,8 +309,10 @@ const editorTitle = document.getElementById('editor-title');
 const packIdInput = document.getElementById('pack-id');
 const packNameInput = document.getElementById('pack-name');
 const packDescInput = document.getElementById('pack-description');
-const packCoverAssetInput = document.getElementById('pack-cover-asset');
 const packCoverUrlInput = document.getElementById('pack-cover-url');
+const packCoverFileInput = document.getElementById('pack-cover-file');
+const coverPreviewWrapper = document.getElementById('cover-preview-wrapper');
+const coverPreviewImg = document.getElementById('cover-preview-img');
 const packSortInput = document.getElementById('pack-sort-order');
 const packVersionInput = document.getElementById('pack-version');
 const packIsFreeInput = document.getElementById('pack-is-free');
@@ -293,6 +331,28 @@ const addPackTransBtn = document.getElementById('add-pack-translation');
 document.querySelectorAll('#pack-editor input, #pack-editor textarea').forEach(el => {
   el.addEventListener('input', markDirty);
   el.addEventListener('change', markDirty);
+});
+
+packCoverFileInput.addEventListener('change', async () => {
+  const file = packCoverFileInput.files[0];
+  if (!file) return;
+  try {
+    packCoverFileInput.disabled = true;
+    const url = await uploadCoverImage(file);
+    packCoverUrlInput.value = url;
+    updateCoverPreview(url);
+    markDirty();
+    toast('Cover image uploaded', 'success');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    packCoverFileInput.disabled = false;
+    packCoverFileInput.value = '';
+  }
+});
+
+packCoverUrlInput.addEventListener('input', () => {
+  updateCoverPreview(packCoverUrlInput.value.trim());
 });
 
 addQuoteBtn.addEventListener('click', () => {
@@ -383,8 +443,9 @@ function openEditor(pack) {
     packIdInput.disabled = true;
     packNameInput.value = pack.name;
     packDescInput.value = pack.description || '';
-    packCoverAssetInput.value = pack.cover_asset || '';
     packCoverUrlInput.value = pack.cover_url || '';
+    updateCoverPreview(pack.cover_url || '');
+    packCoverFileInput.value = '';
     packSortInput.value = pack.sort_order ?? 0;
     packVersionInput.value = pack.version || 1;
     packIsFreeInput.checked = pack.is_free !== false; // default to true
@@ -404,8 +465,9 @@ function openEditor(pack) {
     packIdInput.disabled = false;
     packNameInput.value = '';
     packDescInput.value = '';
-    packCoverAssetInput.value = '';
     packCoverUrlInput.value = '';
+    updateCoverPreview('');
+    packCoverFileInput.value = '';
     packSortInput.value = packs.length;
     packVersionInput.value = 1;
     packIsFreeInput.checked = true;
@@ -677,7 +739,6 @@ function collectPackData() {
     id,
     name,
     description: packDescInput.value.trim(),
-    cover_asset: packCoverAssetInput.value.trim() || null,
     cover_url: packCoverUrlInput.value.trim() || null,
     cover_search_query: null,
     sort_order: parseInt(packSortInput.value) || 0,
