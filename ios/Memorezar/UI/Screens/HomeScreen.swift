@@ -352,15 +352,12 @@ struct SuggestionPackCard: View {
                         endPoint: .bottomTrailing
                     )
                 }
-                .frame(height: 200)
-                .clipped()
             } else {
                 LinearGradient(
                     colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-                .frame(height: 200)
             }
 
             // Dark gradient overlay at bottom — same as CategoryCard
@@ -386,6 +383,7 @@ struct SuggestionPackCard: View {
             .padding(12)
         }
         .frame(height: 200)
+        .clipped()
         .background(Color(.secondarySystemBackground))
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))

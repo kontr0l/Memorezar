@@ -169,6 +169,7 @@ struct CategoryCard: View {
             .padding(12)
         }
         .frame(height: 200)
+        .clipped()
         .background(Color(.secondarySystemBackground))
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))
