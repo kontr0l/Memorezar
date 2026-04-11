@@ -301,50 +301,21 @@ struct LevelBadge: View {
         } else {
             switch level {
             case 2:
-                if #available(iOS 26.0, *) {
-                    ZStack {
-                        // Invisible placeholder to reserve space
-                        Image(systemName: "lightbulb.max.fill")
-                            .font(.system(size: 80))
-                            .opacity(0)
-                        if animate {
-                            Image(systemName: "lightbulb.max.fill")
-                                .font(.system(size: 80))
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.yellow, .orange)
-                                .transition(.symbolEffect(.drawOn.individually))
-                        }
-                    }
-                } else {
-                    Image(systemName: "lightbulb.max.fill")
-                        .font(.system(size: 80))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.yellow, .orange)
-                        .symbolEffect(.variableColor.cumulative.dimInactiveLayers, isActive: animate)
-                }
+                // Advancing — lightbulb bounces in once on appear.
+                Image(systemName: "lightbulb.max.fill")
+                    .font(.system(size: 80))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.yellow, .orange)
+                    .symbolEffect(.bounce.up.byLayer, options: .nonRepeating, value: animate)
 
             case 3:
-                if #available(iOS 26.0, *) {
-                    ZStack {
-                        // Invisible placeholder to reserve space
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 100))
-                            .opacity(0)
-                        if animate {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 100))
-                                .foregroundStyle(badgeColor)
-                                .symbolRenderingMode(.hierarchical)
-                                .transition(.symbolEffect(.drawOn.individually))
-                        }
-                    }
-                } else {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 100))
-                        .foregroundStyle(badgeColor)
-                        .symbolRenderingMode(.hierarchical)
-                        .symbolEffect(.variableColor.cumulative.dimInactiveLayers, isActive: animate)
-                }
+                // Proficient — sparkles bounce in once on appear (same effect
+                // as Advancing).
+                Image(systemName: "sparkles")
+                    .font(.system(size: 100))
+                    .foregroundStyle(badgeColor)
+                    .symbolRenderingMode(.hierarchical)
+                    .symbolEffect(.bounce.up.byLayer, options: .nonRepeating, value: animate)
 
             default:
                 Image(systemName: "leaf.fill")
