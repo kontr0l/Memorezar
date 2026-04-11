@@ -72,7 +72,10 @@ struct HomeScreen: View {
                 RecitationScreen(quote: quote)
             }
             .task {
-                remotePacks = await PackService.shared.fetchPacks()
+                async let packsTask = PackService.shared.fetchPacks()
+                async let langsTask: () = LanguageService.shared.fetchLanguages()
+                remotePacks = await packsTask
+                await langsTask
             }
         }
     }
@@ -340,50 +343,57 @@ struct SuggestionPackCard: View {
     private var lang: String { LanguageHelper.preferredLanguageCode }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            // Cover image — remote URL or gradient fallback
-            if let urlString = pack.coverURL, let url = URL(string: urlString) {
-                AsyncImage(url: url) { image in
-                    image.resizable().aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    LinearGradient(
-                        colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+        GeometryReader { geo in
+            ZStack(alignment: .bottomLeading) {
+                // Cover image — remote URL or gradient fallback.
+                // Forced into geo.size and clipped locally so wide/tall
+                // images can never escape the card bounds.
+                Group {
+                    if let urlString = pack.coverURL, let url = URL(string: urlString) {
+                        AsyncImage(url: url) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            LinearGradient(
+                                colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        }
+                    } else {
+                        LinearGradient(
+                            colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    }
                 }
-            } else {
+                .frame(width: geo.size.width, height: geo.size.height)
+                .clipped()
+
+                // Dark gradient overlay at bottom — same as CategoryCard
                 LinearGradient(
-                    colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                    colors: [.clear, .black.opacity(0.7)],
+                    startPoint: .center,
+                    endPoint: .bottom
                 )
+
+                // Pack name and quote count — same layout as CategoryCard
+                VStack(alignment: .leading, spacing: 4) {
+                    Spacer()
+
+                    Text(pack.localizedName(for: lang))
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+
+                    Text(String(localized: "\(pack.quotes.count) quotes"))
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(12)
             }
-
-            // Dark gradient overlay at bottom — same as CategoryCard
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.7)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
-
-            // Pack name and quote count — same layout as CategoryCard
-            VStack(alignment: .leading, spacing: 4) {
-                Spacer()
-
-                Text(pack.localizedName(for: lang))
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .lineLimit(2)
-
-                Text(String(localized: "\(pack.quotes.count) quotes"))
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.8))
-            }
-            .padding(12)
         }
         .frame(height: 200)
-        .clipped()
         .background(Color(.secondarySystemBackground))
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))

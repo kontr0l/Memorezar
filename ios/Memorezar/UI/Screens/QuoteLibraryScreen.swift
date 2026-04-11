@@ -140,36 +140,39 @@ struct CategoryCard: View {
     let quoteCount: Int
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            // Cover image or gradient placeholder
-            categoryImage
-                .frame(height: 200)
-                .clipped()
+        GeometryReader { geo in
+            ZStack(alignment: .bottomLeading) {
+                // Cover image or gradient placeholder.
+                // Forced into geo.size and clipped locally so wide/tall
+                // images can never escape the card bounds.
+                categoryImage
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .clipped()
 
-            // Dark gradient overlay at bottom
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.7)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
+                // Dark gradient overlay at bottom
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.7)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
 
-            // Category name and quote count
-            VStack(alignment: .leading, spacing: 4) {
-                Spacer()
+                // Category name and quote count
+                VStack(alignment: .leading, spacing: 4) {
+                    Spacer()
 
-                Text(category.name)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .lineLimit(2)
+                    Text(category.name)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
 
-                Text(String(localized: "\(quoteCount) \(quoteCount == 1 ? "quote" : "quotes")"))
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.8))
+                    Text(String(localized: "\(quoteCount) \(quoteCount == 1 ? "quote" : "quotes")"))
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(12)
             }
-            .padding(12)
         }
         .frame(height: 200)
-        .clipped()
         .background(Color(.secondarySystemBackground))
         .cornerRadius(12)
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))
