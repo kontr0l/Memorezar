@@ -1709,54 +1709,54 @@ private fun ControlPill(
             .padding(horizontal = 12.dp).padding(top = 7.dp, bottom = 3.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Top row: info icon — numbers — reset icon
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.Top
         ) {
-            Box(Modifier.width(50.dp).clickable { onInfo() }, contentAlignment = Alignment.Center) {
+            // Info button: icon + label as one tap target
+            Column(
+                modifier = Modifier.width(50.dp).clickable { onInfo() },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Icon(painter = painterResource(id = R.drawable.ic_info), "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                Text("INFO", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.offset(y = (-3).dp))
             }
             Spacer(Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Text("${uiState.correctCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace, color = CorrectGreen,
-                    textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
-                Text("${uiState.mistakeCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace, color = MismatchRed,
-                    textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
-                Text("${uiState.hintCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace, color = PendingYellow,
-                    textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+            // Center: numbers + legend icons
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                    Text("${uiState.correctCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, color = CorrectGreen,
+                        textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+                    Text("${uiState.mistakeCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, color = MismatchRed,
+                        textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+                    Text("${uiState.hintCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace, color = PendingYellow,
+                        textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.offset(y = 1.dp)) {
+                    Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Check, null, tint = CorrectGreen.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    }
+                    Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.Close, null, tint = MismatchRed.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    }
+                    Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                        Icon(painter = painterResource(id = R.drawable.ic_lightbulb), null, tint = PendingYellow.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    }
+                }
             }
             Spacer(Modifier.weight(1f))
-            Box(Modifier.width(50.dp).clickable { onReset() }, contentAlignment = Alignment.Center) {
+            // Reset button: icon + label as one tap target
+            Column(
+                modifier = Modifier.width(50.dp).clickable { onReset() },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-            }
-        }
-        // Bottom row: INFO text — icons — RESET text
-        Row(
-            modifier = Modifier.fillMaxWidth().offset(y = (-3).dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
-                Text("INFO", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
-            }
-            Spacer(Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Check, null, tint = CorrectGreen.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                }
-                Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Close, null, tint = MismatchRed.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                }
-                Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-                    Icon(painter = painterResource(id = R.drawable.ic_lightbulb), null, tint = PendingYellow.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                }
-            }
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
-                Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+                Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
+                    modifier = Modifier.offset(y = (-3).dp))
             }
         }
     }

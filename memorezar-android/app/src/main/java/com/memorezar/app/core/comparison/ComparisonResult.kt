@@ -9,5 +9,7 @@ data class ComparisonResult(
     val normalizedSpoken: String,
     val position: Int,
     val confidence: Float = 0f,
-    val matchType: MatchType = MatchType.MISMATCH
+    val matchType: MatchType = MatchType.MISMATCH,
+    /** Positions that were skipped when look-ahead jumped ahead (should be marked as mistakes) */
+    val skippedPositions: List<Int> = emptyList()
 )

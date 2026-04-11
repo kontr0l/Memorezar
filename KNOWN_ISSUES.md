@@ -900,4 +900,103 @@ The first four mastery levels still auto-progress based on practice count and ac
 
 ---
 
+## Android-Specific Issues
+
+Android's `SpeechRecognizer` is fundamentally different from iOS's `SFSpeechRecognizer`. iOS provides a continuous streaming session with per-word confidence, alternatives, and contextual priming. Android stops after every final result, requiring a destroy-and-recreate cycle. This creates **session gaps** — periods of 150-700ms where audio is lost permanently. Much of the Android voice mode work is about mitigating these gaps.
+
+### ANDROID-SPEECH: Session Gap Architecture
+
+**Severity:** Architectural limitation
+**Affects:** Android app (all devices)
+**Files:**
+- `memorezar-android/app/src/main/java/com/memorezar/app/core/speech/SpeechRecognitionService.kt`
+- `memorezar-android/app/src/main/java/com/memorezar/app/ui/viewmodels/RecitationViewModel.kt`
+- `memorezar-android/app/src/main/java/com/memorezar/app/core/comparison/WordComparator.kt`
+
+#### The Problem
+
+| Aspect | iOS (SFSpeechRecognizer) | Android (SpeechRecognizer) |
+|--------|--------------------------|---------------------------|
+| Session model | Continuous stream | Stops after each final result |
+| Per-word confidence | Yes (segment-level) | No (result-level only) |
+| Per-word alternatives | Yes (alternativeSubstrings) | No |
+| Contextual priming | contextualStrings array | Not available |
+| Gap between sessions | None (continuous) | 150-700ms (audio lost) |
+
+When Android's recognizer delivers a FINAL result, it stops. We must destroy and recreate the recognizer to continue. During this gap:
+- The user may still be speaking
+- 1-4 words can be lost depending on speaking speed
+- Position tracking desyncs because the comparator never sees those words
+
+#### Mitigations Implemented (v2.4.3 → v2.4.19)
+
+**1. High Water Mark (replay guard)**
+After each restart, the new recognizer may replay words from its audio buffer that overlap with the previous session. `highWaterMark` tracks how many words were emitted before the restart. Words below this mark are skipped to prevent duplicate processing.
+
+**2. Deferred Mismatch Settlement**
+When a mismatch is detected, it's held as `pendingMismatch` for ~500ms before confirming. This gives time for the correct word to arrive from a new session after a gap. If the correct word arrives during the settle window, the mismatch is cancelled.
+
+**3. Sync Recovery via Look-Ahead (confirmMismatch)**
+When a mismatch is confirmed, `confirmMismatch()` does a broader look-ahead (`maxJump=5`) to find if the spoken word matches a position further ahead. If found, skipped positions are marked CORRECT (assumed lost in the session gap) and position jumps forward. Normal processing uses a conservative `maxJump=2` to prevent premature jumps.
+
+**Known limitation:** Sync recovery can be too aggressive. If the user says completely wrong words and then says a word that matches something far ahead, positions in between get incorrectly marked CORRECT. Example: saying "banana apple pineapple virtues" on the quote "Truthfulness is the foundation of all human virtues" — "virtues" matches pos 7, so pos 2-6 get marked CORRECT even though they were never spoken. This is an acceptable trade-off for now since the common case (session gaps during correct recitation) is more important than the adversarial case.
+
+**4. isRestarting Guard**
+Prevents overlapping restarts. Set to `true` in all restart paths (FINAL result, error handler, proactive timeout) and cleared only after the new recognizer is created.
+
+### ANDROID-ERR11: OnePlus Service Unbinding Race (Error 11)
+
+**Severity:** Medium (mitigated)
+**Affects:** OnePlus devices (confirmed on OnePlus 15), possibly other OEMs
+**Status:** Mitigated
+
+**Root Cause:** When we destroy the old `SpeechRecognizer` and immediately create a new one, the Android speech service framework logs `ServiceConnector.Impl: Service is unbinding` and the new recognizer gets error 11 (`ERROR_LANGUAGE_NOT_SUPPORTED`). This is NOT a real language support error — it's a race condition where the service hasn't finished unbinding.
+
+**Fix:** `RESTART_DELAY_MS = 150ms` — enough time for the service to fully unbind before creating the new recognizer. Error 11 does NOT count toward `consecutiveErrorCount` and always retries with a fixed 150ms delay (no backoff, since backoff creates larger dead zones where audio is lost).
+
+### ANDROID-ERR-DISPLAY: No Errors Shown to User
+
+**Severity:** Low
+**Status:** Resolved (v2.4.9)
+
+All speech recognition errors are handled silently. The `onError` handler auto-restarts the recognizer for any error while listening, never calling `delegate?.onError()`. This was done because:
+- Error 11 fires on nearly every restart on OnePlus — confusing "Language not supported" messages
+- Error 7 (no speech) fires when the user pauses — confusing "No speech detected" messages
+- Error 8 (recognizer busy) fires during overlapping restarts — confusing "Recognition service busy" messages
+- None of these errors are actionable by the user
+
+The user can always tap the mic button to manually restart if something truly breaks. After `MAX_CONSECUTIVE_REAL_ERRORS` (8) real errors, the recognizer gives up silently.
+
+### ANDROID-LOCALE: Device Locale Mismatch
+
+**Severity:** Low
+**Status:** Resolved (v2.4.10)
+
+`localeForLanguageCode()` hardcoded `"en"` → `"en-US"`, but the OnePlus device had `en-GB` as default. The recognizer got error 11 on `en-US` and fell back to `en-GB` every time. Fixed by checking if the device's language matches the requested language code — if so, use the device locale directly (e.g., device `en-GB` + quote `en` → use `en-GB`).
+
+### ANDROID-STUCK: PendingMismatch Lifecycle Bug
+
+**Severity:** Critical
+**Status:** Resolved (v2.4.6)
+
+**Symptom:** App permanently stuck at a word, never advancing regardless of what the user says.
+
+**Root Cause:** In `confirmMismatch()`, when the recovery path (tryMatchNext/tryMatchAhead) succeeded, the function returned WITHOUT setting `pendingMismatch = null`. All subsequent words hit the "pending already exists" guard and were ignored forever.
+
+**Fix:** Added `pendingMismatch = null` at the top of the recovery success path, before the return.
+
+### ANDROID-BACKOFF: Exponential Backoff Counterproductive
+
+**Severity:** Medium
+**Status:** Resolved (v2.4.5)
+
+**Lesson learned:** Exponential backoff (100→200→400→800→1600ms) for error 11 was counterproductive. Since error 11 is a race condition (not a load issue), backing off just creates larger dead zones where audio is lost. Fixed by using a fixed 150ms delay for error 11 and mild linear backoff (150, 300, 450, 600ms max) for real errors only.
+
+### Future Considerations
+
+- **Deepgram or Google Cloud Speech v2:** If the built-in `SpeechRecognizer` session gap problem proves too limiting, the `SpeechRecognitionDelegate` interface abstracts the provider, making it straightforward to swap in a streaming API that doesn't have session gaps.
+- **Sync recovery tuning:** The `maxJump=5` in `confirmMismatch` could be made smarter — e.g., only allow large jumps when the preceding mismatch was a near-miss (phonetic match) rather than a total mismatch, or mark skipped positions as SKIPPED instead of CORRECT.
+
+---
+
 *Last Updated: April 2026*

@@ -57,7 +57,8 @@ class SpeechRecognitionService @Inject constructor(
         private const val TAG = "SpeechRecognition"
         private const val SESSION_TIMEOUT_MS = 55_000L
         private const val DEBOUNCE_MS = 200L
-        private const val RESTART_DELAY_MS = 100L
+        private const val RESTART_DELAY_MS = 150L  // Must be long enough for service unbinding (~100-150ms)
+        private const val MAX_CONSECUTIVE_REAL_ERRORS = 8  // Give up after real errors (not error 11)
 
         // Android RMS range is roughly -2 to 10
         private const val RMS_MIN = -2f
@@ -82,6 +83,9 @@ class SpeechRecognitionService @Inject constructor(
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var isRestarting: Boolean = false
     private var highWaterMark: Int = 0
+    private var consecutiveErrorCount: Int = 0
+    private var hasLocaleFailedOver: Boolean = false
+    private var originalLocale: Locale = Locale.getDefault()
 
     /**
      * Start listening for speech with the given locale.
@@ -105,6 +109,9 @@ class SpeechRecognitionService @Inject constructor(
             debounceJob?.cancel()
             debounceJob = null
             isRestarting = false
+            consecutiveErrorCount = 0
+            hasLocaleFailedOver = false
+            originalLocale = locale
 
             createAndStartRecognizer()
             isListening = true
@@ -189,6 +196,7 @@ class SpeechRecognitionService @Inject constructor(
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
 
+        Log.d(TAG, "createAndStartRecognizer: locale=${locale.toLanguageTag()}")
         speechRecognizer?.startListening(intent)
     }
 
@@ -415,9 +423,20 @@ class SpeechRecognitionService @Inject constructor(
         override fun onPartialResults(partialResults: Bundle?) {
             val matches = partialResults
                 ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-            val text = matches?.firstOrNull() ?: return
+            val text = matches?.firstOrNull()
 
-            Log.d(TAG, "PARTIAL: \"$text\"")
+            if (text == null) {
+                Log.d(TAG, "PARTIAL: null (no recognition result in bundle)")
+                return
+            }
+
+            if (text.isBlank()) {
+                Log.d(TAG, "PARTIAL: \"\" (empty — recognizer hearing audio but no words yet)")
+                return
+            }
+
+            Log.d(TAG, "PARTIAL: \"$text\" (emitted=$emittedWordCount hwm=$highWaterMark)")
+            consecutiveErrorCount = 0  // Got real words — recognizer is healthy
             processPartialResult(text)
         }
 
@@ -434,14 +453,17 @@ class SpeechRecognitionService @Inject constructor(
             // Set highWaterMark to prevent duplicate emissions from replayed transcript.
             if (isListening && !isRestarting) {
                 Log.i(TAG, "Auto-restarting after final result")
+                consecutiveErrorCount = 0  // Successful session resets error count
                 highWaterMark = emittedWordCount
+                isRestarting = true  // Prevent overlapping restarts
                 autoRestartJob?.cancel()
                 autoRestartJob = scope.launch {
                     delay(RESTART_DELAY_MS)
-                    if (isListening && !isRestarting) {
+                    if (isListening) {
                         previousTranscript = ""
                         createAndStartRecognizer()
                         scheduleSessionRestart()
+                        isRestarting = false
                     }
                 }
             }
@@ -456,65 +478,77 @@ class SpeechRecognitionService @Inject constructor(
 
         override fun onError(error: Int) {
             val errorMessage = mapErrorCode(error)
-            Log.e(TAG, "Recognition error: $errorMessage (code=$error)")
+            Log.e(TAG, "Recognition error: $errorMessage (code=$error) [consecutiveErrors=$consecutiveErrorCount]")
 
-            // Language not supported — fall back to device default and retry once
-            if (error == 11 && isListening && !isRestarting && locale != Locale.getDefault()) {
-                Log.w(TAG, "Language ${locale.toLanguageTag()} not supported, falling back to ${Locale.getDefault().toLanguageTag()}")
-                locale = Locale.getDefault()
-                delegate?.onError("Language not supported — falling back to default...")
-                autoRestartJob?.cancel()
-                autoRestartJob = scope.launch {
-                    delay(RESTART_DELAY_MS)
-                    if (isListening && !isRestarting) {
-                        previousTranscript = ""
-                        createAndStartRecognizer()
-                        scheduleSessionRestart()
-                    }
-                }
-                return
+            // Error 11 (language not supported) is a destroy/create race condition on OnePlus.
+            // The system service hasn't finished unbinding when we create the new recognizer.
+            // Strategy: DON'T count toward consecutive errors, just retry with a fixed short delay.
+            val isServiceRace = error == 11
+
+            if (!isServiceRace) {
+                consecutiveErrorCount++
             }
 
-            // Auto-restart on transient errors if we were listening
-            val isTransient = error in listOf(
-                SpeechRecognizer.ERROR_NO_MATCH,
-                SpeechRecognizer.ERROR_SPEECH_TIMEOUT,
-                SpeechRecognizer.ERROR_NETWORK,
-                SpeechRecognizer.ERROR_NETWORK_TIMEOUT,
-                SpeechRecognizer.ERROR_SERVER,
-                SpeechRecognizer.ERROR_CLIENT
-            )
+            // Language not supported — fall back to device default ONCE
+            if (error == 11 && isListening && !hasLocaleFailedOver) {
+                val fallback = Locale.getDefault()
+                if (locale != fallback) {
+                    Log.w(TAG, "Language ${locale.toLanguageTag()} not supported, falling back to ${fallback.toLanguageTag()}")
+                    locale = fallback
+                    hasLocaleFailedOver = true
+                } else {
+                    Log.w(TAG, "Error 11 on device default ${locale.toLanguageTag()} — service unbind race, retrying")
+                }
+            }
 
-            if (isTransient && isListening && !isRestarting) {
-                Log.i(TAG, "Auto-restarting after transient error: $errorMessage")
-                // Notify delegate so error is visible briefly
-                delegate?.onError("$errorMessage — retrying...")
+            // Auto-restart on any error if we were listening.
+            // Never show errors to the user — they are confusing and unhelpful.
+            // The user can always tap the mic to restart manually if something truly breaks.
+            if (isListening && !isRestarting) {
+                if (consecutiveErrorCount > MAX_CONSECUTIVE_REAL_ERRORS) {
+                    Log.e(TAG, "Too many consecutive real errors ($consecutiveErrorCount), giving up silently")
+                    return
+                }
+
+                // Error 11: fixed short delay (it's a race condition, backoff makes it worse)
+                // Other errors: small backoff to avoid tight loops
+                val delayMs = if (isServiceRace) {
+                    RESTART_DELAY_MS  // Fixed 150ms — just enough for service unbind
+                } else {
+                    // Mild backoff: 150, 300, 450, 600ms max
+                    RESTART_DELAY_MS * consecutiveErrorCount.coerceAtMost(4)
+                }
+                Log.i(TAG, "Auto-restarting after error: $errorMessage (delay=${delayMs}ms)")
+
                 highWaterMark = emittedWordCount
+                isRestarting = true  // Prevent overlapping restarts
                 autoRestartJob?.cancel()
                 autoRestartJob = scope.launch {
-                    delay(RESTART_DELAY_MS * 3) // Slightly longer delay for network errors
-                    if (isListening && !isRestarting) {
+                    delay(delayMs)
+                    if (isListening) {
                         previousTranscript = ""
                         createAndStartRecognizer()
                         scheduleSessionRestart()
+                        isRestarting = false
                     }
                 }
                 return
             }
 
-            delegate?.onError(errorMessage)
+            // Only reaches here if not listening — log but don't show to user
+            Log.w(TAG, "Error while not listening: $errorMessage (code=$error)")
         }
 
         override fun onReadyForSpeech(params: Bundle?) {
-            Log.d(TAG, "Ready for speech")
+            Log.d(TAG, "Ready for speech (emitted=$emittedWordCount hwm=$highWaterMark)")
         }
 
         override fun onBeginningOfSpeech() {
-            Log.d(TAG, "Speech started")
+            Log.d(TAG, "Speech started (emitted=$emittedWordCount hwm=$highWaterMark)")
         }
 
         override fun onEndOfSpeech() {
-            Log.d(TAG, "Speech ended")
+            Log.d(TAG, "Speech ended (emitted=$emittedWordCount hwm=$highWaterMark pending=${pendingWord != null})")
         }
 
         override fun onBufferReceived(buffer: ByteArray?) {

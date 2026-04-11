@@ -418,7 +418,9 @@ class WordComparator {
         ) {
             // Only look-ahead for words >= 4 chars. Short common words ("the", "a", "and", "of")
             // appear many times in a quote and would match at the wrong position by coincidence.
-            val maxPos = minOf(currentPosition + LOOK_AHEAD_RANGE + 1, targetWords.size)
+            // Limit jump to LOOK_AHEAD_MAX_JUMP positions to prevent catastrophic desync
+            // from Android's session gaps (words lost during SpeechRecognizer restart).
+            val maxPos = minOf(currentPosition + LOOK_AHEAD_MAX_JUMP + 1, targetWords.size)
             for (i in (currentPosition + 1) until maxOf(currentPosition + 1, maxPos)) {
                 val expectedLen = normalizedTargetWords[i].length
                 // Skip if spoken word is much shorter than expected word — likely a partial
@@ -427,6 +429,8 @@ class WordComparator {
 
                 val laMatchType = checkMatch(normalizedSpoken, normalizedTargetWords[i])
                 if (laMatchType != MatchType.MISMATCH) {
+                    // Collect skipped positions so the ViewModel can mark them as mistakes
+                    val skipped = (currentPosition until i).toList()
                     println("[COMPARE] → MATCH (look-ahead at pos $i, $laMatchType)! Skipping pos $currentPosition..${i - 1}")
                     consecutiveMismatchCount = 0
                     multiWordBuffer = mutableListOf()
@@ -439,7 +443,8 @@ class WordComparator {
                         normalizedSpoken = normalizedSpoken,
                         position = i,
                         confidence = confidence,
-                        matchType = laMatchType
+                        matchType = laMatchType,
+                        skippedPositions = skipped
                     )
                     currentPosition = i + 1
                     return result
@@ -467,17 +472,20 @@ class WordComparator {
      * Advances position past the match and returns a match result.
      * Returns null if no nearby match found.
      */
-    fun tryMatchAhead(spoken: String, range: Int = 2): ComparisonResult? {
+    fun tryMatchAhead(spoken: String, range: Int = 2, maxJump: Int = LOOK_AHEAD_MAX_JUMP): ComparisonResult? {
         val normalizedSpoken = normalize(spoken)
         if (normalizedSpoken.length < LOOK_AHEAD_MIN_WORD_LENGTH) return null
 
-        val maxPos = minOf(currentPosition + range + 1, targetWords.size)
+        // Clamp range to maxJump to prevent catastrophic position jumps
+        val clampedRange = minOf(range, maxJump)
+        val maxPos = minOf(currentPosition + clampedRange + 1, targetWords.size)
         for (i in (currentPosition + 1) until maxOf(currentPosition + 1, maxPos)) {
             val expectedLen = normalizedTargetWords[i].length
             if (normalizedSpoken.length * 2 < expectedLen) continue
 
             val syncMatchType = checkMatch(normalizedSpoken, normalizedTargetWords[i])
             if (syncMatchType != MatchType.MISMATCH) {
+                val skipped = (currentPosition until i).toList()
                 println("[COMPARE] → SYNC RECOVERY (match at pos $i, $syncMatchType)! Skipping pos $currentPosition..${i - 1}")
                 val result = ComparisonResult(
                     isMatch = true,
@@ -486,7 +494,8 @@ class WordComparator {
                     normalizedExpected = normalizedTargetWords[i],
                     normalizedSpoken = normalizedSpoken,
                     position = i,
-                    matchType = syncMatchType
+                    matchType = syncMatchType,
+                    skippedPositions = skipped
                 )
                 currentPosition = i + 1
                 consecutiveMismatchCount = 0
@@ -494,6 +503,40 @@ class WordComparator {
                 multiWordBuffer = mutableListOf()
                 return result
             }
+        }
+        return null
+    }
+
+    /**
+     * Check if a spoken word matches the NEXT expected word (currentPosition + 1).
+     * Unlike tryMatchAhead, this has NO minimum word length — it handles short words
+     * like "of", "all", "the" that are common in dropped-word scenarios on Android
+     * where session gaps cause one word to be lost.
+     * Returns a match result with the skipped position, or null if no match.
+     */
+    fun tryMatchNext(spoken: String): ComparisonResult? {
+        val nextPos = currentPosition + 1
+        if (nextPos >= targetWords.size) return null
+
+        val normalizedSpoken = normalize(spoken)
+        val matchType = checkMatch(normalizedSpoken, normalizedTargetWords[nextPos])
+        if (matchType != MatchType.MISMATCH) {
+            println("[COMPARE] → NEXT-WORD RECOVERY (match at pos $nextPos, $matchType)! Skipping pos $currentPosition")
+            val result = ComparisonResult(
+                isMatch = true,
+                expectedWord = targetWords[nextPos],
+                spokenWord = spoken,
+                normalizedExpected = normalizedTargetWords[nextPos],
+                normalizedSpoken = normalizedSpoken,
+                position = nextPos,
+                matchType = matchType,
+                skippedPositions = listOf(currentPosition)
+            )
+            currentPosition = nextPos + 1
+            consecutiveMismatchCount = 0
+            consecutiveMismatchPosition = -1
+            multiWordBuffer = mutableListOf()
+            return result
         }
         return null
     }
@@ -761,7 +804,8 @@ class WordComparator {
         private const val COMPOUND_BUFFER_TIMEOUT = 1500L // millis to wait for second part
         private const val MULTI_WORD_BUFFER_MAX_SIZE = 4
         private const val LOOK_AHEAD_THRESHOLD = 2
-        private const val LOOK_AHEAD_RANGE = 8
+        private const val LOOK_AHEAD_RANGE = 8  // iOS value (unused on Android, kept for reference)
+        private const val LOOK_AHEAD_MAX_JUMP = 2  // Max positions to jump — prevents catastrophic desync from session gaps
         private const val LOOK_AHEAD_MIN_WORD_LENGTH = 4
 
         private val fillerWords: Set<String> = setOf(

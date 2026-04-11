@@ -1495,6 +1495,16 @@ class RecitationViewModel @Inject constructor(
             pendingMismatch = null
             consecutiveMismatchesAtPosition = 0
 
+            // If look-ahead jumped over positions, mark them as CORRECT.
+            // The user likely said them but they were lost during Android's
+            // SpeechRecognizer session gap. Matches iOS behavior (lines 1973-1980).
+            if (result.skippedPositions.isNotEmpty()) {
+                Log.i(TAG, "Look-ahead: marking ${result.skippedPositions.size} skipped positions as correct: ${result.skippedPositions}")
+                for (pos in result.skippedPositions) {
+                    markWordState(pos, WordState.CORRECT)
+                }
+            }
+
             markWordState(result.position, WordState.CORRECT)
 
             // Play recovery sound if previous was a mistake
@@ -1520,6 +1530,14 @@ class RecitationViewModel @Inject constructor(
                 completeSession()
             }
         } else {
+            // If a mismatch is already pending, DON'T replace it — the first
+            // wrong word is the real mistake. Subsequent words at the same position
+            // are ignored; the pending fires via its timer. (Matches iOS logic)
+            if (pendingMismatch != null) {
+                Log.d(TAG, "Ignoring mismatch \"${result.spokenWord}\" at pos=${result.position} — pending already exists")
+                return
+            }
+
             // Track consecutive mismatches at same position
             if (result.position == lastMismatchPosition) {
                 consecutiveMismatchesAtPosition++
@@ -1535,9 +1553,9 @@ class RecitationViewModel @Inject constructor(
             val confidenceExtra = if (confidence in 0.01f..0.85f) 200L else 0L
             val settleMs = (baseMs + consecutiveExtra + confidenceExtra).coerceIn(MIN_SETTLE_MS, MAX_SETTLE_MS)
 
-            pendingMismatchJob?.cancel()
             pendingMismatch = result
-            markWordState(result.position, WordState.PENDING)
+            // Don't change word visual state — keep it as CURRENT during settlement
+            // iOS doesn't show a yellow pending state; the word stays current until confirmed
 
             pendingMismatchJob = viewModelScope.launch(Dispatchers.Main) {
                 delay(settleMs)
@@ -1564,10 +1582,28 @@ class RecitationViewModel @Inject constructor(
     // ---------------------------------------------------------------------------
 
     private fun confirmMismatch(result: ComparisonResult) {
-        // Last chance: try matching ahead
-        val matchedAhead = comparator.tryMatchAhead(result.spokenWord)
+        // Last chance: try matching the spoken word against upcoming positions.
+        // First try next-word recovery (no min length — handles short words like "of", "all")
+        // Then fall back to general tryMatchAhead (requires 4+ chars).
+        // Use a larger maxJump (5) here vs normal processing (2) because:
+        // - We've already waited the settle interval, so higher confidence this is real
+        // - Session gaps can lose 3-4 words, requiring bigger jumps to resync
+        val matchedAhead = comparator.tryMatchNext(result.spokenWord)
+            ?: comparator.tryMatchAhead(result.spokenWord, range = 5, maxJump = 5)
         if (matchedAhead != null) {
-            markWordState(result.position, WordState.CORRECT)
+            // Clear pending FIRST — this was causing the app to get permanently stuck.
+            // Without this, subsequent mismatches would see "pending already exists" forever.
+            pendingMismatch = null
+
+            // Mark skipped positions as CORRECT — the user likely said them but they
+            // were lost during Android's SpeechRecognizer session gap. Matches iOS behavior.
+            if (matchedAhead.skippedPositions.isNotEmpty()) {
+                Log.i(TAG, "Sync recovery: marking ${matchedAhead.skippedPositions.size} skipped positions as correct: ${matchedAhead.skippedPositions}")
+                for (pos in matchedAhead.skippedPositions) {
+                    markWordState(pos, WordState.CORRECT)
+                }
+            }
+            markWordState(matchedAhead.position, WordState.CORRECT)
             val newPosition = comparator.currentPosition
             if (newPosition < _uiState.value.words.size) {
                 markWordState(newPosition, WordState.CURRENT)
@@ -1624,7 +1660,13 @@ class RecitationViewModel @Inject constructor(
         val correct = computeCorrectCount()
         val accuracy = if (tested > 0) correct.toDouble() / tested.toDouble() else 0.0
 
-        alertManager.triggerResultSound(accuracy)
+        // In master mode, only play win sound if passed (95%+), otherwise fail
+        if (_uiState.value.isMasterMode) {
+            if (accuracy >= 0.95) alertManager.triggerResultSound(accuracy)
+            else alertManager.triggerResultFailSound()
+        } else {
+            alertManager.triggerResultSound(accuracy)
+        }
 
         // Record session to QuoteStore for stats tracking
         val q = quote
@@ -1748,6 +1790,13 @@ class RecitationViewModel @Inject constructor(
     }
 
     private fun localeForLanguageCode(code: String): Locale {
+        // If the device's language matches the requested language, use the device locale.
+        // This avoids error 11 on devices where e.g. en-GB is installed but en-US is not.
+        val deviceLocale = Locale.getDefault()
+        if (deviceLocale.language == code) {
+            return deviceLocale
+        }
+
         val localeMap = mapOf(
             "en" to "en-US", "es" to "es-ES", "fr" to "fr-FR", "de" to "de-DE",
             "pt" to "pt-BR", "ar" to "ar-SA", "it" to "it-IT", "ja" to "ja-JP",
