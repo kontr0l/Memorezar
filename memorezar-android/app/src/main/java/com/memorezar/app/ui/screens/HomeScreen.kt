@@ -64,7 +64,7 @@ import com.memorezar.app.data.models.TipDefinition
 import com.memorezar.app.data.storage.TutorialStore
 import com.memorezar.app.ui.viewmodels.HomeViewModel
 
-private val IndigoColor = Color(0xFF5C6BC0)
+private val IndigoColor = Color(0xFF7A71F0)
 private val BorderColor = Color(0xFF777777)
 private val CardBg @Composable get() = MaterialTheme.colorScheme.surfaceVariant
 

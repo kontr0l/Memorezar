@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.memorezar.app.data.models.DEFAULT_CATEGORY_ID
@@ -36,6 +37,7 @@ private val QUOTES_KEY = stringPreferencesKey("memorezar_quotes")
 private val SESSIONS_KEY = stringPreferencesKey("memorezar_sessions")
 private val CATEGORIES_KEY = stringPreferencesKey("memorezar_categories")
 private val PACK_VERSIONS_KEY = stringPreferencesKey("memorezar_pack_versions")
+private val TRANSLATION_SYNC_KEY = booleanPreferencesKey("memorezar_translation_sync_done")
 
 /** Number of gradient palettes available for category backgrounds */
 private const val GRADIENT_PALETTE_COUNT = 12
@@ -591,6 +593,19 @@ class QuoteStore @Inject constructor(
             dataStore.edit { prefs -> prefs[PACK_VERSIONS_KEY] = encoded }
         } catch (e: Exception) {
             android.util.Log.e("QuoteStore", "Failed to save pack versions", e)
+        }
+    }
+
+    /** Whether the one-time translation re-sync has been completed */
+    suspend fun hasCompletedTranslationSync(): Boolean {
+        val prefs = dataStore.data.first()
+        return prefs[TRANSLATION_SYNC_KEY] == true
+    }
+
+    /** Mark the one-time translation re-sync as complete */
+    fun markTranslationSyncComplete() {
+        scope.launch {
+            dataStore.edit { prefs -> prefs[TRANSLATION_SYNC_KEY] = true }
         }
     }
 }

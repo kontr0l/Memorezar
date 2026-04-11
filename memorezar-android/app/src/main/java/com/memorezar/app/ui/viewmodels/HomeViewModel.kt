@@ -67,7 +67,12 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val versions = quoteStore.installedPackVersions()
             if (versions.isNotEmpty()) {
-                packService.syncInstalledPacks(versions, quoteStore)
+                // Force a full re-sync once to pick up any missing translations
+                val needsForceSync = !quoteStore.hasCompletedTranslationSync()
+                packService.syncInstalledPacks(versions, quoteStore, forceAll = needsForceSync)
+                if (needsForceSync) {
+                    quoteStore.markTranslationSyncComplete()
+                }
             }
         }
     }

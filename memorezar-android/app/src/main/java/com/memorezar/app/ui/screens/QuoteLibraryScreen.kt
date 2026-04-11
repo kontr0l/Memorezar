@@ -101,7 +101,7 @@ import java.io.File
 import java.util.UUID
 
 private val gradientPalettes = listOf(
-    listOf(Color(0xFF5C6BC0), Color(0xFF3949AB)),
+    listOf(Color(0xFF7A71F0), Color(0xFF3949AB)),
     listOf(Color(0xFF26A69A), Color(0xFF00897B)),
     listOf(Color(0xFFEF5350), Color(0xFFE53935)),
     listOf(Color(0xFFAB47BC), Color(0xFF8E24AA)),
@@ -109,20 +109,21 @@ private val gradientPalettes = listOf(
     listOf(Color(0xFFFF7043), Color(0xFFE64A19)),
     listOf(Color(0xFF66BB6A), Color(0xFF43A047)),
     listOf(Color(0xFFEC407A), Color(0xFFD81B60)),
-    listOf(Color(0xFF5C6BC0), Color(0xFF283593)),
+    listOf(Color(0xFF7A71F0), Color(0xFF283593)),
     listOf(Color(0xFF78909C), Color(0xFF546E7A)),
     listOf(Color(0xFFFFA726), Color(0xFFF57C00)),
     listOf(Color(0xFF8D6E63), Color(0xFF6D4C41))
 )
 
 private val BorderColor = Color(0xFF777777)
-private val IndigoColor = Color(0xFF5C6BC0)
+private val IndigoColor = Color(0xFF7A71F0)
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun QuoteLibraryScreen(
     onNavigateToRecitation: (String) -> Unit,
     onNavigateToQuoteInput: () -> Unit,
+    onNavigateToCategory: (String) -> Unit,
     onNavigateToQuoteInputForCategory: (String) -> Unit = {},
     onEditQuote: (Quote) -> Unit = {},
     tutorialStore: TutorialStore? = null,
@@ -131,7 +132,6 @@ fun QuoteLibraryScreen(
 ) {
     val categories by viewModel.categories.collectAsState()
     val quotes by viewModel.quotes.collectAsState()
-    var selectedCategory by remember { mutableStateOf<QuoteCategory?>(null) }
     var categoryToDelete by remember { mutableStateOf<QuoteCategory?>(null) }
     var showNewCategorySheet by remember { mutableStateOf(false) }
 
@@ -139,30 +139,12 @@ fun QuoteLibraryScreen(
     val pendingNav by viewModel.quoteStore.pendingCategoryNavigation.collectAsState()
     LaunchedEffect(pendingNav) {
         pendingNav?.let { category ->
-            selectedCategory = category
+            onNavigateToCategory(category.id)
             viewModel.quoteStore.pendingCategoryNavigation.value = null
         }
     }
 
-    if (selectedCategory != null) {
-        CategoryDetailScreen(
-            category = selectedCategory!!,
-            quotes = quotes.filter { it.categoryId == selectedCategory!!.id }
-                .sortedBy { it.sortOrder },
-            isPack = selectedCategory!!.sourcePackId != null,
-            viewModel = viewModel,
-            onBack = { selectedCategory = null },
-            onQuoteClick = { onNavigateToRecitation(it.id) },
-            onDeleteQuote = { viewModel.deleteQuote(it) },
-            onAddQuote = { onNavigateToQuoteInputForCategory(selectedCategory!!.id) },
-            onEditQuote = onEditQuote,
-            onUpdateCategory = { updated ->
-                viewModel.updateCategory(updated)
-                selectedCategory = updated
-            },
-            onDeleteCategory = { viewModel.deleteCategory(it) }
-        )
-    } else {
+    run {
         Column(
             modifier = modifier
                 .fillMaxSize()
@@ -211,7 +193,7 @@ fun QuoteLibraryScreen(
                         CategoryCard(
                             category = category,
                             quoteCount = quoteCount,
-                            onClick = { selectedCategory = category },
+                            onClick = { onNavigateToCategory(category.id) },
                             onLongClick = {
                                 if (categories.size > 1) showContextMenu = true
                             }
@@ -416,19 +398,22 @@ private fun CategoryCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryDetailScreen(
-    category: QuoteCategory,
-    quotes: List<Quote>,
-    isPack: Boolean,
-    viewModel: LibraryViewModel,
+fun CategoryDetailScreen(
+    categoryId: String,
     onBack: () -> Unit,
     onQuoteClick: (Quote) -> Unit,
-    onDeleteQuote: (Quote) -> Unit,
-    onAddQuote: () -> Unit,
+    onAddQuote: (String) -> Unit,
     onEditQuote: (Quote) -> Unit,
-    onUpdateCategory: (QuoteCategory) -> Unit = {},
-    onDeleteCategory: (QuoteCategory) -> Unit = {}
+    viewModel: LibraryViewModel = hiltViewModel()
 ) {
+    val allCategories by viewModel.categories.collectAsState()
+    val allQuotes by viewModel.quotes.collectAsState()
+    val category = allCategories.firstOrNull { it.id == categoryId } ?: run {
+        LaunchedEffect(Unit) { onBack() }
+        return
+    }
+    val quotes = allQuotes.filter { it.categoryId == categoryId }.sortedBy { it.sortOrder }
+    val isPack = category.sourcePackId != null
     var quoteToDelete by remember { mutableStateOf<Quote?>(null) }
     var searchText by remember { mutableStateOf("") }
     var editedName by remember(category.name) { mutableStateOf(category.name) }
@@ -472,7 +457,7 @@ private fun CategoryDetailScreen(
                 },
                 actions = {
                     if (!isPack) {
-                        IconButton(onClick = onAddQuote) {
+                        IconButton(onClick = { onAddQuote(categoryId) }) {
                             Icon(
                                 painter = painterResource(R.drawable.icon_addquote),
                                 contentDescription = "Add Quote",
@@ -489,7 +474,7 @@ private fun CategoryDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
-            contentPadding = PaddingValues(bottom = 16.dp)
+            contentPadding = PaddingValues(bottom = 80.dp)
         ) {
             // Header: thumbnail + editable name + search
             item {
@@ -500,7 +485,7 @@ private fun CategoryDetailScreen(
                     onNameCommit = {
                         val trimmed = editedName.trim()
                         if (trimmed.isNotEmpty() && trimmed != category.name) {
-                            onUpdateCategory(category.copy(name = trimmed))
+                            viewModel.updateCategory(category.copy(name = trimmed))
                         } else {
                             editedName = category.name
                         }
@@ -585,7 +570,7 @@ private fun CategoryDetailScreen(
             text = { Text("Delete \"${q.title}\"?") },
             confirmButton = {
                 TextButton(onClick = {
-                    onDeleteQuote(q)
+                    viewModel.deleteQuote(q)
                     quoteToDelete = null
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
@@ -607,11 +592,11 @@ private fun CategoryDetailScreen(
                 isPack = isPack,
                 viewModel = viewModel,
                 onSave = { updatedCategory ->
-                    onUpdateCategory(updatedCategory)
+                    viewModel.updateCategory(updatedCategory)
                     showCategorySettings = false
                 },
                 onDelete = {
-                    onDeleteCategory(category)
+                    viewModel.deleteCategory(category)
                     showCategorySettings = false
                     onBack()
                 },

@@ -973,8 +973,9 @@ class RecitationViewModel @Inject constructor(
 
     fun setDisplayLevel(level: Int) {
         if (_uiState.value.isMasterMode) return // locked in master mode
-        tutorialRevealActive = false
         val clamped = level.coerceIn(1, 3)
+        if (clamped == _uiState.value.displayLevel) return
+        tutorialRevealActive = false
         val pct = revealPercentageForLevel(clamped)
         val step = letterStepForLevel(clamped)
         _uiState.update { it.copy(displayLevel = clamped, revealPercentage = pct, letterRevealStep = step) }
@@ -1007,8 +1008,9 @@ class RecitationViewModel @Inject constructor(
             // Calculate how many to reveal
             val revealCount = (pendingIndices.size * (revealPct / 100.0)).toInt()
 
-            // Randomly select which to reveal
-            val indicesToReveal = pendingIndices.shuffled().take(revealCount).toSet()
+            // Deterministically select which to reveal (seeded so same level = same words)
+            val seed = (quote?.id?.hashCode() ?: 0).toLong() + revealPct.toLong()
+            val indicesToReveal = pendingIndices.shuffled(java.util.Random(seed)).take(revealCount).toSet()
 
             val updatedWords = state.words.mapIndexed { index, word ->
                 if (index in indicesToReveal) {
@@ -1138,8 +1140,9 @@ class RecitationViewModel @Inject constructor(
         speechService.delegate = this
         if (sessionStartTime == null) sessionStartTime = Date()
 
-        val langCode = activeLanguage ?: quote?.primaryLanguage
+        val langCode = (activeLanguage ?: quote?.primaryLanguage)?.takeIf { it.isNotBlank() }
         val locale = langCode?.let { localeForLanguageCode(it) } ?: Locale.getDefault()
+        Log.d(TAG, "startRecitation: langCode=$langCode locale=${locale.toLanguageTag()}")
 
         speechService.startListening(locale)
         _uiState.update { it.copy(isListening = true, isPaused = false, showPauseIcon = false, speechError = null) }
@@ -1164,7 +1167,7 @@ class RecitationViewModel @Inject constructor(
         speechService.delegate = this
         if (sessionStartTime == null) sessionStartTime = Date()
 
-        val langCode = activeLanguage ?: quote?.primaryLanguage
+        val langCode = (activeLanguage ?: quote?.primaryLanguage)?.takeIf { it.isNotBlank() }
         val locale = langCode?.let { localeForLanguageCode(it) } ?: Locale.getDefault()
 
         speechService.startListening(locale)

@@ -1,6 +1,7 @@
 package com.memorezar.app.ui.screens
 
 import android.Manifest
+import kotlin.math.roundToInt
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalConfiguration
@@ -52,6 +53,8 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.ui.res.painterResource
 import com.memorezar.app.R
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FontDownload
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.CallMerge
 import androidx.compose.material.icons.filled.ContentCut
@@ -97,6 +100,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,6 +117,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -120,6 +125,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -291,7 +299,7 @@ fun RecitationScreen(
         }
     }
 
-    // Outer box fills entire screen including behind system bars (opaque background)
+    // Outer box fills entire screen including behind system bars
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -328,19 +336,11 @@ fun RecitationScreen(
                 // Top bar — mode picker + exit (hidden in tutorial mode)
                 if (!isTutorialMode) {
                     TopBarWithModePicker(
-                        title = viewModel.getActiveTitle().ifEmpty { quoteStore.getQuote(quoteId)?.title ?: "Practice" },
                         currentMode = uiState.currentMode,
                         progress = if (uiState.totalWords > 0) uiState.currentPosition.toFloat() / uiState.totalWords else -1f,
                         audioState = if (uiState.currentMode == MemorizationMode.AUDIO) audioState else null,
                         ttsPlaying = ttsPlaying,
                         isRecording = isRecording,
-                        audioSourceName = if (uiState.currentMode == MemorizationMode.AUDIO) audioState.currentSource?.displayName else null,
-                        audioSourceLanguage = if (!viewModel.hasTranslations()) null
-                            else if (uiState.currentMode == MemorizationMode.AUDIO) viewModel.getAudioLanguage()
-                            else viewModel.getQuoteLanguage(),
-                        availableLanguages = if (viewModel.hasTranslations()) viewModel.getAvailableLanguages() else emptyList(),
-                        primaryLanguageCode = viewModel.getPrimaryLanguageCode(),
-                        onLanguageSwitch = { viewModel.switchLanguage(it) },
                         onModeChange = { viewModel.switchMode(it) },
                         onSeek = { viewModel.seekPlayback(it) },
                         onExit = {
@@ -367,198 +367,259 @@ fun RecitationScreen(
                     )
                 }
 
-                // Chunk navigation header (only when split)
-                uiState.splitChunks?.let { chunks ->
-                    if (chunks.size > 1) {
-                        ChunkNavigationHeader(
-                            activeIndex = uiState.activeChunkIndex,
-                            total = chunks.size,
-                            onPrev = { viewModel.switchToChunk(uiState.activeChunkIndex - 1) },
-                            onNext = { viewModel.switchToChunk(uiState.activeChunkIndex + 1) }
-                        )
+                // Content area — scrollable quote with controls floating on top (matches iOS)
+                Box(modifier = Modifier.weight(1f)) {
+                    val contentScrollState = rememberScrollState()
+                    val autoScrollScope = rememberCoroutineScope()
+                    // Track Y positions of words relative to the scroll content
+                    val wordYPositions = remember { mutableMapOf<Int, Float>() }
+
+                    // Auto-scroll to keep current word visible
+                    LaunchedEffect(uiState.currentPosition) {
+                        val y = wordYPositions[uiState.currentPosition] ?: return@LaunchedEffect
+                        val viewportHeight = contentScrollState.viewportSize
+                        val scrollOffset = contentScrollState.value
+                        // Scroll so current word is in the upper third of the viewport
+                        val targetScroll = (y - viewportHeight / 3f).toInt().coerceAtLeast(0)
+                        if (y < scrollOffset || y > scrollOffset + viewportHeight * 0.6f) {
+                            contentScrollState.animateScrollTo(targetScroll)
+                        }
                     }
-                }
 
-                // Reveal slider (always shown)
-                RevealSlider(
-                    displayLevel = uiState.displayLevel,
-                    isLetterMode = uiState.isFirstLetterToggle && uiState.currentMode == MemorizationMode.VOICE,
-                    enabled = !uiState.isMasterMode,
-                    onLevelChanged = { viewModel.setDisplayLevel(it) },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-
-                // Word grid
-                if (uiState.words.isEmpty()) {
-                    Box(
+                    // Scrollable content — fills entire area
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
+                            .fillMaxSize()
+                            .verticalScroll(contentScrollState),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Title row — scrolls with content (same as iOS)
+                        if (!isTutorialMode) {
+                            Spacer(Modifier.height(12.dp))
+                            ScrollableTitleRow(
+                                title = viewModel.getActiveTitle().ifEmpty { quoteStore.getQuote(quoteId)?.title ?: "Practice" },
+                                currentMode = uiState.currentMode,
+                                audioState = if (uiState.currentMode == MemorizationMode.AUDIO) audioState else null,
+                                isRecording = isRecording,
+                                audioSourceName = if (uiState.currentMode == MemorizationMode.AUDIO) audioState.currentSource?.displayName else null,
+                                audioSourceLanguage = if (!viewModel.hasTranslations()) null
+                                    else if (uiState.currentMode == MemorizationMode.AUDIO) viewModel.getAudioLanguage()
+                                    else viewModel.getQuoteLanguage(),
+                                availableLanguages = if (viewModel.hasTranslations()) viewModel.getAvailableLanguages() else emptyList(),
+                                primaryLanguageCode = viewModel.getPrimaryLanguageCode(),
+                                onLanguageSwitch = { viewModel.switchLanguage(it) }
+                            )
+                        }
+
+                        // Chunk navigation header (only when split)
+                        uiState.splitChunks?.let { chunks ->
+                            if (chunks.size > 1) {
+                                ChunkNavigationHeader(
+                                    activeIndex = uiState.activeChunkIndex,
+                                    total = chunks.size,
+                                    onPrev = { viewModel.switchToChunk(uiState.activeChunkIndex - 1) },
+                                    onNext = { viewModel.switchToChunk(uiState.activeChunkIndex + 1) }
+                                )
+                            }
+                        }
+
+                        // Reveal slider (always shown)
+                        RevealSlider(
+                            displayLevel = uiState.displayLevel,
+                            isLetterMode = uiState.isFirstLetterToggle && uiState.currentMode == MemorizationMode.VOICE,
+                            enabled = !uiState.isMasterMode,
+                            onLevelChanged = { viewModel.setDisplayLevel(it) },
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+
+                        // Word grid
+                        if (uiState.words.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 80.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "Tap a quote to start practicing",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            val infos = uiState.splitChunkInfos
+                            val active = uiState.activeChunkIndex
+                            // Peeks above (up to 2)
+                            if (infos.isNotEmpty()) {
+                                val startAbove = (active - 2).coerceAtLeast(0)
+                                for (i in startAbove until active) {
+                                    ChunkPeekContainer(
+                                        info = infos[i],
+                                        isDirectlyAdjacent = (i == active - 1),
+                                        isBefore = true,
+                                        onTap = { viewModel.switchToChunk(i) }
+                                    )
+                                }
+                            }
+                            var wordGridOffsetY by remember { mutableFloatStateOf(0f) }
+                            Box(
+                                modifier = Modifier
+                                    .padding(top = 4.dp)
+                                    .padding(horizontal = 16.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                    .onGloballyPositioned { coords ->
+                                        wordGridOffsetY = coords.positionInParent().y
+                                    }
+                            ) {
+                                WordGrid(
+                                    uiState = uiState,
+                                    viewModel = viewModel,
+                                    wordYPositions = wordYPositions,
+                                    wordGridOffsetY = wordGridOffsetY,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                            // Peeks below (up to 2)
+                            if (infos.isNotEmpty()) {
+                                val endBelow = (active + 2).coerceAtMost(infos.size - 1)
+                                for (i in (active + 1)..endBelow) {
+                                    ChunkPeekContainer(
+                                        info = infos[i],
+                                        isDirectlyAdjacent = (i == active + 1),
+                                        isBefore = false,
+                                        onTap = { viewModel.switchToChunk(i) }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Bottom spacer so content can scroll above the floating controls
+                        Spacer(Modifier.height(160.dp))
+                    }
+
+                    // Floating controls — overlaid at bottom (matches iOS)
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
                             .fillMaxWidth(),
-                        contentAlignment = Alignment.Center
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            "Tap a quote to start practicing",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    val infos = uiState.splitChunkInfos
-                    val active = uiState.activeChunkIndex
-                    // Peeks above (up to 2)
-                    if (infos.isNotEmpty()) {
-                        val startAbove = (active - 2).coerceAtLeast(0)
-                        for (i in startAbove until active) {
-                            ChunkPeekContainer(
-                                info = infos[i],
-                                isDirectlyAdjacent = (i == active - 1),
-                                isBefore = true,
-                                onTap = { viewModel.switchToChunk(i) }
+                        // Speech error/status display
+                        uiState.speechError?.let { error ->
+                            Text(
+                                text = error,
+                                color = MismatchRed,
+                                fontSize = 11.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                textAlign = TextAlign.Center,
+                                maxLines = 2
+                            )
+                            Spacer(Modifier.height(4.dp))
+                        }
+
+                        // Input area — varies by mode
+                        when (uiState.currentMode) {
+                            MemorizationMode.VOICE -> {
+                                val wavePhase = liquidWavePhase.value * (Math.PI.toFloat() * 2f)
+                                VoiceInputRow(
+                                    uiState = uiState,
+                                    onMicTap = {
+                                        if (uiState.isListening) {
+                                            viewModel.pauseRecitation()
+                                        } else if (uiState.isPaused) {
+                                            viewModel.resumeRecitation()
+                                        } else {
+                                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
+                                    onFirstLetterToggle = { viewModel.toggleFirstLetterMode() },
+                                    onCrownTap = {
+                                        if (uiState.isMasterMode) {
+                                            viewModel.exitMasterMode()
+                                        } else {
+                                            viewModel.showMasterInfo()
+                                        }
+                                    },
+                                    micFillProgress = micFillProgress.value,
+                                    liquidWavePhase = wavePhase,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                            }
+                            MemorizationMode.TYPING -> {
+                                val wavePhaseTyping = liquidWavePhase.value * (Math.PI.toFloat() * 2f)
+                                TypingInputRow(
+                                    uiState = uiState,
+                                    onInputChange = { viewModel.updateTypingInput(it) },
+                                    onSubmit = { viewModel.submitTypingInput() },
+                                    onSubmitDirect = { viewModel.submitTypingInput(it) },
+                                    onFirstLetterToggle = { viewModel.toggleFirstLetterMode() },
+                                    onCrownTap = {
+                                        if (uiState.isMasterMode) {
+                                            viewModel.exitMasterMode()
+                                        } else {
+                                            viewModel.showMasterInfo()
+                                        }
+                                    },
+                                    liquidFillProgress = micFillProgress.value,
+                                    liquidWavePhase = wavePhaseTyping,
+                                    modifier = Modifier.padding(horizontal = 16.dp)
+                                )
+                            }
+                            MemorizationMode.MULTIPLE_CHOICE -> {
+                                if (uiState.mcChoices.isNotEmpty()) {
+                                    MultipleChoiceGrid(
+                                        choices = uiState.mcChoices,
+                                        correctIndex = uiState.mcCorrectIndex,
+                                        wrongIndex = uiState.mcWrongIndex,
+                                        onSelect = { viewModel.selectChoice(it) },
+                                        modifier = Modifier.padding(horizontal = 16.dp).padding(top = 16.dp)
+                                    )
+                                }
+                            }
+                            MemorizationMode.AUDIO -> {
+                                AudioPlayButton(
+                                    audioState = audioState,
+                                    ttsPlaying = ttsPlaying,
+                                    ttsHasPlayer = viewModel.ttsService.hasActivePlayer(),
+                                    isRecording = isRecording,
+                                    onTogglePlayback = { viewModel.togglePlayback() },
+                                    onStartTTS = { viewModel.startTTS() },
+                                    onStopTTS = { viewModel.stopTTS() },
+                                    onToggleTTS = { viewModel.toggleTTS() },
+                                    onStartRecording = { viewModel.startRecording() },
+                                    onStopRecording = { viewModel.stopRecordingAudio() },
+                                    onPrev = { viewModel.navigatePlayback(forward = false) },
+                                    onNext = { viewModel.navigatePlayback(forward = true) }
+                                )
+                            }
+                            else -> { Spacer(Modifier.height(8.dp)) }
+                        }
+
+                        // Dark control pill
+                        if (uiState.currentMode == MemorizationMode.AUDIO) {
+                            AudioControlPill(
+                                audioState = audioState,
+                                isRecording = isRecording,
+                                onToggleRepeat = { viewModel.toggleRepeat() },
+                                onBrowse = { viewModel.showRecordingPicker() },
+                                onEdit = { viewModel.editCurrentRecording() },
+                                onDelete = { viewModel.showDeleteConfirm() },
+                                onEnterRecording = { viewModel.enterRecordingMode() },
+                                onCancelRecording = { viewModel.discardRecording() },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        } else {
+                            ControlPill(
+                                uiState = uiState,
+                                onReset = { viewModel.resetSession() },
+                                onInfo = { viewModel.showQuoteInfo() },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                     }
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                    ) {
-                        WordGrid(
-                            uiState = uiState,
-                            viewModel = viewModel,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-                    // Peeks below (up to 2)
-                    if (infos.isNotEmpty()) {
-                        val endBelow = (active + 2).coerceAtMost(infos.size - 1)
-                        for (i in (active + 1)..endBelow) {
-                            ChunkPeekContainer(
-                                info = infos[i],
-                                isDirectlyAdjacent = (i == active + 1),
-                                isBefore = false,
-                                onTap = { viewModel.switchToChunk(i) }
-                            )
-                        }
-                    }
-                    Spacer(Modifier.weight(1f))
-                }
-
-                // Speech error/status display
-                uiState.speechError?.let { error ->
-                    Text(
-                        text = error,
-                        color = MismatchRed,
-                        fontSize = 11.sp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        textAlign = TextAlign.Center,
-                        maxLines = 2
-                    )
-                    Spacer(Modifier.height(4.dp))
-                }
-
-                // Input area — varies by mode
-                when (uiState.currentMode) {
-                    MemorizationMode.VOICE -> {
-                        val wavePhase = liquidWavePhase.value * (Math.PI.toFloat() * 2f)
-                        VoiceInputRow(
-                            uiState = uiState,
-                            onMicTap = {
-                                if (uiState.isListening) {
-                                    viewModel.pauseRecitation()
-                                } else if (uiState.isPaused) {
-                                    viewModel.resumeRecitation()
-                                } else {
-                                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                            onFirstLetterToggle = { viewModel.toggleFirstLetterMode() },
-                            onCrownTap = {
-                                if (uiState.isMasterMode) {
-                                    viewModel.exitMasterMode()
-                                } else {
-                                    viewModel.showMasterInfo()
-                                }
-                            },
-                            micFillProgress = micFillProgress.value,
-                            liquidWavePhase = wavePhase,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
-                    MemorizationMode.TYPING -> {
-                        val wavePhaseTyping = liquidWavePhase.value * (Math.PI.toFloat() * 2f)
-                        TypingInputRow(
-                            uiState = uiState,
-                            onInputChange = { viewModel.updateTypingInput(it) },
-                            onSubmit = { viewModel.submitTypingInput() },
-                            onSubmitDirect = { viewModel.submitTypingInput(it) },
-                            onFirstLetterToggle = { viewModel.toggleFirstLetterMode() },
-                            onCrownTap = {
-                                if (uiState.isMasterMode) {
-                                    viewModel.exitMasterMode()
-                                } else {
-                                    viewModel.showMasterInfo()
-                                }
-                            },
-                            liquidFillProgress = micFillProgress.value,
-                            liquidWavePhase = wavePhaseTyping,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
-                    MemorizationMode.MULTIPLE_CHOICE -> {
-                        if (uiState.mcChoices.isNotEmpty()) {
-                            MultipleChoiceGrid(
-                                choices = uiState.mcChoices,
-                                correctIndex = uiState.mcCorrectIndex,
-                                wrongIndex = uiState.mcWrongIndex,
-                                onSelect = { viewModel.selectChoice(it) },
-                                modifier = Modifier.padding(horizontal = 16.dp).padding(top = 16.dp)
-                            )
-                        }
-                    }
-                    MemorizationMode.AUDIO -> {
-                        AudioPlayButton(
-                            audioState = audioState,
-                            ttsPlaying = ttsPlaying,
-                            ttsHasPlayer = viewModel.ttsService.hasActivePlayer(),
-                            isRecording = isRecording,
-                            onTogglePlayback = { viewModel.togglePlayback() },
-                            onStartTTS = { viewModel.startTTS() },
-                            onStopTTS = { viewModel.stopTTS() },
-                            onToggleTTS = { viewModel.toggleTTS() },
-                            onStartRecording = { viewModel.startRecording() },
-                            onStopRecording = { viewModel.stopRecordingAudio() },
-                            onPrev = { viewModel.navigatePlayback(forward = false) },
-                            onNext = { viewModel.navigatePlayback(forward = true) }
-                        )
-                    }
-                    else -> { Spacer(Modifier.height(8.dp)) }
-                }
-
-                Spacer(Modifier.height(8.dp))
-
-                // Dark control pill
-                if (uiState.currentMode == MemorizationMode.AUDIO) {
-                    AudioControlPill(
-                        audioState = audioState,
-                        isRecording = isRecording,
-                        onToggleRepeat = { viewModel.toggleRepeat() },
-                        onBrowse = { viewModel.showRecordingPicker() },
-                        onEdit = { viewModel.editCurrentRecording() },
-                        onDelete = { viewModel.showDeleteConfirm() },
-                        onEnterRecording = { viewModel.enterRecordingMode() },
-                        onCancelRecording = { viewModel.discardRecording() },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
-                    )
-                } else {
-                    ControlPill(
-                        uiState = uiState,
-                        onReset = { viewModel.resetSession() },
-                        onInfo = { viewModel.showQuoteInfo() },
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp)
-                    )
                 }
             }
 
@@ -752,17 +813,11 @@ fun RecitationScreen(
 
 @Composable
 private fun TopBarWithModePicker(
-    title: String,
     currentMode: MemorizationMode,
     progress: Float,
     audioState: AudioPlaybackState? = null,
     ttsPlaying: Boolean = false,
     isRecording: Boolean = false,
-    audioSourceName: String? = null,
-    audioSourceLanguage: String? = null,
-    availableLanguages: List<String> = emptyList(),
-    primaryLanguageCode: String = "en",
-    onLanguageSwitch: (String?) -> Unit = {},
     onModeChange: (MemorizationMode) -> Unit,
     onSeek: (Float) -> Unit = {},
     onExit: () -> Unit
@@ -772,7 +827,7 @@ private fun TopBarWithModePicker(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                .padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 0.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             ModePicker(
@@ -826,68 +881,79 @@ private fun TopBarWithModePicker(
         } else if (progress >= 0f) {
             ProgressBar(progress = progress, modifier = Modifier)
         }
+    }
+}
 
-        // Title — centered, or recording name + language badge in audio playback
-        // Audio time labels overlay on top of the title area (don't push layout down)
-        val displayTitle = audioSourceName ?: title
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp)
-        ) {
-            // Time labels — positioned at top, overlaid
-            val showTime = currentMode == MemorizationMode.AUDIO && audioState != null &&
-                (audioState.currentSource != null || (audioState.isRecordingMode && isRecording))
-            if (showTime && audioState != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    val elapsed = if (audioState.isRecordingMode) audioState.recordingDuration else audioState.currentTime
-                    val remaining = if (audioState.isRecordingMode) 0.0 else (audioState.duration - audioState.currentTime).coerceAtLeast(0.0)
-                    Text(formatTime(elapsed), style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("-${formatTime(remaining)}", style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            // Title — always centered in this box
+/** Title row — rendered inside the scrollable area so it scrolls with content */
+@Composable
+private fun ScrollableTitleRow(
+    title: String,
+    currentMode: MemorizationMode,
+    audioState: AudioPlaybackState? = null,
+    isRecording: Boolean = false,
+    audioSourceName: String? = null,
+    audioSourceLanguage: String? = null,
+    availableLanguages: List<String> = emptyList(),
+    primaryLanguageCode: String = "en",
+    onLanguageSwitch: (String?) -> Unit = {}
+) {
+    val displayTitle = audioSourceName ?: title
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+    ) {
+        // Time labels — positioned at top, overlaid
+        val showTime = currentMode == MemorizationMode.AUDIO && audioState != null &&
+            (audioState.currentSource != null || (audioState.isRecordingMode && isRecording))
+        if (showTime && audioState != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 16.dp, bottom = 10.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = displayTitle,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    textAlign = TextAlign.Center
-                )
-                if (audioSourceLanguage != null) {
-                    Spacer(Modifier.width(8.dp))
-                    // Badge is interactive only when user can choose: non-audio modes, or TTS in audio mode
-                    // Greyed out during recording playback or recording mode
-                    val isAudioPlaybackOrRecording = currentMode == MemorizationMode.AUDIO &&
-                        audioState != null &&
-                        (audioState.currentSource != null || audioState.isRecordingMode)
-                    if (availableLanguages.isNotEmpty() && !isAudioPlaybackOrRecording) {
-                        InteractiveLanguageBadge(
-                            code = audioSourceLanguage,
-                            primaryLanguageCode = primaryLanguageCode,
-                            availableLanguages = availableLanguages,
-                            activeLanguage = if (audioSourceLanguage != primaryLanguageCode) audioSourceLanguage else null,
-                            onLanguageSwitch = onLanguageSwitch
-                        )
-                    } else if (isAudioPlaybackOrRecording) {
-                        GreyedLanguageBadge(code = audioSourceLanguage)
-                    } else {
-                        LanguageBadge(code = audioSourceLanguage)
-                    }
+                val elapsed = if (audioState.isRecordingMode) audioState.recordingDuration else audioState.currentTime
+                val remaining = if (audioState.isRecordingMode) 0.0 else (audioState.duration - audioState.currentTime).coerceAtLeast(0.0)
+                Text(formatTime(elapsed), style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("-${formatTime(remaining)}", style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        // Title — always centered in this box
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = displayTitle,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (audioSourceLanguage != null) {
+                Spacer(Modifier.width(8.dp))
+                val isAudioPlaybackOrRecording = currentMode == MemorizationMode.AUDIO &&
+                    audioState != null &&
+                    (audioState.currentSource != null || audioState.isRecordingMode)
+                if (availableLanguages.isNotEmpty() && !isAudioPlaybackOrRecording) {
+                    InteractiveLanguageBadge(
+                        code = audioSourceLanguage,
+                        primaryLanguageCode = primaryLanguageCode,
+                        availableLanguages = availableLanguages,
+                        activeLanguage = if (audioSourceLanguage != primaryLanguageCode) audioSourceLanguage else null,
+                        onLanguageSwitch = onLanguageSwitch
+                    )
+                } else if (isAudioPlaybackOrRecording) {
+                    GreyedLanguageBadge(code = audioSourceLanguage)
+                } else {
+                    LanguageBadge(code = audioSourceLanguage)
                 }
             }
         }
@@ -1004,34 +1070,35 @@ private fun ProgressBar(progress: Float, modifier: Modifier = Modifier) {
 private fun WordGrid(
     uiState: RecitationUiState,
     viewModel: RecitationViewModel,
+    wordYPositions: MutableMap<Int, Float> = mutableMapOf(),
+    wordGridOffsetY: Float = 0f,
     modifier: Modifier = Modifier
 ) {
-    val scrollState = rememberScrollState()
-
-    // Auto-scroll to keep current word visible
-    LaunchedEffect(uiState.currentPosition) {
-        if (uiState.currentPosition > 3) {
-            scrollState.animateScrollTo(scrollState.maxValue)
-        }
-    }
-
-    Box(modifier = modifier) {
+    var flowRowOffsetY by remember { mutableFloatStateOf(0f) }
+    Box(modifier = modifier.onGloballyPositioned { coords ->
+        flowRowOffsetY = coords.positionInParent().y
+    }) {
         FlowRow(
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(scrollState),
+                .fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             uiState.words.forEachIndexed { index, word ->
                 val displayMode = viewModel.wordDisplayMode(index)
-                WordCell(
-                    text = word.text,
-                    wordState = word.state,
-                    displayMode = displayMode,
-                    isFlashing = uiState.flashingWordIndex == index,
-                    onTap = { viewModel.tapWord(index) }
-                )
+                Box(
+                    modifier = Modifier.onGloballyPositioned { coords ->
+                        wordYPositions[index] = wordGridOffsetY + flowRowOffsetY + coords.positionInParent().y
+                    }
+                ) {
+                    WordCell(
+                        text = word.text,
+                        wordState = word.state,
+                        displayMode = displayMode,
+                        isFlashing = uiState.flashingWordIndex == index,
+                        onTap = { viewModel.tapWord(index) }
+                    )
+                }
             }
         }
     }
@@ -1106,6 +1173,8 @@ private fun WordCell(
         else -> borderColor
     }
 
+    val wordStyle = TextStyle(fontSize = 18.sp)
+
     Box(
         modifier = Modifier
             .clickable { onTap() }
@@ -1120,12 +1189,12 @@ private fun WordCell(
                     )
                 else Modifier
             )
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 6.dp, vertical = 3.dp)
     ) {
         // Invisible full text reserves the exact width/height always
         Text(
             text = text,
-            style = MaterialTheme.typography.titleLarge,
+            style = wordStyle,
             fontWeight = FontWeight.Bold,
             color = Color.Transparent
         )
@@ -1133,7 +1202,7 @@ private fun WordCell(
         if (!isHidden) {
             Text(
                 text = displayText!!,
-                style = MaterialTheme.typography.titleLarge,
+                style = wordStyle,
                 fontWeight = if (wordState == WordState.CURRENT) FontWeight.Bold else FontWeight.Normal,
                 color = textColor
             )
@@ -1166,9 +1235,9 @@ private fun RevealSlider(
     modifier: Modifier = Modifier
 ) {
     val thumbSize = 26.dp
-    var isDragging by remember { mutableStateOf(false) }
     var showNumber by remember { mutableStateOf(false) }
-    var dragFraction by remember { mutableFloatStateOf(-1f) }
+    var isDragging by remember { mutableStateOf(false) }
+    val currentLevel by rememberUpdatedState(displayLevel)
 
     LaunchedEffect(isDragging) {
         if (!isDragging && showNumber) {
@@ -1177,19 +1246,15 @@ private fun RevealSlider(
         }
     }
 
-    LaunchedEffect(isDragging) {
-        if (!isDragging) dragFraction = -1f
-    }
-
+    // Thumb always derives from level — matches iOS normalizedPosition
     val targetFraction = when (displayLevel) {
         3 -> 0f; 2 -> 0.5f; else -> 1f
     }
-    val animatedFraction by animateFloatAsState(
+    val thumbFraction by animateFloatAsState(
         targetValue = targetFraction,
         animationSpec = tween(350, easing = EaseInOut),
         label = "thumbPos"
     )
-    val thumbFraction = if (dragFraction >= 0f) dragFraction else animatedFraction
 
     val thumbLabel = if (isLetterMode) {
         when (displayLevel) { 1 -> "3"; 2 -> "2"; else -> "1" }
@@ -1213,37 +1278,26 @@ private fun RevealSlider(
                 .height(thumbSize)
                 .then(
                     if (enabled) Modifier.pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { startOffset ->
+                        awaitPointerEventScope {
+                            while (true) {
+                                val down = awaitFirstDown(requireUnconsumed = false)
                                 isDragging = true
                                 showNumber = true
                                 val totalWidth = size.width - thumbSizePx
-                                dragFraction = ((startOffset.x - thumbSizePx / 2) / totalWidth).coerceIn(0f, 1f)
-                            },
-                            onDragEnd = { isDragging = false },
-                            onDragCancel = { isDragging = false }
-                        ) { _, dragAmount ->
-                            val totalWidth = size.width - thumbSizePx
-                            val currentPx = dragFraction * totalWidth
-                            val newPx = (currentPx + dragAmount.x).coerceIn(0f, totalWidth)
-                            dragFraction = newPx / totalWidth
-                            val newLevel = when {
-                                dragFraction < 0.25f -> 3; dragFraction < 0.75f -> 2; else -> 1
+                                // Snap to nearest level based on finger position (matches iOS round() approach)
+                                val raw = ((down.position.x - thumbSizePx / 2) / totalWidth).coerceIn(0f, 1f)
+                                val snapped = 3 - (raw * 2f).roundToInt().coerceIn(0, 2)
+                                if (snapped != currentLevel) onLevelChanged(snapped)
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val pos = event.changes.firstOrNull()?.position ?: break
+                                    event.changes.forEach { it.consume() }
+                                    val rawDrag = ((pos.x - thumbSizePx / 2) / totalWidth).coerceIn(0f, 1f)
+                                    val newLevel = 3 - (rawDrag * 2f).roundToInt().coerceIn(0, 2)
+                                    if (newLevel != currentLevel) onLevelChanged(newLevel)
+                                } while (event.changes.any { it.pressed })
+                                isDragging = false
                             }
-                            onLevelChanged(newLevel)
-                        }
-                    } else Modifier
-                )
-                .then(
-                    if (enabled) Modifier.pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            val totalWidth = size.width - thumbSizePx
-                            val normalized = (offset.x - thumbSizePx / 2) / totalWidth
-                            val newLevel = when {
-                                normalized < 0.25f -> 3; normalized < 0.75f -> 2; else -> 1
-                            }
-                            showNumber = true
-                            onLevelChanged(newLevel)
                         }
                     } else Modifier
                 )
@@ -1320,7 +1374,7 @@ private fun VoiceInputRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(90.dp),
+            .height(80.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1333,7 +1387,7 @@ private fun VoiceInputRow(
         } else {
             FirstLetterButton(isToggled = uiState.isFirstLetterToggle, onClick = onFirstLetterToggle)
         }
-        Spacer(Modifier.width(20.dp))
+        Spacer(Modifier.width(14.dp))
         MicButton(
             isListening = uiState.isListening,
             audioLevel = uiState.audioLevel,
@@ -1342,7 +1396,7 @@ private fun VoiceInputRow(
             liquidWavePhase = liquidWavePhase,
             onClick = onMicTap
         )
-        Spacer(Modifier.width(20.dp))
+        Spacer(Modifier.width(14.dp))
         CrownButton(
             isMasterMode = uiState.isMasterMode,
             liquidFillProgress = micFillProgress,
@@ -1396,8 +1450,10 @@ private fun TypingInputRow(
             .height(80.dp),
         verticalAlignment = Alignment.Bottom
     ) {
-        FirstLetterButton(isToggled = uiState.isFirstLetterToggle, onClick = onFirstLetterToggle)
-        Spacer(Modifier.width(12.dp))
+        Box(Modifier.offset(y = (-3).dp)) {
+            FirstLetterButton(isToggled = uiState.isFirstLetterToggle, onClick = onFirstLetterToggle)
+        }
+        Spacer(Modifier.width(8.dp))
 
         // Text input field
         Box(
@@ -1449,13 +1505,15 @@ private fun TypingInputRow(
             }
         }
 
-        Spacer(Modifier.width(12.dp))
-        CrownButton(
-            isMasterMode = uiState.isMasterMode,
-            liquidFillProgress = liquidFillProgress,
-            liquidWavePhase = liquidWavePhase,
-            onClick = onCrownTap
-        )
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.offset(y = (-3).dp)) {
+            CrownButton(
+                isMasterMode = uiState.isMasterMode,
+                liquidFillProgress = liquidFillProgress,
+                liquidWavePhase = liquidWavePhase,
+                onClick = onCrownTap
+            )
+        }
     }
 }
 
@@ -1512,16 +1570,21 @@ private fun MultipleChoiceGrid(
 @Composable
 private fun FirstLetterButton(isToggled: Boolean, onClick: () -> Unit) {
     val bgColor by animateColorAsState(
-        targetValue = if (isToggled) Color(0xFF7C4DFF)
-        else MaterialTheme.colorScheme.surfaceVariant,
+        targetValue = if (isToggled) Color(0xFF7A71F0)
+        else Color(0xFFBDBDBD),
         animationSpec = tween(350, easing = EaseInOut), label = "flBg"
     )
     Box(
-        modifier = Modifier.size(48.dp).shadow(2.dp, CircleShape).clip(CircleShape)
+        modifier = Modifier.size(40.dp).shadow(2.dp, CircleShape).clip(CircleShape)
             .background(bgColor).clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Text("A▪", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Icon(
+            painter = painterResource(id = R.drawable.ic_font_download),
+            contentDescription = "First Letter",
+            tint = Color.White,
+            modifier = Modifier.size(18.dp)
+        )
     }
 }
 
@@ -1534,10 +1597,10 @@ private fun CrownButton(
 ) {
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(40.dp)
             .shadow(2.dp, CircleShape)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .background(Color(0xFFBDBDBD))
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
@@ -1551,15 +1614,20 @@ private fun CrownButton(
                 modifier = Modifier.matchParentSize()
             )
         }
-        Text("👑", fontSize = 20.sp)
+        Icon(
+            painter = painterResource(id = R.drawable.ic_crown),
+            contentDescription = "Master",
+            tint = if (isMasterMode) Color.Black else Color.White,
+            modifier = Modifier.size(26.dp)
+        )
     }
 }
 
 @Composable
 private fun MasterStreakCounter(streak: Int, isActive: Boolean) {
     Box(
-        modifier = Modifier.size(48.dp).shadow(2.dp, CircleShape).clip(CircleShape)
-            .background(if (isActive) Color(0xFFFFC107) else MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.size(40.dp).shadow(2.dp, CircleShape).clip(CircleShape)
+            .background(if (isActive) Color(0xFFFFC107) else Color(0xFFBDBDBD)),
         contentAlignment = Alignment.Center
     ) {
         Text("$streak/3", fontSize = 14.sp, fontWeight = FontWeight.Bold,
@@ -1582,7 +1650,7 @@ private fun MicButton(
 ) {
     Box(
         modifier = Modifier
-            .size(80.dp)
+            .size(70.dp)
             .shadow(4.dp, CircleShape)
             .clip(CircleShape)
             .background(iOSBlue)
@@ -1600,7 +1668,7 @@ private fun MicButton(
             )
         }
         if (!isListening) {
-            Icon(Icons.Default.Mic, contentDescription = "Start", tint = Color.White, modifier = Modifier.size(34.dp))
+            Icon(Icons.Default.Mic, contentDescription = "Start", tint = Color.White, modifier = Modifier.size(42.dp))
         } else if (showPauseIcon) {
             Icon(Icons.Default.Pause, contentDescription = "Paused", tint = Color.White, modifier = Modifier.size(30.dp))
         } else {
@@ -1633,43 +1701,64 @@ private fun ControlPill(
     onInfo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(36.dp))
+            .clip(RoundedCornerShape(50))
             .background(Color(0xFF333333))
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 12.dp).padding(top = 7.dp, bottom = 3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Column(Modifier.width(50.dp).clickable { onInfo() }, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Info, "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-            Text("INFO", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+        // Top row: info icon — numbers — reset icon
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.width(50.dp).clickable { onInfo() }, contentAlignment = Alignment.Center) {
+                Icon(painter = painterResource(id = R.drawable.ic_info), "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text("${uiState.correctCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace, color = CorrectGreen,
+                    textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+                Text("${uiState.mistakeCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace, color = MismatchRed,
+                    textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+                Text("${uiState.hintCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace, color = PendingYellow,
+                    textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+            }
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.width(50.dp).clickable { onReset() }, contentAlignment = Alignment.Center) {
+                Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+            }
         }
-
-        Spacer(Modifier.weight(1f))
-
-        StatColumn(uiState.correctCount, "✓", CorrectGreen)
-        Spacer(Modifier.width(20.dp))
-        StatColumn(uiState.mistakeCount, "✗", MismatchRed)
-        Spacer(Modifier.width(20.dp))
-        StatColumn(uiState.hintCount, "💡", PendingYellow)
-
-        Spacer(Modifier.weight(1f))
-
-        Column(Modifier.width(50.dp).clickable { onReset() }, horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.Refresh, "Restart", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-            Text("RESET", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+        // Bottom row: INFO text — icons — RESET text
+        Row(
+            modifier = Modifier.fillMaxWidth().offset(y = (-3).dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
+                Text("INFO", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+            }
+            Spacer(Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Check, null, tint = CorrectGreen.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                }
+                Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Close, null, tint = MismatchRed.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                }
+                Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                    Icon(painter = painterResource(id = R.drawable.ic_lightbulb), null, tint = PendingYellow.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
+                Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+            }
         }
-    }
-}
-
-@Composable
-private fun StatColumn(value: Int, icon: String, color: Color) {
-    Column(Modifier.width(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("$value", fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-            color = color, modifier = Modifier.height(24.dp), textAlign = TextAlign.Center)
-        Spacer(Modifier.height(3.dp))
-        Text(icon, fontSize = 10.sp, color = color.copy(alpha = 0.7f), modifier = Modifier.height(14.dp), textAlign = TextAlign.Center)
     }
 }
 
@@ -1767,7 +1856,7 @@ private fun CompletionView(uiState: RecitationUiState, isTutorialMode: Boolean =
         }
         Button(onClick = onDone,
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (isTutorialMode) Color(0xFF5C6BC0) else MaterialTheme.colorScheme.surfaceVariant
+                containerColor = if (isTutorialMode) Color(0xFF7A71F0) else MaterialTheme.colorScheme.surfaceVariant
             ),
             shape = CircleShape,
             modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)) {
@@ -1827,24 +1916,17 @@ private fun MasterInfoPopup(currentStreak: Int, onDismiss: () -> Unit, onStart: 
             )
             Spacer(Modifier.height(16.dp))
 
-            // Crown progress: 3 crowns
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Crown progress: 3 crowns (matches iOS CrownFillView)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 repeat(3) { i ->
                     val filled = i < currentStreak
-                    Text(
-                        "👑",
-                        fontSize = 32.sp,
-                        modifier = Modifier.then(
-                            if (!filled) Modifier else Modifier
-                        ),
-                        color = Color.Unspecified
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_crown),
+                        contentDescription = if (filled) "Crown filled" else "Crown empty",
+                        tint = if (filled) MasterYellow else Color(0xFFBDBDBD),
+                        modifier = Modifier.size(36.dp)
                     )
-                    // Use alpha to show filled vs empty
                 }
-            }
-            // Overlay empty crowns using opacity
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Already drawn above, this is the overlay approach
             }
 
             Spacer(Modifier.height(8.dp))
@@ -2399,15 +2481,11 @@ private fun formatRecordingDate(timestamp: Long): String {
 private fun CrownRow(filledCount: Int, total: Int = 3, size: Float = 32f) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         repeat(total) { i ->
-            Text(
-                "👑",
-                fontSize = size.sp,
-                modifier = Modifier.then(
-                    if (i < filledCount) Modifier else Modifier
-                ).let { mod ->
-                    if (i >= filledCount) mod.then(Modifier) // empty style
-                    else mod
-                }
+            Icon(
+                painter = painterResource(id = R.drawable.ic_crown),
+                contentDescription = if (i < filledCount) "Crown filled" else "Crown empty",
+                tint = if (i < filledCount) MasterYellow else Color(0xFFBDBDBD),
+                modifier = Modifier.size(size.dp)
             )
         }
     }
@@ -2478,8 +2556,12 @@ private fun MasterFailedView(previousStreak: Int, onRetry: () -> Unit, onDone: (
         // Show empty crowns (streak reset to 0)
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             repeat(3) {
-                Text("👑", fontSize = 36.sp, color = Color.Unspecified,
-                    modifier = Modifier.then(Modifier)) // all empty/gray
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_crown),
+                    contentDescription = "Crown empty",
+                    tint = Color(0xFFBDBDBD),
+                    modifier = Modifier.size(36.dp)
+                )
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -2529,13 +2611,18 @@ private fun MasterPassedView(previousStreak: Int, onRetry: () -> Unit, onDone: (
             repeat(3) { i ->
                 val isFilled = i < previousStreak
                 val isNew = i == previousStreak
-                val scale = if (isNew) crownScale else if (isFilled) 1f else 0.4f
-                Text(
-                    "👑",
-                    fontSize = (36 * if (isNew && showNewCrown) 1.2f else 1f).sp,
-                    modifier = Modifier.then(
-                        if (scale < 1f && !isNew) Modifier else Modifier
-                    )
+                val iconSize = if (isNew && showNewCrown) 43.dp else 36.dp
+                val animatedSize by animateDpAsState(
+                    targetValue = iconSize,
+                    animationSpec = tween(500, easing = EaseInOut), label = "crownSize$i"
+                )
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_crown),
+                    contentDescription = if (isFilled || isNew) "Crown filled" else "Crown empty",
+                    tint = if (isFilled) MasterYellow
+                        else if (isNew && showNewCrown) MasterYellow
+                        else Color(0xFFBDBDBD),
+                    modifier = Modifier.size(animatedSize)
                 )
             }
         }
@@ -2604,10 +2691,14 @@ private fun MasteredCelebration(onDone: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Crown slam
-            Text(
-                "👑",
-                fontSize = (70 * crownScale).sp,
-                modifier = Modifier.padding(top = crownOffset.dp.coerceAtLeast(0.dp))
+            val slamSize = (70 * crownScale).dp
+            Icon(
+                painter = painterResource(id = R.drawable.ic_crown),
+                contentDescription = "Crown",
+                tint = MasterYellow,
+                modifier = Modifier
+                    .size(slamSize)
+                    .padding(top = crownOffset.dp.coerceAtLeast(0.dp))
             )
 
             Spacer(Modifier.height(24.dp))
@@ -2632,7 +2723,14 @@ private fun MasteredCelebration(onDone: () -> Unit) {
             Spacer(Modifier.height(24.dp))
             if (showCrowns) {
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    repeat(3) { Text("👑", fontSize = 36.sp) }
+                    repeat(3) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_crown),
+                            contentDescription = "Crown filled",
+                            tint = MasterYellow,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
                 }
             }
 
@@ -2752,7 +2850,7 @@ private fun LiquidWaveCanvas(
 private val AudioGreen = Color(0xFF4CAF50)
 private val AudioOrange = Color(0xFFFF9800)
 private val AudioRed = Color(0xFFF44336)
-private val AudioIndigo = Color(0xFF5C6BC0)
+private val AudioIndigo = Color(0xFF7A71F0)
 private val DarkPillBg = Color(0xFF333333)
 private val PillButtonInactive = Color.White.copy(alpha = 0.7f)
 
@@ -3699,7 +3797,7 @@ private fun languageColor(code: String): Color = when (code.lowercase()) {
     "de" -> Color(0xFFFF9800)
     "pt" -> Color(0xFF4CAF50)
     "ar" -> Color(0xFF4CAF50)
-    else -> Color(0xFF5C6BC0)
+    else -> Color(0xFF7A71F0)
 }
 
 private fun languageTextColor(code: String): Color = when (code.lowercase()) {
@@ -3713,20 +3811,21 @@ private fun LanguageBadge(code: String) {
     val fg = languageTextColor(code)
     Row(
         modifier = Modifier
-            .background(bg, RoundedCornerShape(12.dp))
+            .background(bg, RoundedCornerShape(20.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Icon(
             painter = painterResource(id = R.drawable.ic_globe),
             contentDescription = null,
             tint = fg,
-            modifier = Modifier.size(10.dp)
+            modifier = Modifier.size(9.dp)
         )
         Text(
             code.uppercase(),
-            fontSize = 11.sp,
+            fontSize = 10.sp,
+            lineHeight = 10.sp,
             fontWeight = FontWeight.Bold,
             color = fg
         )
@@ -3737,20 +3836,21 @@ private fun LanguageBadge(code: String) {
 private fun GreyedLanguageBadge(code: String) {
     Row(
         modifier = Modifier
-            .background(Color(0xFFBDBDBD), RoundedCornerShape(12.dp))
+            .background(Color(0xFFBDBDBD), RoundedCornerShape(20.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(3.dp)
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Icon(
             painter = painterResource(id = R.drawable.ic_globe),
             contentDescription = null,
             tint = Color.White,
-            modifier = Modifier.size(10.dp)
+            modifier = Modifier.size(9.dp)
         )
         Text(
             code.uppercase(),
-            fontSize = 11.sp,
+            fontSize = 10.sp,
+            lineHeight = 10.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White
         )

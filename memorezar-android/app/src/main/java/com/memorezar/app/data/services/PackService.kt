@@ -90,19 +90,21 @@ class PackService @Inject constructor(
 
     /**
      * Sync installed packs: if server version > local version, update the category.
+     * Also force-syncs all packs once if translations may be missing (migration).
      * @param installedVersions Map of sourcePackId -> local version
      */
     suspend fun syncInstalledPacks(
         installedVersions: Map<String, Int>,
-        store: QuoteStore
+        store: QuoteStore,
+        forceAll: Boolean = false
     ) {
         if (installedVersions.isEmpty()) return
         val remotePacks = fetchPacks()
         for (pack in remotePacks) {
             val localVersion = installedVersions[pack.id] ?: continue
             val remoteVersion = pack.version
-            if (remoteVersion > localVersion) {
-                Log.d(TAG, "Updating pack ${pack.id}: v$localVersion -> v$remoteVersion")
+            if (forceAll || remoteVersion > localVersion) {
+                Log.d(TAG, "Updating pack ${pack.id}: v$localVersion -> v$remoteVersion (force=$forceAll)")
                 store.updateInstalledPack(pack)
             }
         }

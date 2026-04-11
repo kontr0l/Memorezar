@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.res.painterResource
+import com.memorezar.app.R
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -71,7 +74,12 @@ fun MasteredQuotesScreen(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("👑", fontSize = 70.sp)
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_crown),
+                    contentDescription = "Crown",
+                    tint = Color(0xFFFFC107),
+                    modifier = Modifier.size(70.dp)
+                )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "Mastered",

@@ -60,7 +60,7 @@ import com.memorezar.app.ui.components.BrainCharacterView
 import kotlinx.coroutines.delay
 
 private val BlueColor = Color(0xFF2196F3)
-private val IndigoColor = Color(0xFF5C6BC0)
+private val IndigoColor = Color(0xFF7A71F0)
 
 private val tutorialWords = listOf("Happy", "birthday", "to", "you")
 

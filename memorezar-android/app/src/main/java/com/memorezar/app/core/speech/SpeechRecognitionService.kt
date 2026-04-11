@@ -458,6 +458,23 @@ class SpeechRecognitionService @Inject constructor(
             val errorMessage = mapErrorCode(error)
             Log.e(TAG, "Recognition error: $errorMessage (code=$error)")
 
+            // Language not supported — fall back to device default and retry once
+            if (error == 11 && isListening && !isRestarting && locale != Locale.getDefault()) {
+                Log.w(TAG, "Language ${locale.toLanguageTag()} not supported, falling back to ${Locale.getDefault().toLanguageTag()}")
+                locale = Locale.getDefault()
+                delegate?.onError("Language not supported — falling back to default...")
+                autoRestartJob?.cancel()
+                autoRestartJob = scope.launch {
+                    delay(RESTART_DELAY_MS)
+                    if (isListening && !isRestarting) {
+                        previousTranscript = ""
+                        createAndStartRecognizer()
+                        scheduleSessionRestart()
+                    }
+                }
+                return
+            }
+
             // Auto-restart on transient errors if we were listening
             val isTransient = error in listOf(
                 SpeechRecognizer.ERROR_NO_MATCH,
@@ -521,6 +538,11 @@ class SpeechRecognitionService @Inject constructor(
         SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognition service busy"
         SpeechRecognizer.ERROR_SERVER -> "Server error"
         SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input"
+        10 -> "Too many requests" // ERROR_TOO_MANY_REQUESTS (API 31)
+        11 -> "Language not supported" // ERROR_LANGUAGE_NOT_SUPPORTED (API 31)
+        12 -> "Language unavailable — try downloading it in device settings" // ERROR_LANGUAGE_UNAVAILABLE (API 31)
+        13 -> "Cannot check for language support" // ERROR_CANNOT_CHECK_SUPPORT (API 33)
+        14 -> "Cannot listen to language — download required" // ERROR_CANNOT_LISTEN_TO_DOWNLOAD_EVENTS (API 34)
         else -> "Unknown error (code=$error)"
     }
 }

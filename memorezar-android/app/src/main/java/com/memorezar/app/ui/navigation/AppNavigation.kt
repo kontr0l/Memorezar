@@ -61,6 +61,7 @@ import com.memorezar.app.ui.screens.PackDetailScreen
 import com.memorezar.app.ui.screens.PackSearchScreen
 import com.memorezar.app.ui.screens.PaywallSheet
 import com.memorezar.app.ui.screens.QuoteInputSheet
+import com.memorezar.app.ui.screens.CategoryDetailScreen
 import com.memorezar.app.ui.screens.QuoteLibraryScreen
 import com.memorezar.app.ui.screens.RecitationScreen
 import com.memorezar.app.ui.screens.SettingsScreen
@@ -204,6 +205,9 @@ fun AppNavigation(
                 QuoteLibraryScreen(
                     onNavigateToRecitation = { navController.navigate("recitation/$it") },
                     onNavigateToQuoteInput = { showQuoteInput = true },
+                    onNavigateToCategory = { categoryId ->
+                        navController.navigate("category_detail/$categoryId")
+                    },
                     onNavigateToQuoteInputForCategory = { categoryId ->
                         quoteInputCategoryId = categoryId
                         showQuoteInput = true
@@ -214,6 +218,22 @@ fun AppNavigation(
                     },
                     tutorialStore = tutorialStore,
                     modifier = Modifier.padding(padding)
+                )
+            }
+            composable("category_detail/{categoryId}") { backStackEntry ->
+                val categoryId = backStackEntry.arguments?.getString("categoryId") ?: return@composable
+                CategoryDetailScreen(
+                    categoryId = categoryId,
+                    onBack = { navController.popBackStack() },
+                    onQuoteClick = { quote -> navController.navigate("recitation/${quote.id}") },
+                    onAddQuote = { catId ->
+                        quoteInputCategoryId = catId
+                        showQuoteInput = true
+                    },
+                    onEditQuote = { quote ->
+                        quoteToEdit = quote
+                        showQuoteInput = true
+                    }
                 )
             }
             composable("settings") {

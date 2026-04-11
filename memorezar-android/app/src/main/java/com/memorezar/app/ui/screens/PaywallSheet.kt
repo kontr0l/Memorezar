@@ -100,7 +100,7 @@ fun PaywallSheet(
         // Price buttons (placeholder — RevenueCat provides real prices)
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF5C6BC0).copy(alpha = 0.1f)
+                containerColor = Color(0xFF7A71F0).copy(alpha = 0.1f)
             )
         ) {
             Column(

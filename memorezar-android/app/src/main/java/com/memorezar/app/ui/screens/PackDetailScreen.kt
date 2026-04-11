@@ -53,7 +53,7 @@ import com.memorezar.app.data.models.LanguageHelper
 import com.memorezar.app.data.models.SuggestionPack
 import com.memorezar.app.data.models.SuggestionQuote
 
-private val IndigoColor = Color(0xFF5C6BC0)
+private val IndigoColor = Color(0xFF7A71F0)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
