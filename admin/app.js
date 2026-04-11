@@ -834,6 +834,149 @@ function esc(str) {
 }
 
 // ══════════════════════════════════════════════════
+// ── Languages ──
+// ══════════════════════════════════════════════════
+
+const LANGUAGES_TABLE = 'languages';
+let languages = [];
+let editingLang = null;
+
+const langListEl = document.getElementById('languages-list');
+const langTotalBadge = document.getElementById('lang-total');
+const langEmptyEl = document.getElementById('lang-empty');
+const addLangBtn = document.getElementById('add-lang-btn');
+const langModal = document.getElementById('lang-modal');
+const langModalTitle = document.getElementById('lang-modal-title');
+const langCodeInput = document.getElementById('lang-code-input');
+const langNameInput = document.getElementById('lang-name-input');
+const langColorInput = document.getElementById('lang-color-input');
+const langColorHex = document.getElementById('lang-color-hex');
+const langTextColorInput = document.getElementById('lang-text-color-input');
+const langTextColorHex = document.getElementById('lang-text-color-hex');
+const langPreviewPill = document.getElementById('lang-preview-pill');
+const langModalCancel = document.getElementById('lang-modal-cancel');
+const langModalDelete = document.getElementById('lang-modal-delete');
+const langModalSave = document.getElementById('lang-modal-save');
+
+function updateLangPreview() {
+  const bg = langColorInput.value;
+  const fg = langTextColorInput.value;
+  const name = langCodeInput.value.toUpperCase() || 'Preview';
+  langPreviewPill.style.background = bg;
+  langPreviewPill.style.color = fg;
+  langPreviewPill.textContent = name;
+}
+
+langColorInput.addEventListener('input', () => { langColorHex.value = langColorInput.value; updateLangPreview(); });
+langColorHex.addEventListener('input', () => { langColorInput.value = langColorHex.value; updateLangPreview(); });
+langTextColorInput.addEventListener('input', () => { langTextColorHex.value = langTextColorInput.value; updateLangPreview(); });
+langTextColorHex.addEventListener('input', () => { langTextColorInput.value = langTextColorHex.value; updateLangPreview(); });
+langCodeInput.addEventListener('input', updateLangPreview);
+
+async function loadLanguages() {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${LANGUAGES_TABLE}?select=*&order=code.asc`,
+      { headers: headers() }
+    );
+    if (!res.ok) throw new Error(`Failed: ${res.status}`);
+    languages = await res.json();
+    renderLanguages();
+  } catch (e) {
+    console.error('loadLanguages', e);
+  }
+}
+
+function renderLanguages() {
+  langTotalBadge.textContent = languages.length;
+  langEmptyEl.classList.toggle('hidden', languages.length > 0);
+  langListEl.innerHTML = '';
+  languages.forEach(lang => {
+    const card = document.createElement('div');
+    card.className = 'lang-card';
+    card.innerHTML = `
+      <span class="lang-pill" style="background:${esc(lang.color)};color:${esc(lang.text_color)}">${esc(lang.code.toUpperCase())}</span>
+      <div class="lang-info">
+        <h4>${esc(lang.display_name)}</h4>
+        <span>${esc(lang.code)}</span>
+      </div>
+    `;
+    card.addEventListener('click', () => openLangModal(lang));
+    langListEl.appendChild(card);
+  });
+}
+
+function openLangModal(lang) {
+  editingLang = lang || null;
+  langModalTitle.textContent = lang ? `Edit: ${lang.display_name}` : 'Add Language';
+  langCodeInput.value = lang ? lang.code : '';
+  langCodeInput.disabled = !!lang;
+  langNameInput.value = lang ? lang.display_name : '';
+  langColorInput.value = lang ? lang.color : '#6366f1';
+  langColorHex.value = lang ? lang.color : '#6366f1';
+  langTextColorInput.value = lang ? lang.text_color : '#ffffff';
+  langTextColorHex.value = lang ? lang.text_color : '#ffffff';
+  langModalDelete.classList.toggle('hidden', !lang);
+  updateLangPreview();
+  langModal.classList.remove('hidden');
+}
+
+addLangBtn.addEventListener('click', () => openLangModal(null));
+langModalCancel.addEventListener('click', () => langModal.classList.add('hidden'));
+
+langModalSave.addEventListener('click', async () => {
+  const code = langCodeInput.value.trim().toLowerCase();
+  const display_name = langNameInput.value.trim();
+  if (!code || !display_name) { toast('Code and name are required', 'error'); return; }
+
+  const row = {
+    code,
+    display_name,
+    color: langColorInput.value,
+    text_color: langTextColorInput.value,
+  };
+
+  try {
+    langModalSave.disabled = true;
+    langModalSave.textContent = 'Saving...';
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${LANGUAGES_TABLE}?on_conflict=code`,
+      {
+        method: 'POST',
+        headers: { ...headers(), 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+        body: JSON.stringify(row),
+      }
+    );
+    if (!res.ok) throw new Error(`Save failed: ${res.status}`);
+    langModal.classList.add('hidden');
+    toast('Language saved', 'success');
+    await loadLanguages();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    langModalSave.disabled = false;
+    langModalSave.textContent = 'Save';
+  }
+});
+
+langModalDelete.addEventListener('click', async () => {
+  if (!editingLang) return;
+  if (!confirm(`Delete language "${editingLang.display_name}"?`)) return;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${LANGUAGES_TABLE}?code=eq.${encodeURIComponent(editingLang.code)}`,
+      { method: 'DELETE', headers: headers() }
+    );
+    if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+    langModal.classList.add('hidden');
+    toast('Language deleted', 'success');
+    await loadLanguages();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+});
+
+// ══════════════════════════════════════════════════
 // ── Tab Navigation ──
 // ══════════════════════════════════════════════════
 
@@ -841,6 +984,7 @@ const tabBtns = document.querySelectorAll('.tab-btn');
 const packsViews = ['pack-list-view', 'pack-editor'];
 const recordingsViews = ['recordings-list-view', 'recording-detail'];
 const equivalencesViews = ['equivalences-view'];
+const languagesViews = ['languages-view'];
 const supportViews = ['support-view', 'support-detail'];
 
 let activeTab = 'packs';
@@ -859,7 +1003,7 @@ tabBtns.forEach(btn => {
 
 function switchTab() {
   // Hide all views
-  [...packsViews, ...recordingsViews, ...equivalencesViews, ...supportViews].forEach(id =>
+  [...packsViews, ...recordingsViews, ...equivalencesViews, ...languagesViews, ...supportViews].forEach(id =>
     document.getElementById(id).classList.add('hidden')
   );
 
@@ -871,6 +1015,9 @@ function switchTab() {
   } else if (activeTab === 'equivalences') {
     document.getElementById('equivalences-view').classList.remove('hidden');
     if (equivalences.length === 0) loadEquivalences();
+  } else if (activeTab === 'languages') {
+    document.getElementById('languages-view').classList.remove('hidden');
+    if (languages.length === 0) loadLanguages();
   } else if (activeTab === 'support') {
     document.getElementById('support-view').classList.remove('hidden');
     if (supportTickets.length === 0) loadSupportTickets();

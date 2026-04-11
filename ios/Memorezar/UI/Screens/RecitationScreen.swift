@@ -2172,24 +2172,12 @@ struct RecitationScreen: View {
 
     /// Adaptive text color for readability on the language pill background
     private static func languageTextColor(_ code: String) -> Color {
-        switch code {
-        case "es", "it", "de", "pt": return .black   // light backgrounds
-        default:                      return .white   // dark backgrounds (en blue, fr red, ar green, etc.)
-        }
+        LanguageService.shared.textColor(for: code)
     }
 
-    /// Flag-inspired color for a language code
+    /// Color for a language code (fetched from Supabase)
     private static func languageColor(_ code: String) -> Color {
-        switch code {
-        case "en": return .blue
-        case "es": return .yellow
-        case "fr": return .red
-        case "it": return .green
-        case "de": return .orange
-        case "pt": return .green
-        case "ar": return .green
-        default:   return .indigo
-        }
+        LanguageService.shared.color(for: code)
     }
 
     /// Greyed-out language pill for recording playback (shows recording's language, not interactive)

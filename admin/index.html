@@ -27,6 +27,7 @@
         <button class="tab-btn active" data-tab="packs">Packs</button>
         <button class="tab-btn" data-tab="recordings">Recordings</button>
         <button class="tab-btn" data-tab="equivalences">Equivalences</button>
+        <button class="tab-btn" data-tab="languages">Languages</button>
         <button class="tab-btn" data-tab="support">Support</button>
       </nav>
       <div style="display:flex;align-items:center;gap:12px">
@@ -182,6 +183,45 @@
         <div id="recordings-list"></div>
         <div id="recordings-load-more" class="hidden" style="text-align:center;padding:16px">
           <button id="load-more-btn" class="btn-secondary">Load More</button>
+        </div>
+      </div>
+
+      <!-- Languages (hidden by default) -->
+      <div id="languages-view" class="hidden">
+        <div class="toolbar">
+          <h2>Languages <span id="lang-total" class="badge">0</span></h2>
+          <button id="add-lang-btn" class="btn-primary">+ Add Language</button>
+        </div>
+        <div id="languages-list" class="lang-grid"></div>
+        <div id="lang-empty" class="empty-state hidden">
+          <p>No languages configured yet.</p>
+        </div>
+      </div>
+
+      <!-- Add/Edit Language Modal -->
+      <div id="lang-modal" class="modal hidden">
+        <div class="modal-content">
+          <h3 id="lang-modal-title">Add Language</h3>
+          <label style="display:block;font-size:0.8125rem;font-weight:500;color:var(--text2);margin-bottom:4px">Language Code</label>
+          <input type="text" id="lang-code-input" placeholder="e.g. es, fr, ar" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;font-size:0.875rem">
+          <label style="display:block;font-size:0.8125rem;font-weight:500;color:var(--text2);margin-bottom:4px">Display Name</label>
+          <input type="text" id="lang-name-input" placeholder="e.g. Spanish, French" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;font-size:0.875rem">
+          <label style="display:block;font-size:0.8125rem;font-weight:500;color:var(--text2);margin-bottom:4px">Pill Color</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <input type="color" id="lang-color-input" value="#6366f1" style="width:48px;height:36px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;padding:2px">
+            <input type="text" id="lang-color-hex" placeholder="#6366f1" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:0.875rem">
+          </div>
+          <label style="display:block;font-size:0.8125rem;font-weight:500;color:var(--text2);margin-bottom:4px">Text Color</label>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px">
+            <input type="color" id="lang-text-color-input" value="#ffffff" style="width:48px;height:36px;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;padding:2px">
+            <input type="text" id="lang-text-color-hex" placeholder="#ffffff" style="flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:0.875rem">
+            <div id="lang-preview-pill" style="padding:4px 12px;border-radius:12px;font-size:0.8125rem;font-weight:600">Preview</div>
+          </div>
+          <div class="modal-actions">
+            <button id="lang-modal-cancel" class="btn-secondary">Cancel</button>
+            <button id="lang-modal-delete" class="btn-danger hidden">Delete</button>
+            <button id="lang-modal-save" class="btn-primary">Save</button>
+          </div>
         </div>
       </div>
 

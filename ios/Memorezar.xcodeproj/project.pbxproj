@@ -35,6 +35,7 @@
 		110000000000001B /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220000000000001B /* AudioRecorderService.swift */; };
 		110000000000001C /* EquivalenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220000000000001C /* EquivalenceService.swift */; };
 		110000000000001D /* UnsplashService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220000000000001D /* UnsplashService.swift */; };
+		1100000000000080 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000080 /* LanguageService.swift */; };
 		110000000000001F /* QuoteSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220000000000001F /* QuoteSplitView.swift */; };
 		1100000000000020 /* BrainCharacterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000020 /* BrainCharacterView.swift */; };
 		1100000000000021 /* PhotoSourcePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000021 /* PhotoSourcePicker.swift */; };
@@ -94,6 +95,7 @@
 		220000000000001B /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
 		220000000000001C /* EquivalenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EquivalenceService.swift; sourceTree = "<group>"; };
 		220000000000001D /* UnsplashService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnsplashService.swift; sourceTree = "<group>"; };
+		2200000000000080 /* LanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageService.swift; sourceTree = "<group>"; };
 		220000000000001F /* QuoteSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuoteSplitView.swift; sourceTree = "<group>"; };
 		2200000000000020 /* BrainCharacterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainCharacterView.swift; sourceTree = "<group>"; };
 		2200000000000021 /* PhotoSourcePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoSourcePicker.swift; sourceTree = "<group>"; };
@@ -316,6 +318,7 @@
 				220000000000001B /* AudioRecorderService.swift */,
 				220000000000001C /* EquivalenceService.swift */,
 				220000000000001D /* UnsplashService.swift */,
+				2200000000000080 /* LanguageService.swift */,
 				2200000000000025 /* PackService.swift */,
 				2200000000000031 /* TextToSpeechService.swift */,
 				2200000000000032 /* KeychainHelper.swift */,
@@ -433,6 +436,7 @@
 				110000000000001B /* AudioRecorderService.swift in Sources */,
 				110000000000001C /* EquivalenceService.swift in Sources */,
 				110000000000001D /* UnsplashService.swift in Sources */,
+				1100000000000080 /* LanguageService.swift in Sources */,
 				1100000000000025 /* PackService.swift in Sources */,
 				1100000000000031 /* TextToSpeechService.swift in Sources */,
 				110000000000001F /* QuoteSplitView.swift in Sources */,

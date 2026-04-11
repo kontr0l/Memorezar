@@ -277,3 +277,22 @@ VALUES (
     {"title": "We cannot solve our problems", "text": "We cannot solve our problems with the same thinking we used when we created them.", "translations": null}
   ]$$::jsonb
 );
+
+-- Languages table
+CREATE TABLE IF NOT EXISTS languages (
+  code TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  color TEXT NOT NULL DEFAULT '#6366f1',
+  text_color TEXT NOT NULL DEFAULT '#ffffff'
+);
+
+INSERT INTO languages (code, display_name, color, text_color) VALUES
+  ('en', 'English', '#3b82f6', '#ffffff'),
+  ('es', 'Spanish', '#eab308', '#000000'),
+  ('fr', 'French', '#ef4444', '#ffffff'),
+  ('it', 'Italian', '#22c55e', '#000000'),
+  ('de', 'German', '#f97316', '#000000'),
+  ('pt', 'Portuguese', '#22c55e', '#000000'),
+  ('ar', 'Arabic', '#22c55e', '#ffffff'),
+  ('nl', 'Dutch', '#f97316', '#ffffff')
+ON CONFLICT (code) DO NOTHING;

@@ -790,6 +790,51 @@ input[type="file"] {
 }
 .equiv-sort-select:focus { outline: none; border-color: var(--primary); }
 
+/* Languages */
+.lang-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.lang-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lang-card:hover { border-color: var(--primary); }
+
+.lang-card .lang-pill {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.lang-card .lang-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.lang-card .lang-info h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.lang-card .lang-info span {
+  font-size: 0.75rem;
+  color: var(--text2);
+}
+
 /* Support Tickets */
 #support-detail textarea[disabled] {
   background: var(--surface2);
