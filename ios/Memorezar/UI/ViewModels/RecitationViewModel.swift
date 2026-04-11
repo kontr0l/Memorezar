@@ -1518,7 +1518,16 @@ final class RecitationViewModel: NSObject, ObservableObject {
             checkLevelAdvancement(accuracy: accuracy)
         }
 
-        AlertManager.shared.triggerResultSound(accuracy: accuracy)
+        // In master mode, only play win sound if passed (95%+), otherwise fail
+        if isMasterMode {
+            if accuracy >= 0.95 {
+                AlertManager.shared.triggerResultSound(accuracy: accuracy)
+            } else {
+                AlertManager.shared.triggerResultFailSound()
+            }
+        } else {
+            AlertManager.shared.triggerResultSound(accuracy: accuracy)
+        }
         DispatchQueue.main.async { [weak self] in
             self?.showResults = true
         }
