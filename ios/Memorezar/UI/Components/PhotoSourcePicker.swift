@@ -22,13 +22,13 @@ struct PhotoSourcePicker: View {
                     }
 
                     PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                        Label("Choose from Photo Library", systemImage: "photo.on.rectangle")
+                        Label("Choose from Gallery", systemImage: "photo.on.rectangle")
                     }
 
                     Button {
                         showingUnsplashSearch = true
                     } label: {
-                        Label("Search Unsplash", systemImage: "magnifyingglass")
+                        Label("Search Online", systemImage: "magnifyingglass")
                     }
                 } header: {
                     Text("Photo Source")

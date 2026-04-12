@@ -25,8 +25,8 @@ val TealDark = Color(0xFF0D9488)
 // Semantic colors used across the app
 val MistakeFlash = Color(0x4DFF0000)       // 30% red overlay for visual flash
 val MistakeFlashDark = Color(0x66FF3333)   // slightly brighter for dark mode
-val CorrectGreen = Color(0xFF4CAF50)
-val CorrectGreenDark = Color(0xFF81C784)
+val CorrectGreen = Color(0xFF34C759)       // matches iOS system green
+val CorrectGreenDark = Color(0xFF30D158)   // matches iOS system green (dark)
 val MismatchRed = Color(0xFFE53935)
 val MismatchRedDark = Color(0xFFEF5350)
 val PendingYellow = Color(0xFFFFC107)

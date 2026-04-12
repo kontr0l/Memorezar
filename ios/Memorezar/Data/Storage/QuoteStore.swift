@@ -144,9 +144,9 @@ final class QuoteStore: ObservableObject {
     }
 
     /// Update cover image for a category from a remote URL
-    func updateCoverImage(from urlString: String, for category: QuoteCategory) {
+    func updateCoverImage(from urlString: String, for category: QuoteCategory) async {
         guard let url = URL(string: urlString),
-              let data = try? Data(contentsOf: url),
+              let (data, _) = try? await URLSession.shared.data(from: url),
               let image = UIImage(data: data),
               let jpegData = image.jpegData(compressionQuality: 0.85),
               let filename = saveCategoryImage(jpegData, for: category.id) else { return }
@@ -514,14 +514,16 @@ final class QuoteStore: ObservableObject {
     func addSuggestionPack(_ pack: SuggestionPack, preferredLanguage: String = "en") {
         // Create category for the pack, linking back to the Supabase pack ID for sync
         let localizedName = pack.localizedName(for: preferredLanguage)
-        var category = QuoteCategory(name: localizedName, gradientIndex: nextAvailableGradientIndex(), sourcePackId: pack.id)
-
-        // Download cover image from remote URL
-        if let coverURL = pack.coverURL {
-            downloadAndSaveCoverImage(from: coverURL, for: &category)
-        }
+        let category = QuoteCategory(name: localizedName, gradientIndex: nextAvailableGradientIndex(), sourcePackId: pack.id)
 
         addCategory(category)
+
+        // Download cover image asynchronously after adding the category
+        if let coverURL = pack.coverURL {
+            Task {
+                await downloadAndSaveCoverImage(from: coverURL, for: category.id)
+            }
+        }
 
         // Create a Quote for each item in the pack, preserving Supabase order
         let lang = preferredLanguage
@@ -563,13 +565,16 @@ final class QuoteStore: ObservableObject {
     }
 
     /// Download a remote cover image and save it locally for a category
-    private func downloadAndSaveCoverImage(from urlString: String, for category: inout QuoteCategory) {
+    private func downloadAndSaveCoverImage(from urlString: String, for categoryId: UUID) async {
         guard let url = URL(string: urlString),
-              let data = try? Data(contentsOf: url),
+              let (data, _) = try? await URLSession.shared.data(from: url),
               let image = UIImage(data: data),
               let jpegData = image.jpegData(compressionQuality: 0.85),
-              let filename = saveCategoryImage(jpegData, for: category.id) else { return }
-        category.imageSource = .local(filename)
+              let filename = saveCategoryImage(jpegData, for: categoryId) else { return }
+        if let idx = categories.firstIndex(where: { $0.id == categoryId }) {
+            categories[idx].imageSource = .local(filename)
+            saveCategories()
+        }
     }
 
     /// Clear all user data (for settings reset)

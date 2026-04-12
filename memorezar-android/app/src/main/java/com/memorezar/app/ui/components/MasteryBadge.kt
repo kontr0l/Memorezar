@@ -22,9 +22,9 @@ fun MasteryBadge(level: MasteryLevel, modifier: Modifier = Modifier) {
     if (level == MasteryLevel.NONE) return
 
     val (color, icon, label) = when (level) {
-        MasteryLevel.LEARNING -> Triple(Color(0xFF2196F3), "📖", "Learning")
-        MasteryLevel.ADVANCING -> Triple(Color(0xFF9C27B0), "💡", "Advancing")
-        MasteryLevel.PROFICIENT -> Triple(Color(0xFF4CAF50), "✨", "Proficient")
+        MasteryLevel.LEARNING -> Triple(Color(0xFF34C759), "🌱", "Learning")
+        MasteryLevel.ADVANCING -> Triple(Color(0xFFFF6D00), "💡", "Advancing")
+        MasteryLevel.PROFICIENT -> Triple(Color(0xFF5856D6), "✨", "Proficient")
         MasteryLevel.MASTERED -> Triple(Color(0xFFFFC107), "👑", "Mastered")
         else -> return
     }

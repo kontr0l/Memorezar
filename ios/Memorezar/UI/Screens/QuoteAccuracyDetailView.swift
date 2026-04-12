@@ -61,31 +61,45 @@ struct QuoteAccuracyDetailView: View {
         ZStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    // Current level badge or mastered badge
-                    LevelBadge(level: max(1, quote.revealLevel), masteryLevel: quote.masteryLevel)
-                        .id(badgeId)
-                        .padding(.top, 4)
+                    if quote.practiceCount == 0 {
+                        // Not practiced yet — welcome message
+                        Spacer().frame(height: 16)
+                        BrainCharacterView(character: .speech, size: 100)
+                        Text("Ready to practice!")
+                            .font(.title2.bold())
+                        Text("Your stats and progress will show up here after your first session. If this quote feels too long, use the scissors button above to split it into smaller chunks.")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                        Spacer().frame(height: 16)
+                    } else {
+                        // Current level badge or mastered badge
+                        LevelBadge(level: max(1, quote.revealLevel), masteryLevel: quote.masteryLevel)
+                            .id(badgeId)
+                            .padding(.top, 4)
 
-                    // Key stats row
-                    statsRow
+                        // Key stats row
+                        statsRow
 
-                    // Trouble phrases
-                    if !troublePhrases.isEmpty {
-                        troublePhrasesSection
+                        // Trouble phrases
+                        if !troublePhrases.isEmpty {
+                            troublePhrasesSection
+                        }
+
+                        // Recent sessions
+                        if !recentSessions.isEmpty {
+                            recentSessionsSection
+                        }
+
+                        // Reset stats
+                        Button(role: .destructive) {
+                            showingResetAlert = true
+                        } label: {
+                            Label("Reset Statistics", systemImage: "arrow.counterclockwise")
+                        }
+                        .padding(.top, 8)
                     }
-
-                    // Recent sessions
-                    if !recentSessions.isEmpty {
-                        recentSessionsSection
-                    }
-
-                    // Reset stats
-                    Button(role: .destructive) {
-                        showingResetAlert = true
-                    } label: {
-                        Label("Reset Statistics", systemImage: "arrow.counterclockwise")
-                    }
-                    .padding(.top, 8)
                 }
                 .padding()
             }

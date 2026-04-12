@@ -152,7 +152,7 @@ fun StreakDetailScreen(
                                     Icon(
                                         Icons.Default.Check,
                                         contentDescription = "Practiced",
-                                        tint = Color(0xFF4CAF50),
+                                        tint = Color(0xFF34C759),
                                         modifier = Modifier.size(20.dp)
                                     )
                                 } else {

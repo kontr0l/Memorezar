@@ -1,16 +1,22 @@
 package com.memorezar.app.ui.screens
 
 import android.Manifest
+import androidx.annotation.DrawableRes
 import kotlin.math.roundToInt
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -31,6 +37,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -81,6 +88,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Switch
 import androidx.compose.material3.HorizontalDivider
@@ -104,6 +113,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
@@ -132,6 +142,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.memorezar.app.data.models.LocalRecording
 import com.memorezar.app.data.models.MemorizationMode
@@ -142,6 +153,7 @@ import com.memorezar.app.data.models.Quote
 import com.memorezar.app.data.models.Recording
 import com.memorezar.app.data.services.AuthService
 import com.memorezar.app.data.storage.QuoteStore
+import com.memorezar.app.data.storage.SettingsStore
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.concurrent.TimeUnit
@@ -189,6 +201,7 @@ private val iOSBlue = Color(0xFF007AFF)
 fun RecitationScreen(
     quoteId: String,
     quoteStore: QuoteStore,
+    settingsStore: SettingsStore? = null,
     authService: AuthService,
     onShowAuthSheet: () -> Unit,
     tutorialQuote: Quote? = null,
@@ -203,6 +216,7 @@ fun RecitationScreen(
     val scope = rememberCoroutineScope()
     val ttsPlaying by viewModel.ttsService.isPlaying.collectAsStateWithLifecycle()
     val isRecording by viewModel.recorderService.isRecording.collectAsStateWithLifecycle()
+    val wordFontSize = settingsStore?.settings?.collectAsState()?.value?.fontSize?.pointSize?.sp ?: 18.sp
 
     LaunchedEffect(quoteId) {
         if (tutorialQuote != null) {
@@ -475,6 +489,7 @@ fun RecitationScreen(
                                 WordGrid(
                                     uiState = uiState,
                                     viewModel = viewModel,
+                                    wordFontSize = wordFontSize,
                                     wordYPositions = wordYPositions,
                                     wordGridOffsetY = wordGridOffsetY,
                                     modifier = Modifier.padding(12.dp)
@@ -614,7 +629,7 @@ fun RecitationScreen(
                         } else {
                             ControlPill(
                                 uiState = uiState,
-                                onReset = { viewModel.resetSession() },
+                                onReset = { viewModel.resetSession(recalculateReveal = false) },
                                 onInfo = { viewModel.showQuoteInfo() },
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
@@ -637,6 +652,7 @@ fun RecitationScreen(
             MistakeDisputePopup(
                 wordIndex = uiState.tappedMistakeIndex!!,
                 spokenWord = uiState.tappedMistakeSpoken ?: "",
+                mode = uiState.currentMode,
                 onDismiss = { viewModel.dismissMistakePopup() },
                 onOverride = { viewModel.overrideMistake() }
             )
@@ -671,19 +687,56 @@ fun RecitationScreen(
             )
         }
 
-        // Quote info sheet
+        // Quote info sheet — slides up from bottom like iOS .sheet(.large)
         if (uiState.showQuoteInfo) {
             val infoQuote = viewModel.getQuoteForInfo()
             if (infoQuote != null) {
-                QuoteInfoPopup(
-                    quote = infoQuote,
-                    quoteStore = quoteStore,
-                    onDismiss = { viewModel.dismissQuoteInfo() },
-                    onScissors = {
-                        viewModel.dismissQuoteInfo()
-                        viewModel.openSplitOverlay()
+                var showInfoPanel by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) { showInfoPanel = true }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { viewModel.dismissQuoteInfo() },
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    AnimatedVisibility(
+                        visible = showInfoPanel,
+                        enter = slideInVertically(
+                            initialOffsetY = { it },
+                            animationSpec = tween(350, easing = EaseOut)
+                        ) + fadeIn(animationSpec = tween(200))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight(0.92f)
+                                .offset(y = navBarHeight)
+                                .shadow(8.dp, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {}
+                        ) {
+                            QuoteInfoPopup(
+                                quote = infoQuote,
+                                quoteStore = quoteStore,
+                                onDismiss = { viewModel.dismissQuoteInfo() },
+                                onScissors = {
+                                    viewModel.dismissQuoteInfo()
+                                    viewModel.openSplitOverlay()
+                                }
+                            )
+                        }
                     }
-                )
+                }
             }
         }
 
@@ -704,31 +757,52 @@ fun RecitationScreen(
                 }
             }
 
+            var showPanel by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) { showPanel = true }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .imePadding()
                     .background(MaterialTheme.colorScheme.background.copy(alpha = 0.4f))
-                    .clickable { viewModel.dismissCompletion() },
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { viewModel.dismissCompletion() },
                 contentAlignment = Alignment.BottomCenter
             ) {
+                AnimatedVisibility(
+                    visible = showPanel,
+                    enter = slideInVertically(
+                        initialOffsetY = { it },
+                        animationSpec = tween(350, easing = EaseOut)
+                    ) + fadeIn(animationSpec = tween(200))
+                ) {
+                val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(0.70f)
+                        .fillMaxHeight(0.75f)
+                        .padding(bottom = 0.dp) // no bottom gap
+                        .offset(y = navBarHeight) // extend past nav bar inset
                         .shadow(8.dp, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                         .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                         .background(MaterialTheme.colorScheme.surface)
-                        .clickable {} // consume clicks so they don't pass through to scrim
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {} // consume clicks
                 ) {
                     if (uiState.isMasterMode && uiState.masterResult != null) {
                         MasterCompletionView(
                             uiState = uiState,
                             onDone = {
+                                viewModel.stopResultSound()
                                 viewModel.exitMasterMode()
                                 onBack()
                             },
                             onRetry = {
+                                viewModel.stopResultSound()
                                 viewModel.enterMasterMode()
                             }
                         )
@@ -736,14 +810,19 @@ fun RecitationScreen(
                         CompletionView(
                             uiState = uiState,
                             isTutorialMode = isTutorialMode,
-                            onDone = onBack,
+                            onDone = {
+                                viewModel.stopResultSound()
+                                onBack()
+                            },
                             onRetry = {
+                                viewModel.stopResultSound()
                                 val quote = quoteStore.getQuote(quoteId)
                                 if (quote != null) viewModel.setQuote(quote)
                             }
                         )
                     }
                 }
+                } // AnimatedVisibility
             }
         }
     } // inner Box (content with insets)
@@ -1070,6 +1149,7 @@ private fun ProgressBar(progress: Float, modifier: Modifier = Modifier) {
 private fun WordGrid(
     uiState: RecitationUiState,
     viewModel: RecitationViewModel,
+    wordFontSize: androidx.compose.ui.unit.TextUnit = 18.sp,
     wordYPositions: MutableMap<Int, Float> = mutableMapOf(),
     wordGridOffsetY: Float = 0f,
     modifier: Modifier = Modifier
@@ -1096,6 +1176,7 @@ private fun WordGrid(
                         wordState = word.state,
                         displayMode = displayMode,
                         isFlashing = uiState.flashingWordIndex == index,
+                        fontSize = wordFontSize,
                         onTap = { viewModel.tapWord(index) }
                     )
                 }
@@ -1114,6 +1195,7 @@ private fun WordCell(
     wordState: WordState,
     displayMode: WordDisplayMode,
     isFlashing: Boolean,
+    fontSize: androidx.compose.ui.unit.TextUnit = 18.sp,
     onTap: () -> Unit
 ) {
     val textColor = when (wordState) {
@@ -1148,15 +1230,20 @@ private fun WordCell(
 
     val (letters, punctuation) = splitPunctuation(text)
 
-    val displayText = when (displayMode) {
-        WordDisplayMode.FULL -> text
-        WordDisplayMode.HIDDEN -> null
-        WordDisplayMode.FIRST_LETTER_1 -> buildFirstLetterText(letters, 1) + punctuation
-        WordDisplayMode.FIRST_LETTER_2 -> buildFirstLetterText(letters, 2) + punctuation
-        WordDisplayMode.FIRST_LETTER_3 -> buildFirstLetterText(letters, 3) + punctuation
+    val displayText = when {
+        isFlashing -> text // Flashing hint — always show full word
+        displayMode == WordDisplayMode.FULL -> text
+        displayMode == WordDisplayMode.HIDDEN -> null
+        displayMode == WordDisplayMode.FIRST_LETTER_1 -> buildFirstLetterText(letters, 1) + punctuation
+        displayMode == WordDisplayMode.FIRST_LETTER_2 -> buildFirstLetterText(letters, 2) + punctuation
+        displayMode == WordDisplayMode.FIRST_LETTER_3 -> buildFirstLetterText(letters, 3) + punctuation
+        else -> null
     }
 
     val isHidden = displayText == null
+
+    // When flashing a hint, use primary text color (matching iOS)
+    val effectiveTextColor = if (isFlashing) MaterialTheme.colorScheme.onSurface else textColor
 
     // Use a Box that always sizes to the full word text.
     // Render invisible full text for sizing, visible text on top.
@@ -1173,7 +1260,7 @@ private fun WordCell(
         else -> borderColor
     }
 
-    val wordStyle = TextStyle(fontSize = 18.sp)
+    val wordStyle = TextStyle(fontSize = fontSize)
 
     Box(
         modifier = Modifier
@@ -1203,8 +1290,8 @@ private fun WordCell(
             Text(
                 text = displayText!!,
                 style = wordStyle,
-                fontWeight = if (wordState == WordState.CURRENT) FontWeight.Bold else FontWeight.Normal,
-                color = textColor
+                fontWeight = if (!isFlashing && wordState == WordState.CURRENT) FontWeight.Bold else FontWeight.Normal,
+                color = effectiveTextColor
             )
         }
     }
@@ -1779,27 +1866,82 @@ private fun stableMistakeCharacter(wordIndex: Int): BrainCharacter {
 }
 
 @Composable
-private fun MistakeDisputePopup(wordIndex: Int, spokenWord: String, onDismiss: () -> Unit, onOverride: () -> Unit) {
+private fun MistakeDisputePopup(wordIndex: Int, spokenWord: String, mode: MemorizationMode, onDismiss: () -> Unit, onOverride: () -> Unit) {
     val character = remember(wordIndex) { stableMistakeCharacter(wordIndex) }
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable { onDismiss() },
-        contentAlignment = Alignment.Center
+    val indigoColor = Color(0xFF5856D6)
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Column(
-            modifier = Modifier.padding(32.dp).clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surface).clickable { /* consume */ }.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable(
+                interactionSource = remember { MutableInteractionSource() }, indication = null
+            ) { onDismiss() },
+            contentAlignment = Alignment.Center
         ) {
-            BrainCharacterView(character = character, size = 150.dp)
-            Spacer(Modifier.height(16.dp))
-            Row {
-                Text("I heard you say \"", style = MaterialTheme.typography.bodyLarge)
-                Text(spokenWord, style = MaterialTheme.typography.bodyLarge, color = MismatchRed, fontWeight = FontWeight.Bold)
-                Text("\"", style = MaterialTheme.typography.bodyLarge)
-            }
-            Spacer(Modifier.height(20.dp))
-            Button(onClick = onOverride, colors = ButtonDefaults.buttonColors(containerColor = CorrectGreen)) {
-                Text("No, I said the right word", color = Color.White)
+            Column(
+                modifier = Modifier.padding(32.dp).clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface).clickable(
+                        interactionSource = remember { MutableInteractionSource() }, indication = null
+                    ) { /* consume */ }.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                BrainCharacterView(character = character, size = 150.dp)
+                Spacer(Modifier.height(16.dp))
+                Row {
+                    when (mode) {
+                        MemorizationMode.TYPING -> {
+                            Text("You typed '", style = MaterialTheme.typography.bodyLarge)
+                            Text(spokenWord, style = MaterialTheme.typography.bodyLarge, color = MismatchRed, fontWeight = FontWeight.Bold)
+                            Text("'", style = MaterialTheme.typography.bodyLarge)
+                        }
+                        MemorizationMode.MULTIPLE_CHOICE -> {
+                            Text("You picked '", style = MaterialTheme.typography.bodyLarge)
+                            Text(spokenWord, style = MaterialTheme.typography.bodyLarge, color = MismatchRed, fontWeight = FontWeight.Bold)
+                            Text("'", style = MaterialTheme.typography.bodyLarge)
+                        }
+                        else -> {
+                            Text("I heard you say \"", style = MaterialTheme.typography.bodyLarge)
+                            Text(spokenWord, style = MaterialTheme.typography.bodyLarge, color = MismatchRed, fontWeight = FontWeight.Bold)
+                            Text("\"", style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+                if (mode == MemorizationMode.VOICE) {
+                    Button(
+                        onClick = onOverride,
+                        colors = ButtonDefaults.buttonColors(containerColor = CorrectGreen),
+                        shape = CircleShape,
+                        modifier = Modifier.fillMaxWidth().height(50.dp)
+                    ) {
+                        Text("No, I said the right word", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(8.dp))
+                        Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = indigoColor),
+                        shape = CircleShape,
+                        modifier = Modifier.fillMaxWidth().height(50.dp)
+                    ) {
+                        Text("Yes, that's what I said", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(8.dp))
+                        Text("😅", color = Color.White)
+                    }
+                } else {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = indigoColor),
+                        shape = CircleShape,
+                        modifier = Modifier.fillMaxWidth().height(50.dp)
+                    ) {
+                        Text("I'll get it next time", color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(8.dp))
+                        Text("💪", color = Color.White)
+                    }
+                }
             }
         }
     }
@@ -1849,21 +1991,37 @@ private fun CompletionView(uiState: RecitationUiState, isTutorialMode: Boolean =
         Spacer(Modifier.height(32.dp))
 
         if (!isTutorialMode) {
-            Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = iOSBlue),
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7A71F0)),
                 shape = CircleShape,
-                modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)) { Text("Try Again", color = Color.White, fontWeight = FontWeight.Bold) }
-            Spacer(Modifier.height(8.dp))
+                modifier = Modifier.fillMaxWidth().height(50.dp)
+            ) {
+                Text("Try Again", color = Color.White, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.height(10.dp))
         }
-        Button(onClick = onDone,
+        Button(
+            onClick = onDone,
             colors = ButtonDefaults.buttonColors(
                 containerColor = if (isTutorialMode) Color(0xFF7A71F0) else MaterialTheme.colorScheme.surfaceVariant
             ),
             shape = CircleShape,
-            modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)) {
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
             Text(
                 if (isTutorialMode) "Continue" else "Done",
                 color = if (isTutorialMode) Color.White else MaterialTheme.colorScheme.onSurface,
                 fontWeight = if (isTutorialMode) FontWeight.Bold else FontWeight.Normal
+            )
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                Icons.Default.Check,
+                contentDescription = null,
+                tint = if (isTutorialMode) Color.White else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.size(20.dp)
             )
         }
     }
@@ -1895,13 +2053,21 @@ private val MasterYellow = Color(0xFFFFC107)
 @Composable
 private fun MasterInfoPopup(currentStreak: Int, onDismiss: () -> Unit, onStart: () -> Unit) {
     val character = remember { BrainCharacter.randomSuccess() }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
     Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable { onDismiss() },
+        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable(
+            interactionSource = remember { MutableInteractionSource() }, indication = null
+        ) { onDismiss() },
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier.padding(32.dp).clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.surface).clickable { /* consume */ }.padding(24.dp),
+                .background(MaterialTheme.colorScheme.surface).clickable(
+                    interactionSource = remember { MutableInteractionSource() }, indication = null
+                ) { /* consume */ }.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             BrainCharacterView(character = character, size = 120.dp)
@@ -1948,6 +2114,83 @@ private fun MasterInfoPopup(currentStreak: Int, onDismiss: () -> Unit, onStart: 
             }
         }
     }
+    }
+}
+
+@Composable
+private fun LevelBadgeAnimated(
+    @DrawableRes iconRes: Int,
+    level: MasteryLevel,
+    tint: Color
+) {
+    var animate by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        delay(300)
+        animate = true
+    }
+
+    when (level) {
+        MasteryLevel.MASTERED -> {
+            // Crown: bounce via spring scale overshoot
+            val scale by animateFloatAsState(
+                targetValue = if (animate) 1f else 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                ),
+                label = "crownBounce"
+            )
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = level.displayName,
+                tint = tint,
+                modifier = Modifier
+                    .size(80.dp)
+                    .graphicsLayer(scaleX = scale, scaleY = scale)
+            )
+        }
+        MasteryLevel.NONE, MasteryLevel.LEARNING -> {
+            // Leaf: bounce via spring scale overshoot
+            val scale by animateFloatAsState(
+                targetValue = if (animate) 1f else 0f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                ),
+                label = "leafBounce"
+            )
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = level.displayName,
+                tint = tint,
+                modifier = Modifier
+                    .size(80.dp)
+                    .graphicsLayer(scaleX = scale, scaleY = scale)
+            )
+        }
+        MasteryLevel.ADVANCING, MasteryLevel.PROFICIENT -> {
+            // Lightbulb / Sparkles: scale up + fade in
+            val scale by animateFloatAsState(
+                targetValue = if (animate) 1f else 0.3f,
+                animationSpec = tween(durationMillis = 600, easing = EaseOut),
+                label = "sparkleScale"
+            )
+            val alpha by animateFloatAsState(
+                targetValue = if (animate) 1f else 0f,
+                animationSpec = tween(durationMillis = 500, easing = EaseOut),
+                label = "sparkleAlpha"
+            )
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = level.displayName,
+                tint = tint,
+                modifier = Modifier
+                    .size(80.dp)
+                    .graphicsLayer(scaleX = scale, scaleY = scale, alpha = alpha)
+            )
+        }
+    }
 }
 
 @Composable
@@ -1991,7 +2234,7 @@ private fun QuoteInfoPopup(quote: Quote, quoteStore: QuoteStore, onDismiss: () -
     // Mastery level colors
     val masteryColor = when (quote.masteryLevel) {
         MasteryLevel.NONE -> Color.Gray
-        MasteryLevel.LEARNING -> Color(0xFF4CAF50) // green
+        MasteryLevel.LEARNING -> Color(0xFF34C759) // green
         MasteryLevel.ADVANCING -> Color(0xFFFF9800) // orange
         MasteryLevel.PROFICIENT -> Color(0xFF3F51B5) // indigo
         MasteryLevel.MASTERED -> Color(0xFFFFC107) // yellow
@@ -1999,20 +2242,18 @@ private fun QuoteInfoPopup(quote: Quote, quoteStore: QuoteStore, onDismiss: () -
 
     val masteryIcon = when (quote.masteryLevel) {
         MasteryLevel.NONE -> R.drawable.ic_leaf
-        MasteryLevel.LEARNING -> R.drawable.ic_leaf
-        MasteryLevel.ADVANCING -> R.drawable.ic_lightbulb
+        MasteryLevel.LEARNING -> R.drawable.ic_psychiatry
+        MasteryLevel.ADVANCING -> R.drawable.ic_emoji_objects
         MasteryLevel.PROFICIENT -> R.drawable.ic_sparkles
         MasteryLevel.MASTERED -> R.drawable.ic_crown
     }
 
-    // Full-screen sheet matching iOS QuoteAccuracyDetailView presented via
+    // Sheet matching iOS QuoteAccuracyDetailView presented via
     // `.presentationDetents([.large])`. Scissors button on the left (opens split
     // overlay), quote title centered, Done button on the right.
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .systemBarsPadding()
     ) {
         // Title bar with scissors + title + Done (mirrors iOS NavigationStack toolbar)
         Row(
@@ -2060,13 +2301,35 @@ private fun QuoteInfoPopup(quote: Quote, quoteStore: QuoteStore, onDismiss: () -
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-            // Mastery level badge with icon
+        if (quote.practiceCount == 0) {
+            // Not practiced yet — show welcome message with character sprite
+            Spacer(Modifier.height(24.dp))
+            BrainCharacterView(
+                character = BrainCharacter.SPEECH,
+                size = 100.dp
+            )
+            Spacer(Modifier.height(16.dp))
+            Text(
+                text = "Ready to practice!",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Your stats and progress will show up here after your first session. If this quote feels too long, use the scissors button above to split it into smaller chunks.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(Modifier.height(24.dp))
+        } else {
+            // Mastery level badge with icon — animated on appear
             Spacer(Modifier.height(4.dp))
-            Icon(
-                painter = painterResource(id = masteryIcon),
-                contentDescription = quote.masteryLevel.displayName,
-                tint = masteryColor,
-                modifier = Modifier.size(80.dp)
+            LevelBadgeAnimated(
+                iconRes = masteryIcon,
+                level = quote.masteryLevel,
+                tint = masteryColor
             )
             Spacer(Modifier.height(8.dp))
             Text(
@@ -2184,7 +2447,7 @@ private fun QuoteInfoPopup(quote: Quote, quoteStore: QuoteStore, onDismiss: () -
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = when {
-                                    session.accuracy >= 0.9 -> Color(0xFF4CAF50)
+                                    session.accuracy >= 0.9 -> Color(0xFF34C759)
                                     session.accuracy >= 0.7 -> Color(0xFFFF9800)
                                     else -> Color(0xFFE53935)
                                 }
@@ -2207,6 +2470,7 @@ private fun QuoteInfoPopup(quote: Quote, quoteStore: QuoteStore, onDismiss: () -
                 Text("Reset Statistics", color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(16.dp))
+        } // end else (practiceCount > 0)
         } // inner scrollable Column
     }
 
@@ -2347,6 +2611,10 @@ private fun SplitMergeOverlay(
     onMergePrevious: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -2441,12 +2709,13 @@ private fun SplitMergeOverlay(
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3F51B5))
                 ) {
-                    Icon(Icons.Default.ContentCut, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
                     Text("Split", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.ContentCut, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             }
         }
+    }
     }
 }
 
@@ -2497,27 +2766,52 @@ private fun CrownRow(filledCount: Int, total: Int = 3, size: Float = 32f) {
 
 @Composable
 private fun MasterHintBlockPopup(onDismiss: () -> Unit) {
-    Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.4f)).clickable { onDismiss() },
-        contentAlignment = Alignment.Center
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Column(
-            modifier = Modifier.padding(40.dp).clip(RoundedCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surface).clickable { /* consume */ }.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() },
+            contentAlignment = Alignment.Center
         ) {
-            Text("🚫", fontSize = 40.sp)
-            Spacer(Modifier.height(12.dp))
-            Text("Hints Disabled", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Hints are not available in Master Mode. You must recite entirely from memory!",
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onDismiss) { Text("Got it") }
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 40.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { /* consume */ }
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                BrainCharacterView(character = BrainCharacter.WORK1, size = 80.dp)
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "No help \u2014 prove you know it!",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = MasterYellow),
+                    shape = CircleShape,
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
+                ) {
+                    Text("Got it", color = Color.Black, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                }
+            }
         }
     }
 }
@@ -2568,16 +2862,26 @@ private fun MasterFailedView(previousStreak: Int, onRetry: () -> Unit, onDone: (
         Text("Streak reset to 0", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         Spacer(Modifier.height(32.dp))
-        Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = MasterYellow),
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(containerColor = MasterYellow),
             shape = CircleShape,
-            modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)) {
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
             Text("Try Again", color = Color.Black, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(8.dp))
+            Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
         }
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = onDone, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = onDone,
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             shape = CircleShape,
-            modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)) {
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
             Text("Done", color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.width(8.dp))
+            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -2636,16 +2940,26 @@ private fun MasterPassedView(previousStreak: Int, onRetry: () -> Unit, onDone: (
         )
 
         Spacer(Modifier.height(32.dp))
-        Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = MasterYellow),
+        Button(
+            onClick = onRetry,
+            colors = ButtonDefaults.buttonColors(containerColor = MasterYellow),
             shape = CircleShape,
-            modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)) {
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
             Text("Try Again", color = Color.Black, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.width(8.dp))
+            Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
         }
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = onDone, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = onDone,
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             shape = CircleShape,
-            modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)) {
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
             Text("Done", color = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.width(8.dp))
+            Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -2740,9 +3054,11 @@ private fun MasteredCelebration(onDone: () -> Unit) {
                     onClick = onDone,
                     colors = ButtonDefaults.buttonColors(containerColor = MasterYellow),
                     shape = CircleShape,
-                    modifier = Modifier.fillMaxWidth(0.6f).height(50.dp)
+                    modifier = Modifier.fillMaxWidth().height(50.dp)
                 ) {
                     Text("Done", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
                 }
             }
         }
@@ -2847,7 +3163,7 @@ private fun LiquidWaveCanvas(
 // Audio Mode UI
 // ===========================================================================
 
-private val AudioGreen = Color(0xFF4CAF50)
+private val AudioGreen = Color(0xFF34C759)
 private val AudioOrange = Color(0xFFFF9800)
 private val AudioRed = Color(0xFFF44336)
 private val AudioIndigo = Color(0xFF7A71F0)
@@ -3793,10 +4109,10 @@ private fun languageColor(code: String): Color = when (code.lowercase()) {
     "en" -> Color(0xFF2196F3)
     "es" -> Color(0xFFFFC107)
     "fr" -> Color(0xFFF44336)
-    "it" -> Color(0xFF4CAF50)
+    "it" -> Color(0xFF34C759)
     "de" -> Color(0xFFFF9800)
-    "pt" -> Color(0xFF4CAF50)
-    "ar" -> Color(0xFF4CAF50)
+    "pt" -> Color(0xFF34C759)
+    "ar" -> Color(0xFF34C759)
     else -> Color(0xFF7A71F0)
 }
 

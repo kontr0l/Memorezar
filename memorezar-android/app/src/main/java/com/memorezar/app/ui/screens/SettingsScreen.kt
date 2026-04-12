@@ -151,10 +151,10 @@ fun SettingsScreen(
 
         // Statistics
         SectionHeader("Statistics")
-        InfoRow("Total Sessions", "${quoteStore.totalPracticeSessions}")
-        InfoRow("Quotes Mastered", "${quoteStore.masteredQuotesCount}")
-        InfoRow("Average Accuracy", "${(quoteStore.averageAccuracy * 100).toInt()}%")
-        InfoRow("Total Practice Time", formatDuration(quoteStore.totalPracticeTime))
+        InfoRow("Total Sessions", "${quoteStore.totalPracticeSessions}", compact = true)
+        InfoRow("Quotes Mastered", "${quoteStore.masteredQuotesCount}", compact = true)
+        InfoRow("Average Accuracy", "${(quoteStore.averageAccuracy * 100).toInt()}%", compact = true)
+        InfoRow("Total Practice Time", formatDuration(quoteStore.totalPracticeTime), compact = true)
         SectionDivider()
 
         // Account
@@ -183,7 +183,7 @@ fun SettingsScreen(
 
         // About
         SectionHeader("About")
-        InfoRow("Version", "v2.4.19")
+        InfoRow("Version", "v2.4.63")
         ClickRow("Contact Support") { onShowContactSupport() }
 
         Spacer(Modifier.height(80.dp))
@@ -242,7 +242,7 @@ private fun SectionHeader(title: String) {
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+        modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
     )
 }
 
@@ -266,7 +266,7 @@ private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .height(48.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, modifier = Modifier.weight(1f))
@@ -275,11 +275,11 @@ private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun InfoRow(label: String, value: String, compact: Boolean = false) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .then(if (compact) Modifier.padding(vertical = 4.dp) else Modifier.height(48.dp)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, modifier = Modifier.weight(1f))
@@ -289,14 +289,15 @@ private fun InfoRow(label: String, value: String) {
 
 @Composable
 private fun ClickRow(label: String, color: Color = MaterialTheme.colorScheme.primary, onClick: () -> Unit) {
-    Text(
-        text = label,
-        color = color,
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 12.dp)
-    )
+            .height(48.dp)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, color = color)
+    }
 }
 
 @Composable
@@ -310,8 +311,8 @@ private fun PickerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded }
-            .padding(vertical = 8.dp),
+            .height(48.dp)
+            .clickable { expanded = !expanded },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(label, modifier = Modifier.weight(1f))

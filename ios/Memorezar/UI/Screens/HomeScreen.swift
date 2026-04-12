@@ -110,14 +110,13 @@ struct HomeScreen: View {
 
                 if continuePracticingQuotes.count > 2 {
                     Button {
+                        tutorialStore.completeTip(TipDefinition.addOwnQuote.id)
                         showingQuoteInput = true
                     } label: {
-                        Image("IconAddQuote").renderingMode(.original)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(height: 36)
+                        Text("Add Quote")
+                            .font(.subheadline)
+                            .foregroundColor(.blue)
                     }
-                    .actionTip(.addOwnQuote)
                 }
             }
 
@@ -203,14 +202,15 @@ struct HomeScreen: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(height: 36)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .actionTip(.addOwnQuote)
             }
             .padding(12)
             .frame(width: 160, height: 100)
             .background(Color(.secondarySystemBackground))
             .cornerRadius(12)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))
+            .contentShape(Rectangle())
         }
+        .actionTip(.addOwnQuote)
     }
 
     // MARK: - Stats Section
@@ -395,7 +395,7 @@ struct SuggestionPackCard: View {
         }
         .frame(height: 200)
         .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))
     }
 }
@@ -619,12 +619,10 @@ struct ContinueQuoteCard: View {
                     .foregroundColor(.primary)
                     .lineLimit(1)
 
-                if !quote.titleMatchesPreview {
-                    Text(quote.preview)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                }
+                Text(continuationPreview)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
 
                 Spacer()
 
@@ -642,6 +640,20 @@ struct ContinueQuoteCard: View {
             .background(Color(.secondarySystemBackground))
             .cornerRadius(12)
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))
+        }
+    }
+
+    /// Preview that continues where the title leaves off
+    private var continuationPreview: String {
+        if quote.titleMatchesPreview {
+            let titleWordCount = quote.displayTitle.split(whereSeparator: { $0.isWhitespace }).count
+            let allWords = quote.displayText.split(whereSeparator: { $0.isWhitespace })
+            let remaining = allWords.dropFirst(titleWordCount).prefix(10)
+            if remaining.isEmpty { return "" }
+            let text = remaining.joined(separator: " ")
+            return remaining.count >= 10 ? text + "..." : text + "..."
+        } else {
+            return quote.preview
         }
     }
 
@@ -740,8 +752,8 @@ struct MasteryBadge: View {
 
     var body: some View {
         if level != .none {
-            HStack(spacing: 4) {
-                Image(systemName: level.icon)
+            HStack(spacing: 2) {
+                Text(verbatim: emoji)
                 Text(level.localizedName)
             }
             .font(.caption2.bold())
@@ -755,11 +767,21 @@ struct MasteryBadge: View {
         }
     }
 
+    private var emoji: String {
+        switch level {
+        case .none: return ""
+        case .learning: return "🌱"
+        case .advancing: return "💡"
+        case .proficient: return "✨"
+        case .mastered: return "👑"
+        }
+    }
+
     private var color: Color {
         switch level {
         case .none: return .gray
         case .learning: return .green
-        case .advancing: return .orange
+        case .advancing: return Color(red: 1.0, green: 0.427, blue: 0.0) // #FF6D00
         case .proficient: return .indigo
         case .mastered: return .yellow
         }

@@ -23,8 +23,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -34,7 +39,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
@@ -58,11 +66,13 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -430,51 +440,22 @@ fun CategoryDetailScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { },
-                navigationIcon = {
-                    Row(
-                        modifier = Modifier
-                            .clickable(onClick = onBack)
-                            .padding(start = 4.dp, end = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            "Library",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                    }
-                },
-                actions = {
-                    if (!isPack) {
-                        IconButton(onClick = { onAddQuote(categoryId) }) {
-                            Icon(
-                                painter = painterResource(R.drawable.icon_addquote),
-                                contentDescription = "Add Quote",
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
-                    }
-                }
-            )
+    val listState = rememberLazyListState()
+    // Show pack/category name in toolbar once the header scrolls off screen
+    val showNavTitle by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 ||
+                    (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset > 150)
         }
-    ) { padding ->
+    }
+
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+
+    Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(bottom = 80.dp)
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = statusBarTop + 48.dp, bottom = 80.dp)
         ) {
             // Header: thumbnail + editable name + search
             item {
@@ -561,7 +542,74 @@ fun CategoryDetailScreen(
                 }
             }
         }
-    }
+
+        // Floating translucent toolbar — smooth fade like iOS
+        val toolbarAlpha by animateFloatAsState(
+            targetValue = if (showNavTitle) 0.78f else 0f,
+            animationSpec = tween(durationMillis = 250),
+            label = "toolbarAlpha"
+        )
+        val surfaceColor = MaterialTheme.colorScheme.surface
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    drawRect(surfaceColor.copy(alpha = toolbarAlpha))
+                }
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clickable(onClick = onBack)
+                        .padding(start = 0.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.ChevronLeft,
+                        contentDescription = "Back",
+                        modifier = Modifier.size(28.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    if (!showNavTitle) {
+                        Text(
+                            "Library",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                    }
+                }
+                if (showNavTitle) {
+                    Text(
+                        text = category.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = if (isPack) 16.dp else 48.dp)
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                if (!isPack) {
+                    IconButton(onClick = { onAddQuote(categoryId) }) {
+                        Icon(
+                            painter = painterResource(R.drawable.icon_addquote),
+                            contentDescription = "Add Quote",
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+            }
+        }
+    } // Box
 
     quoteToDelete?.let { q ->
         AlertDialog(
@@ -1302,7 +1350,7 @@ private fun PhotoSourcePickerDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("🖼️", style = MaterialTheme.typography.titleMedium)
-                    Text("Photo Library", style = MaterialTheme.typography.bodyLarge)
+                    Text("Choose from Gallery", style = MaterialTheme.typography.bodyLarge)
                 }
                 HorizontalDivider()
                 Row(
@@ -1314,7 +1362,7 @@ private fun PhotoSourcePickerDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("🔍", style = MaterialTheme.typography.titleMedium)
-                    Text("Search Unsplash", style = MaterialTheme.typography.bodyLarge)
+                    Text("Search Online", style = MaterialTheme.typography.bodyLarge)
                 }
             }
         },
@@ -1361,7 +1409,7 @@ private fun UnsplashSearchContent(
                 tint = MaterialTheme.colorScheme.primary
             )
             Text(
-                "Search Unsplash",
+                "Search Online",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)

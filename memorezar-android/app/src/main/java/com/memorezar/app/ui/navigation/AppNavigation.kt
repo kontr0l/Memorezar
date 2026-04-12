@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -148,14 +149,21 @@ fun AppNavigation(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         bottomNavItems.forEach { item ->
-                            val selected = navBackStackEntry?.destination?.hierarchy?.any {
-                                it.route == item.route
-                            } == true
+                            val selected = if (item.route == "library") {
+                                currentRoute == "library" || currentRoute?.startsWith("category_detail") == true
+                            } else {
+                                navBackStackEntry?.destination?.hierarchy?.any {
+                                    it.route == item.route
+                                } == true
+                            }
 
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clickable {
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
                                         navController.navigate(item.route) {
                                             popUpTo(navController.graph.findStartDestination().id) {
                                                 saveState = true
@@ -253,6 +261,7 @@ fun AppNavigation(
                 RecitationScreen(
                     quoteId = quoteId,
                     quoteStore = quoteStore,
+                    settingsStore = settingsStore,
                     authService = authService,
                     onShowAuthSheet = { showAuthSheet = true },
                     onBack = { navController.popBackStack() }

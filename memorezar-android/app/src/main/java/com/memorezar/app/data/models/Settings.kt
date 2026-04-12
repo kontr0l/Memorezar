@@ -12,13 +12,12 @@ enum class WordVisibility(val displayName: String, val description: String) {
 
 @Serializable
 enum class FontSize(val pointSize: Float, val displayName: String) {
-    MEDIUM(18f, "Medium"),
-    EXTRA_LARGE(28f, "Extra Large")
+    MEDIUM(18f, "Normal"),
+    EXTRA_LARGE(28f, "Large")
 }
 
 @Serializable
 enum class AppTheme(val displayName: String) {
-    SYSTEM("System"),
     LIGHT("Light"),
     DARK("Dark")
 }

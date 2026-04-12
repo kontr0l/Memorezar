@@ -505,8 +505,8 @@ struct QuoteListRow: View {
                     }
 
                     if quote.practiceCount > 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: "target")
+                        HStack(spacing: 2) {
+                            Text(verbatim: "🎯")
                             Text(String(localized: "\(quote.practiceCount) attempts \(String(format: "%.0f%%", quote.bestAccuracy * 100))"))
                         }
                         .font(.caption2.bold())
@@ -629,13 +629,13 @@ struct CategorySettingsView: View {
                         }
 
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                            Label("Choose from Photo Library", systemImage: "photo.on.rectangle")
+                            Label("Choose from Gallery", systemImage: "photo.on.rectangle")
                         }
 
                         Button {
                             showingUnsplashSearch = true
                         } label: {
-                            Label("Search Unsplash", systemImage: "magnifyingglass")
+                            Label("Search Online", systemImage: "magnifyingglass")
                         }
 
                         if case .none = imageSource {} else {

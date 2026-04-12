@@ -54,7 +54,7 @@ final class PackService {
 
             // Update cover image if changed
             if let coverURL = remotePack.coverURL {
-                store.updateCoverImage(from: coverURL, for: category)
+                await store.updateCoverImage(from: coverURL, for: category)
             }
 
             // Store the new version

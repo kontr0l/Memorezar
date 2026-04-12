@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,22 +25,18 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -55,7 +54,6 @@ import com.memorezar.app.data.models.SuggestionQuote
 
 private val IndigoColor = Color(0xFF7A71F0)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PackDetailScreen(
     pack: SuggestionPack,
@@ -67,30 +65,19 @@ fun PackDetailScreen(
 ) {
     val lang = LanguageHelper.preferredLanguageCode
     var added by remember { mutableStateOf(isAdded) }
+    val scrollState = rememberScrollState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = pack.localizedName(lang),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
-            )
-        }
-    ) { padding ->
+    // Show pack name in toolbar once scrolled past the cover image
+    val showTitleInBar by remember {
+        derivedStateOf { scrollState.value > 400 }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Scrollable content — no top padding, cover image goes edge-to-edge
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(padding)
+                .verticalScroll(scrollState)
         ) {
             // Cover image header
             Box(
@@ -284,6 +271,41 @@ fun PackDetailScreen(
             }
 
             Spacer(Modifier.height(32.dp))
+        }
+
+        // Floating toolbar overlay — transparent over cover, solid after scrolling past it
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (showTitleInBar) MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                    else Color.Transparent
+                )
+                .windowInsetsPadding(WindowInsets.statusBars)
+                .padding(horizontal = 4.dp, vertical = 4.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = if (showTitleInBar) MaterialTheme.colorScheme.onSurface else Color.White
+                    )
+                }
+                if (showTitleInBar) {
+                    Text(
+                        text = pack.localizedName(lang),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 48.dp)
+                    )
+                }
+            }
         }
     }
 }

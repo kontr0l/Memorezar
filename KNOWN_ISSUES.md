@@ -4,6 +4,17 @@ This document tracks known issues, bugs, workarounds, and ongoing investigations
 
 ---
 
+## Development Rules
+
+### LOCALIZATION: All user-facing text must be localized
+
+All text that is part of the app UI (buttons, labels, messages, section headers, etc.) **must** be localized. This does not apply to quote pack content, which has its own translation system.
+
+- **iOS:** Use `String(localized:)` or SwiftUI's automatic localization via `Text("...")`. Ensure new strings appear in `Localizable.xcstrings`.
+- **Android:** Use string resources (`strings.xml`) or ensure text is wrapped in translation-ready patterns.
+
+---
+
 ## Active Issues
 
 ### Speech Recognition

@@ -57,7 +57,6 @@ class MainActivity : ComponentActivity() {
             val darkTheme = when (settings.theme) {
                 AppTheme.LIGHT -> false
                 AppTheme.DARK -> true
-                AppTheme.SYSTEM -> isSystemInDarkTheme()
             }
 
             MemorezerTheme(darkTheme = darkTheme) {

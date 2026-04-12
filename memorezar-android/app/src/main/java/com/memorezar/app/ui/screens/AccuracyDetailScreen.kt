@@ -110,7 +110,7 @@ fun AccuracyDetailScreen(
                     Text(
                         text = "$arrow ${sign}${(it * 100).toInt()}% vs previous",
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (it >= 0) Color(0xFF4CAF50) else Color(0xFFE53935)
+                        color = if (it >= 0) Color(0xFF34C759) else Color(0xFFE53935)
                     )
                 }
             }
@@ -194,7 +194,7 @@ fun AccuracyDetailScreen(
 }
 
 private fun accuracyColor(accuracy: Double): Color = when {
-    accuracy >= 0.9 -> Color(0xFF4CAF50)
+    accuracy >= 0.9 -> Color(0xFF34C759)
     accuracy >= 0.7 -> Color(0xFFFFA000)
     else -> Color(0xFFE53935)
 }

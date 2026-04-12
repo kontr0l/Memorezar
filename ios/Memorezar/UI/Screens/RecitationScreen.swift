@@ -347,8 +347,15 @@ struct RecitationScreen: View {
                                 .font(.headline)
                                 .multilineTextAlignment(.center)
 
-                            Button("Got it") {
+                            Button {
                                 viewModel.showMasterModeHintBlock = false
+                            } label: {
+                                HStack {
+                                    Text("Got it")
+                                    Image(systemName: "checkmark")
+                                }
+                                .font(.headline)
+                                .frame(maxWidth: .infinity, minHeight: 50)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.yellow)
@@ -416,7 +423,9 @@ struct RecitationScreen: View {
                     micFillProgress = 0
                 }
             }
-            .sheet(isPresented: $viewModel.showResults) {
+            .sheet(isPresented: $viewModel.showResults, onDismiss: {
+                AlertManager.shared.stopResultSound()
+            }) {
                 resultsSheet
             }
             .sheet(isPresented: $showSaveRecordingSheet, onDismiss: {
@@ -2785,6 +2794,7 @@ struct RecitationScreen: View {
             idx < viewModel.words.count ? viewModel.words[idx].word : nil
         }
         let character = mistakeCharacter(for: viewModel.tappedMistakeIndex)
+        let mode = viewModel.currentMode
 
         return ZStack {
             // Dimmed background — tap to dismiss
@@ -2797,24 +2807,71 @@ struct RecitationScreen: View {
             VStack(spacing: 16) {
                 BrainCharacterView(character: character, size: 150)
 
-                (Text(String(localized: "I heard you say "))
-                    .foregroundColor(.secondary)
-                + Text("\"\(spokenWord)\"")
-                    .font(.headline)
-                    .foregroundColor(.red))
-
-                Button {
-                    viewModel.overrideMistake()
-                } label: {
-                    HStack {
-                        Text(String(localized: "No, I said the right word"))
-                        Image(systemName: "checkmark")
+                Group {
+                    switch mode {
+                    case .typing:
+                        Text(String(localized: "You typed "))
+                            .foregroundColor(.secondary)
+                        + Text("'\(spokenWord)'")
+                            .font(.headline)
+                            .foregroundColor(.red)
+                    case .multipleChoice:
+                        Text(String(localized: "You picked "))
+                            .foregroundColor(.secondary)
+                        + Text("'\(spokenWord)'")
+                            .font(.headline)
+                            .foregroundColor(.red)
+                    default:
+                        Text(String(localized: "I heard you say "))
+                            .foregroundColor(.secondary)
+                        + Text("\"\(spokenWord)\"")
+                            .font(.headline)
+                            .foregroundColor(.red)
                     }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity, minHeight: 50)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+
+                if mode == .voice {
+                    // Voice mode: override button + acknowledgment button
+                    Button {
+                        viewModel.overrideMistake()
+                    } label: {
+                        HStack {
+                            Text(String(localized: "No, I said the right word"))
+                            Image(systemName: "checkmark")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+
+                    Button {
+                        viewModel.dismissMistakePopup()
+                    } label: {
+                        HStack {
+                            Text(String(localized: "Yes, that's what I said"))
+                            Text(verbatim: "😅")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.indigo)
+                } else {
+                    // Typing / Multiple Choice: just an acknowledgment button
+                    Button {
+                        viewModel.dismissMistakePopup()
+                    } label: {
+                        HStack {
+                            Text(String(localized: "I'll get it next time"))
+                            Text(verbatim: "💪")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.indigo)
+                }
             }
             .padding(24)
             .background(Color(.systemBackground))

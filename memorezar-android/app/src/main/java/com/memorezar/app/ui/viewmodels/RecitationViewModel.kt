@@ -1008,9 +1008,8 @@ class RecitationViewModel @Inject constructor(
             // Calculate how many to reveal
             val revealCount = (pendingIndices.size * (revealPct / 100.0)).toInt()
 
-            // Deterministically select which to reveal (seeded so same level = same words)
-            val seed = (quote?.id?.hashCode() ?: 0).toLong() + revealPct.toLong()
-            val indicesToReveal = pendingIndices.shuffled(java.util.Random(seed)).take(revealCount).toSet()
+            // Randomly select which words to reveal (truly random each time, matching iOS)
+            val indicesToReveal = pendingIndices.shuffled().take(revealCount).toSet()
 
             val updatedWords = state.words.mapIndexed { index, word ->
                 if (index in indicesToReveal) {
@@ -1175,14 +1174,87 @@ class RecitationViewModel @Inject constructor(
         resetSilenceTimer()
     }
 
-    fun resetSession() {
+    /**
+     * Reset the current recitation.
+     * @param recalculateReveal When true (e.g. "Try Again" after completion),
+     *   refreshes reveal from the quote's level. When false (footer reset button),
+     *   keeps the current slider position but re-randomizes which words are revealed.
+     */
+    fun resetSession(recalculateReveal: Boolean = true) {
         val q = quote ?: return
-        setQuote(q)
+        if (recalculateReveal) {
+            setQuote(q)
+        } else {
+            // Keep current display level and reveal percentage, just reset words
+            val savedLevel = _uiState.value.displayLevel
+            val savedPct = _uiState.value.revealPercentage
+            val savedLetterStep = _uiState.value.letterRevealStep
+            val savedFirstLetter = _uiState.value.isFirstLetterToggle
+            val savedMode = _uiState.value.currentMode
+
+            stopRecitation()
+
+            val comparatorText = getActiveText().ifEmpty { q.text }
+            val comparatorLang = activeLanguage ?: q.primaryLanguage
+            comparator.setTargetText(comparatorText, comparatorLang)
+
+            val targetWords = comparator.getTargetWords()
+            val wordDisplays = targetWords.mapIndexed { index, word ->
+                WordDisplay(
+                    text = word,
+                    state = if (index == 0) WordState.CURRENT else WordState.UPCOMING
+                )
+            }
+
+            _uiState.update { state ->
+                state.copy(
+                    words = wordDisplays,
+                    currentPosition = 0,
+                    isComplete = false,
+                    accuracy = 0.0,
+                    mistakeCount = 0,
+                    correctCount = 0,
+                    hintCount = 0,
+                    totalWords = targetWords.size,
+                    testedWordCount = 0,
+                    audioLevel = 0f,
+                    showMistakeFlash = false,
+                    isPaused = false,
+                    displayLevel = savedLevel,
+                    revealPercentage = savedPct,
+                    letterRevealStep = savedLetterStep,
+                    isFirstLetterToggle = savedFirstLetter,
+                    flashingWordIndex = null,
+                    showPauseIcon = false,
+                    tappedMistakeIndex = null,
+                    tappedMistakeSpoken = null,
+                    typingInput = "",
+                    mcChoices = emptyList(),
+                    mcCorrectIndex = -1,
+                    mcWrongIndex = null,
+                    showSplitOverlay = false,
+                    speechError = null,
+                    currentMode = savedMode
+                )
+            }
+
+            applyRevealPercentage()
+
+            if (savedMode == MemorizationMode.MULTIPLE_CHOICE) {
+                generateChoices()
+            }
+        }
     }
 
     /** Hide the completion overlay without resetting the session. */
     fun dismissCompletion() {
+        alertManager.stopResultSound()
         _uiState.update { it.copy(isComplete = false) }
+    }
+
+    /** Stop any playing result sounds. */
+    fun stopResultSound() {
+        alertManager.stopResultSound()
     }
 
     // ---------------------------------------------------------------------------
@@ -1690,12 +1762,15 @@ class RecitationViewModel @Inject constructor(
             )
             quoteStore.recordSession(session)
 
-            // Persist the language the user practiced in so the quote reopens
+            // Refresh local quote from store to pick up updated practiceCount, lastPracticedAt, etc.
+            // Also persist the language the user practiced in so the quote reopens
             // in that language and Home / Library cards show the right translation.
             val currentQuote = quoteStore.getQuote(q.id)
-            if (currentQuote != null && currentQuote.lastPracticedLanguage != activeLanguage) {
-                currentQuote.lastPracticedLanguage = activeLanguage
-                quoteStore.updateQuote(currentQuote)
+            if (currentQuote != null) {
+                if (currentQuote.lastPracticedLanguage != activeLanguage) {
+                    currentQuote.lastPracticedLanguage = activeLanguage
+                    quoteStore.updateQuote(currentQuote)
+                }
                 this.quote = currentQuote
             }
 

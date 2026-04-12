@@ -113,7 +113,7 @@ fun PaywallSheet(
                 Text(
                     "Best Value — Save 44%",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF4CAF50)
+                    color = Color(0xFF34C759)
                 )
             }
         }
@@ -180,7 +180,7 @@ private fun FeatureRow(text: String) {
         Icon(
             Icons.Default.Check,
             contentDescription = null,
-            tint = Color(0xFF4CAF50),
+            tint = Color(0xFF34C759),
             modifier = Modifier.size(20.dp)
         )
         Spacer(Modifier.width(12.dp))

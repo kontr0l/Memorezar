@@ -99,7 +99,7 @@ fun HomeScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Spacer(Modifier.height(8.dp))
 
@@ -121,7 +121,7 @@ fun HomeScreen(
 
         // Continue Practicing / Get Started
         if (continuePracticing.isNotEmpty()) {
-          Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             // Rules (mirrors iOS):
             //  - 1 quote        → card + add card, full width (no scroll)
             //  - 2 quotes       → cards + add card, all inside one horizontal scroll
@@ -134,24 +134,15 @@ fun HomeScreen(
                 color = Color(0xFF2196F3),
                 trailing = if (showTrailingAdd) {
                     {
-                        ActionTip(
-                            text = TipDefinition.addOwnQuote.content,
-                            visible = shouldShowTip(TipDefinition.addOwnQuote),
-                            wiggle = true,
-                            horizontalAlign = com.memorezar.app.ui.components.TipHorizontalAlign.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.icon_addquote),
-                                contentDescription = "Add Quote",
-                                tint = Color.Unspecified,
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clickable {
-                                        tutorialStore?.completeTip(TipDefinition.addOwnQuote.id)
-                                        onNavigateToQuoteInput()
-                                    }
-                            )
-                        }
+                        Text(
+                            text = "Add Quote",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF2196F3),
+                            modifier = Modifier.clickable {
+                                tutorialStore?.completeTip(TipDefinition.addOwnQuote.id)
+                                onNavigateToQuoteInput()
+                            }
+                        )
                     }
                 } else null
             )
@@ -234,7 +225,7 @@ fun HomeScreen(
             }
           }
         } else {
-          Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             SectionHeaderWithIcon(
                 title = "Get Started",
                 icon = "play",
@@ -317,10 +308,11 @@ fun HomeScreen(
         }
 
         // Stats Section
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SectionHeaderWithIcon(
             title = "Your Progress",
             icon = "chart",
-            color = Color(0xFF4CAF50)
+            color = Color(0xFF34C759)
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -350,14 +342,16 @@ fun HomeScreen(
                 iconText = "🎯",
                 value = "${(avg * 100).toInt()}%",
                 label = "Accuracy",
-                color = Color(0xFF4CAF50),
+                color = Color(0xFF34C759),
                 modifier = Modifier.weight(1f),
                 onClick = onNavigateToAccuracyDetail
             )
         }
+        } // Stats Column
 
         // Browse Quote Packs
         if (availablePacks.isNotEmpty()) {
+          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ActionTip(
                 text = TipDefinition.browsePacks.content,
                 visible = shouldShowTip(TipDefinition.browsePacks),
@@ -397,6 +391,7 @@ fun HomeScreen(
                     })
                 }
             }
+          }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -410,35 +405,41 @@ private fun SectionHeaderWithIcon(
     color: Color,
     trailing: (@Composable () -> Unit)? = null
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
+    Box(
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Icon(
-            imageVector = when (icon) {
-                "search" -> Icons.Default.Search
-                else -> Icons.Default.Add // placeholder
-            },
-            contentDescription = null,
-            tint = if (icon == "play" || icon == "chart") Color.Transparent else color,
-            modifier = Modifier.size(if (icon == "play" || icon == "chart") 0.dp else 20.dp)
-        )
-        // Use emoji icons for play and chart to avoid needing extra drawables
-        if (icon == "play") {
-            Text("▶", color = color, modifier = Modifier.padding(end = 6.dp))
-        } else if (icon == "chart") {
-            Text("📊", modifier = Modifier.padding(end = 6.dp))
-        } else {
-            Spacer(Modifier.width(6.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = when (icon) {
+                    "search" -> Icons.Default.Search
+                    else -> Icons.Default.Add // placeholder
+                },
+                contentDescription = null,
+                tint = if (icon == "play" || icon == "chart") Color.Transparent else color,
+                modifier = Modifier.size(if (icon == "play" || icon == "chart") 0.dp else 20.dp)
+            )
+            // Use emoji icons for play and chart to avoid needing extra drawables
+            if (icon == "play") {
+                Text("▶", color = color, modifier = Modifier.padding(end = 6.dp))
+            } else if (icon == "chart") {
+                Text("📊", modifier = Modifier.padding(end = 6.dp))
+            } else {
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = color
+            )
         }
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = color
-        )
-        Spacer(Modifier.weight(1f))
-        trailing?.invoke()
+        if (trailing != null) {
+            Box(modifier = Modifier.align(Alignment.CenterEnd)) {
+                trailing()
+            }
+        }
     }
 }
 
@@ -477,16 +478,14 @@ private fun ContinueQuoteCard(quote: Quote, flexible: Boolean = false, onClick: 
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            if (!quote.titleMatchesPreview) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = quote.preview,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = continuationPreview(quote),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Spacer(Modifier.weight(1f))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -518,22 +517,26 @@ private fun AddQuoteCard(onClick: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(12.dp)
         ) {
             Text(
                 "Add your own",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(Modifier.height(8.dp))
-            Icon(
-                painter = painterResource(R.drawable.icon_addquote),
-                contentDescription = "Add Quote",
-                tint = Color.Unspecified,
-                modifier = Modifier.size(36.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.icon_addquote),
+                    contentDescription = "Add Quote",
+                    tint = Color.Unspecified,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
         }
     }
 }
@@ -642,6 +645,17 @@ fun PackCard(pack: SuggestionPack, onClick: () -> Unit = {}) {
             }
         }
     }
+}
+
+private fun continuationPreview(quote: Quote): String {
+    if (quote.titleMatchesPreview) {
+        val titleWordCount = quote.displayTitle.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }.size
+        val allWords = quote.displayText.trim().split("\\s+".toRegex()).filter { it.isNotEmpty() }
+        val remaining = allWords.drop(titleWordCount).take(10)
+        if (remaining.isEmpty()) return ""
+        return remaining.joinToString(" ") + "..."
+    }
+    return quote.preview
 }
 
 private fun formatLastPracticed(lastPracticedAt: Long?, wordCount: Int): String {
