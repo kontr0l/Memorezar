@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,13 +35,18 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,6 +69,9 @@ import com.memorezar.app.ui.components.BrainCharacterView
 import com.memorezar.app.ui.components.ActionTip
 import com.memorezar.app.ui.components.MasteryBadge
 import com.memorezar.app.data.models.TipDefinition
+import com.memorezar.app.data.services.AuthService
+import com.memorezar.app.data.services.SupportReason
+import com.memorezar.app.data.services.SupportTicketService
 import com.memorezar.app.data.storage.TutorialStore
 import com.memorezar.app.ui.viewmodels.HomeViewModel
 
@@ -68,6 +79,7 @@ private val IndigoColor = Color(0xFF7A71F0)
 private val BorderColor = Color(0xFF777777)
 private val CardBg @Composable get() = MaterialTheme.colorScheme.surfaceVariant
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToRecitation: (String) -> Unit,
@@ -78,9 +90,12 @@ fun HomeScreen(
     onNavigateToPackDetail: (SuggestionPack) -> Unit = {},
     onNavigateToPackSearch: (List<SuggestionPack>) -> Unit = {},
     tutorialStore: TutorialStore? = null,
+    authService: AuthService? = null,
+    supportTicketService: SupportTicketService? = null,
     modifier: Modifier = Modifier,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
+    var showPackRequest by remember { mutableStateOf(false) }
     val continuePracticing by viewModel.continuePracticingQuotes.collectAsState()
     val availablePacks by viewModel.availablePacks.collectAsState()
     val quotes by viewModel.quoteStore.quotes.collectAsState()
@@ -101,7 +116,7 @@ fun HomeScreen(
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding()))
 
         // Hero Section — logo + brain character
         Column(
@@ -374,8 +389,9 @@ fun HomeScreen(
                     }
                 )
             }
-            val packCount = availablePacks.take(6).size
-            val rows = (packCount + 1) / 2 // ceil division for 2 columns
+            val displayPacks = availablePacks.take(5) // 5 packs + 1 request card = 6 slots
+            val totalItems = displayPacks.size + 1 // +1 for request card
+            val rows = (totalItems + 1) / 2 // ceil division for 2 columns
             val gridHeight = (rows * 200 + (rows - 1).coerceAtLeast(0) * 12).dp
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
@@ -384,17 +400,36 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 userScrollEnabled = false
             ) {
-                items(availablePacks.take(6), key = { it.id }) { pack ->
+                items(displayPacks, key = { it.id }) { pack ->
                     PackCard(pack = pack, onClick = {
                         tutorialStore?.completeTip(TipDefinition.browsePacks.id)
                         onNavigateToPackDetail(pack)
                     })
+                }
+                item(key = "pack_request") {
+                    PackRequestCard(onClick = { showPackRequest = true })
                 }
             }
           }
         }
 
         Spacer(Modifier.height(16.dp))
+    }
+
+    // Quote Pack Request bottom sheet
+    if (showPackRequest && authService != null && supportTicketService != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showPackRequest = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null
+        ) {
+            ContactSupportScreen(
+                authService = authService,
+                supportTicketService = supportTicketService,
+                onDismiss = { showPackRequest = false },
+                initialReason = SupportReason.QUOTE_PACK_REQUEST
+            )
+        }
     }
 }
 
@@ -641,6 +676,50 @@ fun PackCard(pack: SuggestionPack, onClick: () -> Unit = {}) {
                     text = "${pack.quotes.size} quotes",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun PackRequestCard(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(2.dp, BorderColor)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            IndigoColor.copy(alpha = 0.15f),
+                            IndigoColor.copy(alpha = 0.05f)
+                        )
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = "📩",
+                    style = MaterialTheme.typography.headlineLarge
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Request a\nQuote Pack",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = IndigoColor,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
         }

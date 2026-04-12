@@ -1,6 +1,19 @@
 package com.memorezar.app.ui.screens
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.ContentValues
+import android.content.Intent
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.widget.Toast
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,6 +24,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +32,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +50,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +61,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -107,6 +124,7 @@ import com.memorezar.app.data.storage.TutorialStore
 import com.memorezar.app.ui.viewmodels.LibraryViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+// FileProvider no longer needed for PDF
 import java.io.File
 import java.util.UUID
 
@@ -161,6 +179,8 @@ fun QuoteLibraryScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp)
         ) {
+            Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding()))
+
             // Header: "Library" + AddQuote icon
             Row(
                 modifier = Modifier
@@ -449,13 +469,22 @@ fun CategoryDetailScreen(
         }
     }
 
+    // Animated toolbar alpha for smooth fade like iOS
+    val toolbarAlpha by animateFloatAsState(
+        targetValue = if (showNavTitle) 0.78f else 0f,
+        animationSpec = tween(durationMillis = 250),
+        label = "toolbarAlpha"
+    )
+    val surfaceColor = MaterialTheme.colorScheme.surface
+
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val toolbarHeight = statusBarTop + 56.dp
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(top = statusBarTop + 48.dp, bottom = 80.dp)
+            contentPadding = PaddingValues(top = toolbarHeight, bottom = 80.dp)
         ) {
             // Header: thumbnail + editable name + search
             item {
@@ -543,68 +572,103 @@ fun CategoryDetailScreen(
             }
         }
 
-        // Floating translucent toolbar — smooth fade like iOS
-        val toolbarAlpha by animateFloatAsState(
-            targetValue = if (showNavTitle) 0.78f else 0f,
-            animationSpec = tween(durationMillis = 250),
-            label = "toolbarAlpha"
-        )
-        val surfaceColor = MaterialTheme.colorScheme.surface
-
+        // Floating toolbar with gradient fade — matches iOS navigation bar blur
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .drawBehind {
-                    drawRect(surfaceColor.copy(alpha = toolbarAlpha))
-                }
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 4.dp, vertical = 4.dp),
-            contentAlignment = Alignment.CenterStart
+                .align(Alignment.TopStart)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            // Gradient background layer — tall enough to fade smoothly below the toolbar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(toolbarHeight + 30.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0.0f to surfaceColor.copy(alpha = toolbarAlpha.coerceAtLeast(0.01f)),
+                                0.7f to surfaceColor.copy(alpha = toolbarAlpha.coerceAtLeast(0.01f) * 0.92f),
+                                0.85f to surfaceColor.copy(alpha = toolbarAlpha * 0.4f),
+                                1.0f to Color.Transparent
+                            )
+                        )
+                    )
+            )
+            // Toolbar content — solid touch target that blocks pass-through
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(toolbarHeight)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = { /* consume touches — block pass-through */ }
+                    )
             ) {
+                Spacer(Modifier.windowInsetsPadding(WindowInsets.statusBars))
                 Row(
                     modifier = Modifier
-                        .clickable(onClick = onBack)
-                        .padding(start = 0.dp, end = 4.dp),
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        Icons.Default.ChevronLeft,
-                        contentDescription = "Back",
-                        modifier = Modifier.size(28.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    if (!showNavTitle) {
+                    // Back button with circular background like iOS
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                shape = CircleShape
+                            )
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onBack
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.ChevronLeft,
+                            contentDescription = "Back",
+                            modifier = Modifier.size(24.dp),
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    if (showNavTitle) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = category.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(end = if (isPack) 16.dp else 48.dp)
+                        )
+                    } else {
                         Text(
                             "Library",
                             color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.bodyLarge
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = onBack
+                                )
+                                .padding(start = 4.dp)
                         )
+                        Spacer(Modifier.weight(1f))
                     }
-                }
-                if (showNavTitle) {
-                    Text(
-                        text = category.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f).padding(end = if (isPack) 16.dp else 48.dp)
-                    )
-                } else {
-                    Spacer(Modifier.weight(1f))
-                }
-                if (!isPack) {
-                    IconButton(onClick = { onAddQuote(categoryId) }) {
-                        Icon(
-                            painter = painterResource(R.drawable.icon_addquote),
-                            contentDescription = "Add Quote",
-                            tint = Color.Unspecified,
-                            modifier = Modifier.size(28.dp)
-                        )
+                    if (!isPack) {
+                        IconButton(onClick = { onAddQuote(categoryId) }) {
+                            Icon(
+                                painter = painterResource(R.drawable.icon_addquote),
+                                contentDescription = "Add Quote",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -632,11 +696,14 @@ fun CategoryDetailScreen(
     if (showCategorySettings) {
         ModalBottomSheet(
             onDismissRequest = { showCategorySettings = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null
         ) {
+            // Fill to match iOS height — content at top, empty space below
+            Column(modifier = Modifier.fillMaxHeight(0.85f)) {
             CategorySettingsSheet(
                 category = category,
-                quoteCount = quotes.size,
+                quotes = quotes,
                 isPack = isPack,
                 viewModel = viewModel,
                 onSave = { updatedCategory ->
@@ -650,6 +717,7 @@ fun CategoryDetailScreen(
                 },
                 onDismiss = { showCategorySettings = false }
             )
+            }
         }
     }
 }
@@ -798,13 +866,14 @@ private fun CategoryThumbnail(
 @Composable
 private fun CategorySettingsSheet(
     category: QuoteCategory,
-    quoteCount: Int,
+    quotes: List<Quote>,
     isPack: Boolean,
     viewModel: LibraryViewModel,
     onSave: (QuoteCategory) -> Unit,
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val quoteCount = quotes.size
     var name by remember { mutableStateOf(category.name) }
     var coverImageUrl by remember { mutableStateOf(category.coverImageUrl) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -840,86 +909,40 @@ private fun CategorySettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
         ) {
-            Text(
-                if (isPack) "Pack Settings" else "Category Settings",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(Modifier.height(20.dp))
-
-            if (!isPack) {
-                // Cover photo section
-                CoverPhotoSection(
-                    coverImageUrl = coverImageUrl,
-                    onAddPhoto = { showPhotoSourcePicker = true },
-                    onRemovePhoto = { coverImageUrl = null }
-                )
-
-                Spacer(Modifier.height(20.dp))
-
-                // Category name field
-                Text(
-                    "Name",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(20.dp))
-            }
-
-            // Delete / Remove button
-            TextButton(
-                onClick = { showDeleteConfirmation = true },
-                modifier = Modifier.fillMaxWidth()
+            // Top bar — matches iOS inline navigation bar
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+                    .padding(top = 6.dp, bottom = 8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                // Leading: Done/Cancel
+                TextButton(
+                    onClick = {
+                        if (!isPack) {
+                            onDismiss()
+                        } else {
+                            onDismiss()
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.CenterStart)
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.icon_trash),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp)
-                    )
                     Text(
-                        if (isPack) "Remove Pack" else "Delete Category",
-                        color = MaterialTheme.colorScheme.error
+                        if (isPack) "Done" else "Cancel",
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
-            }
-
-            if (isPack) {
+                // Center: Title
                 Text(
-                    "This will remove the pack and its $quoteCount ${if (quoteCount == 1) "quote" else "quotes"}. You can re-add it anytime from Browse.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    if (isPack) "Pack Settings" else "Category Settings",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.align(Alignment.Center)
                 )
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Action buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onDismiss) {
-                    Text(if (isPack) "Done" else "Cancel")
-                }
+                // Trailing: Save (non-pack only)
                 if (!isPack) {
-                    Spacer(Modifier.width(8.dp))
                     TextButton(
                         onClick = {
                             val trimmed = name.trim()
@@ -927,12 +950,135 @@ private fun CategorySettingsSheet(
                                 onSave(category.copy(name = trimmed, coverImageUrl = coverImageUrl))
                             }
                         },
-                        enabled = name.isNotBlank()
-                    ) { Text("Save") }
+                        enabled = name.isNotBlank(),
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    ) {
+                        Text(
+                            "Save",
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (name.isNotBlank()) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            // Scrollable content with grouped sections
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                if (!isPack) {
+                    // Name section
+                    SettingsSectionHeader("NAME")
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = { name = it },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(4.dp),
+                            colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = androidx.compose.ui.graphics.Color.Transparent,
+                                focusedBorderColor = androidx.compose.ui.graphics.Color.Transparent
+                            )
+                        )
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    // Cover Photo section
+                    SettingsSectionHeader("COVER PHOTO")
+                    CoverPhotoSection(
+                        coverImageUrl = coverImageUrl,
+                        onAddPhoto = { showPhotoSourcePicker = true },
+                        onRemovePhoto = { coverImageUrl = null }
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+                }
+
+                // Download as PDF section
+                if (quotes.isNotEmpty()) {
+                    Spacer(Modifier.height(if (!isPack) 0.dp else 8.dp))
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch(Dispatchers.IO) {
+                                        generateAndSharePdf(context, category.name, quotes)
+                                    }
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                "Download as PDF",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                }
+
+                // Delete / Remove section
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showDeleteConfirmation = true }
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.icon_trash),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            if (isPack) "Remove Pack" else "Delete Category",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
+                if (isPack) {
+                    Text(
+                        "This will remove the pack and its $quoteCount ${if (quoteCount == 1) "quote" else "quotes"}. You can re-add it anytime from Browse.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
+                    )
+                }
+            }
         }
     }
 
@@ -1544,4 +1690,159 @@ private fun saveCategoryImageFromUri(context: android.content.Context, uri: Uri)
     } catch (_: Exception) {
         null
     }
+}
+
+@Composable
+private fun SettingsSectionHeader(title: String) {
+    Text(
+        title,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+    )
+}
+
+private fun generateAndSharePdf(context: android.content.Context, packName: String, quotes: List<Quote>) {
+    val pageWidth = 595  // A4 width in points
+    val pageHeight = 842 // A4 height in points
+    val margin = 50f
+    val usableWidth = pageWidth - margin * 2
+
+    val titlePaint = Paint().apply {
+        textSize = 24f
+        isFakeBoldText = true
+        isAntiAlias = true
+    }
+    val quoteTitlePaint = Paint().apply {
+        textSize = 14f
+        isFakeBoldText = true
+        isAntiAlias = true
+    }
+    val bodyPaint = Paint().apply {
+        textSize = 12f
+        isAntiAlias = true
+    }
+    val footerPaint = Paint().apply {
+        textSize = 10f
+        isAntiAlias = true
+        color = android.graphics.Color.GRAY
+    }
+
+    val document = PdfDocument()
+    var pageNumber = 1
+    var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+    var page = document.startPage(pageInfo)
+    var canvas = page.canvas
+    var y = margin + 10f
+
+    for ((index, quote) in quotes.withIndex()) {
+        // Estimate space needed for this quote
+        val titleLines = wrapText(quote.title, bodyPaint, usableWidth)
+        val bodyLines = wrapText(quote.text, bodyPaint, usableWidth)
+        val neededHeight = 24f + titleLines.size * 18f + bodyLines.size * 18f + 24f
+
+        // Start new page if not enough room
+        if (y + neededHeight > pageHeight - margin) {
+            // Footer
+            canvas.drawText("$packName — Page $pageNumber", margin, pageHeight - 30f, footerPaint)
+            document.finishPage(page)
+            pageNumber++
+            pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            page = document.startPage(pageInfo)
+            canvas = page.canvas
+            y = margin + 10f
+        }
+
+        // Quote number + title
+        canvas.drawText("${index + 1}. ${quote.title}", margin, y, quoteTitlePaint)
+        y += 20f
+
+        // Quote body — word-wrapped
+        for (line in bodyLines) {
+            canvas.drawText(line, margin, y, bodyPaint)
+            y += 18f
+        }
+
+        y += 16f // spacing between quotes
+    }
+
+    // Footer on last page
+    canvas.drawText("$packName — Page $pageNumber", margin, pageHeight - 30f, footerPaint)
+    document.finishPage(page)
+
+    // Save to Downloads via MediaStore
+    val fileName = "${packName.replace(Regex("[^a-zA-Z0-9 ]"), "").trim()}.pdf"
+    val contentValues = ContentValues().apply {
+        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+        put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
+        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+    }
+    val resolver = context.contentResolver
+    val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+    if (uri != null) {
+        resolver.openOutputStream(uri)?.use { document.writeTo(it) }
+        document.close()
+
+        // Show notification to open the PDF
+        val channelId = "pdf_downloads"
+        val notificationManager = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Downloads", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "PDF download notifications"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+        val openIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/pdf")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context, 0, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_clock)
+            .setContentTitle("PDF Downloaded")
+            .setContentText("$fileName saved to Downloads")
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(fileName.hashCode(), notification)
+        } catch (_: SecurityException) {
+            // POST_NOTIFICATIONS permission not granted — toast is enough
+        }
+
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            Toast.makeText(context, "PDF saved to Downloads", Toast.LENGTH_SHORT).show()
+            // Open the PDF immediately
+            try {
+                context.startActivity(openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Exception) {
+                // No PDF viewer installed — notification and toast are enough
+            }
+        }
+    } else {
+        document.close()
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            Toast.makeText(context, "Failed to save PDF", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
+private fun wrapText(text: String, paint: Paint, maxWidth: Float): List<String> {
+    val words = text.split(" ")
+    val lines = mutableListOf<String>()
+    var currentLine = ""
+    for (word in words) {
+        val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+        if (paint.measureText(testLine) <= maxWidth) {
+            currentLine = testLine
+        } else {
+            if (currentLine.isNotEmpty()) lines.add(currentLine)
+            currentLine = word
+        }
+    }
+    if (currentLine.isNotEmpty()) lines.add(currentLine)
+    return lines
 }

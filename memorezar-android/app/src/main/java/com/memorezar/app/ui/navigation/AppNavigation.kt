@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -136,6 +137,7 @@ fun AppNavigation(
             && currentRoute != "mastered_quotes"
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         bottomBar = {
             if (showBottomBar) {
                 androidx.compose.foundation.layout.Column(
@@ -208,6 +210,8 @@ fun AppNavigation(
                         allRemotePacks = packs
                         navController.navigate("pack_search")
                     },
+                    authService = authService,
+                    supportTicketService = supportTicketService,
                     modifier = Modifier.padding(padding)
                 )
             }
@@ -373,7 +377,8 @@ fun AppNavigation(
     if (showContactSupport) {
         ModalBottomSheet(
             onDismissRequest = { showContactSupport = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null
         ) {
             ContactSupportScreen(
                 authService = authService,

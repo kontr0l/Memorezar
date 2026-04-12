@@ -664,6 +664,18 @@ struct CategorySettingsView: View {
                     }
                 }
 
+                // Download as PDF
+                if !quoteStore.quotes(inCategory: category.id).isEmpty {
+                    Section {
+                        Button {
+                            let quotes = quoteStore.quotes(inCategory: category.id)
+                            generateAndOpenPdf(packName: category.name, quotes: quotes)
+                        } label: {
+                            Label(String(localized: "Download as PDF"), systemImage: "arrow.down.doc")
+                        }
+                    }
+                }
+
                 // Delete / Remove
                 if quoteStore.categories.count > 1 {
                     Section {
@@ -772,6 +784,89 @@ struct CategorySettingsView: View {
         updated.imageSource = imageSource
         quoteStore.updateCategory(updated)
         dismiss()
+    }
+
+    private func generateAndOpenPdf(packName: String, quotes: [Quote]) {
+        let pageWidth: CGFloat = 595
+        let pageHeight: CGFloat = 842
+        let margin: CGFloat = 50
+        let usableWidth = pageWidth - margin * 2
+
+        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: pageWidth, height: pageHeight))
+
+        let quoteTitleFont = UIFont.boldSystemFont(ofSize: 14)
+        let bodyFont = UIFont.systemFont(ofSize: 12)
+        let footerFont = UIFont.systemFont(ofSize: 10)
+        let footerColor = UIColor.gray
+
+        let data = renderer.pdfData { context in
+            var y = margin + 10
+            var pageNumber = 1
+
+            func startNewPage() {
+                // Footer on current page
+                let footerAttrs: [NSAttributedString.Key: Any] = [.font: footerFont, .foregroundColor: footerColor]
+                let footerText = "\(packName) — Page \(pageNumber)"
+                footerText.draw(at: CGPoint(x: margin, y: pageHeight - 40), withAttributes: footerAttrs)
+
+                pageNumber += 1
+                context.beginPage()
+                y = margin + 10
+            }
+
+            context.beginPage()
+
+            for (index, quote) in quotes.enumerated() {
+                let titleText = "\(index + 1). \(quote.title)"
+                let titleAttrs: [NSAttributedString.Key: Any] = [.font: quoteTitleFont]
+                let bodyAttrs: [NSAttributedString.Key: Any] = [.font: bodyFont]
+
+                let titleRect = titleText.boundingRect(
+                    with: CGSize(width: usableWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin],
+                    attributes: titleAttrs, context: nil
+                )
+                let bodyRect = quote.text.boundingRect(
+                    with: CGSize(width: usableWidth, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin],
+                    attributes: bodyAttrs, context: nil
+                )
+
+                let neededHeight = titleRect.height + bodyRect.height + 30
+
+                if y + neededHeight > pageHeight - margin {
+                    startNewPage()
+                }
+
+                titleText.draw(in: CGRect(x: margin, y: y, width: usableWidth, height: titleRect.height), withAttributes: titleAttrs)
+                y += titleRect.height + 6
+
+                quote.text.draw(in: CGRect(x: margin, y: y, width: usableWidth, height: bodyRect.height), withAttributes: bodyAttrs)
+                y += bodyRect.height + 16
+            }
+
+            // Footer on last page
+            let footerAttrs: [NSAttributedString.Key: Any] = [.font: footerFont, .foregroundColor: footerColor]
+            let footerText = "\(packName) — Page \(pageNumber)"
+            footerText.draw(at: CGPoint(x: margin, y: pageHeight - 40), withAttributes: footerAttrs)
+        }
+
+        // Save to temp file and open
+        let fileName = packName.replacingOccurrences(of: "[^a-zA-Z0-9 ]", with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(fileName).pdf")
+        try? data.write(to: tempURL)
+
+        // Present via Quick Look
+        DispatchQueue.main.async {
+            guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                  let rootVC = scene.windows.first?.rootViewController else { return }
+            var presenter = rootVC
+            while let presented = presenter.presentedViewController {
+                presenter = presented
+            }
+            let activityVC = UIActivityViewController(activityItems: [tempURL], applicationActivities: nil)
+            presenter.present(activityVC, animated: true)
+        }
     }
 }
 

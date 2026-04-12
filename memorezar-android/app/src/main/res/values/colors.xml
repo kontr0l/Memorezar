@@ -4,4 +4,5 @@
     <color name="indigo_primary">#4F46E5</color>
     <color name="indigo_light">#818CF8</color>
     <color name="mistake_flash">#4DFF0000</color>
+    <color name="window_background">#FBFBFE</color>
 </resources>

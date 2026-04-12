@@ -1,0 +1,19 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- rectangle.3.group — mixed layout grid -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M3,4c0,-0.55 0.45,-1 1,-1h6c0.55,0 1,0.45 1,1v7c0,0.55 -0.45,1 -1,1H4c-0.55,0 -1,-0.45 -1,-1V4zM5,5v5h4V5H5z"/>
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M14,4c0,-0.55 0.45,-1 1,-1h5c0.55,0 1,0.45 1,1v4c0,0.55 -0.45,1 -1,1h-5c-0.55,0 -1,-0.45 -1,-1V4zM16,5v2h3V5H16z"/>
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M14,13c0,-0.55 0.45,-1 1,-1h5c0.55,0 1,0.45 1,1v7c0,0.55 -0.45,1 -1,1h-5c-0.55,0 -1,-0.45 -1,-1V13zM16,14v5h3V14H16z"/>
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M3,16c0,-0.55 0.45,-1 1,-1h6c0.55,0 1,0.45 1,1v4c0,0.55 -0.45,1 -1,1H4c-0.55,0 -1,-0.45 -1,-1V16zM5,17v2h4V17H5z"/>
+</vector>
