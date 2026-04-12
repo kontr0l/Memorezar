@@ -34,6 +34,20 @@ enum SupabaseConfig {
         URL(string: "\(projectURL)/storage/v1/object/public/recordings/\(path)")!
     }
 
+    // MARK: - Cloud Backup
+
+    static var userBackupsURL: URL {
+        URL(string: "\(projectURL)/rest/v1/user_backups")!
+    }
+
+    static var userImagesStorageURL: URL {
+        URL(string: "\(projectURL)/storage/v1/object/user-images")!
+    }
+
+    static func publicUserImageURL(path: String) -> URL {
+        URL(string: "\(projectURL)/storage/v1/object/public/user-images/\(path)")!
+    }
+
     // MARK: - Headers
 
     static var headers: [String: String] {

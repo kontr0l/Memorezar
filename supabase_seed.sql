@@ -296,3 +296,33 @@ INSERT INTO languages (code, display_name, color, text_color) VALUES
   ('ar', 'Arabic', '#22c55e', '#ffffff'),
   ('nl', 'Dutch', '#f97316', '#ffffff')
 ON CONFLICT (code) DO NOTHING;
+
+-- ============================================================
+-- Cloud Backup: user_backups table
+-- One row per user containing a JSONB snapshot of all local data.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_backups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  data JSONB NOT NULL,
+  backup_version INT NOT NULL DEFAULT 1,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT user_backups_user_id_key UNIQUE (user_id)
+);
+
+CREATE INDEX IF NOT EXISTS user_backups_user_id_idx ON user_backups (user_id);
+
+ALTER TABLE user_backups ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can read own backup" ON user_backups
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own backup" ON user_backups
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own backup" ON user_backups
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own backup" ON user_backups
+  FOR DELETE USING (auth.uid() = user_id);

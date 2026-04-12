@@ -11,7 +11,10 @@ final class TutorialStore: ObservableObject {
 
     /// Whether the user has completed the initial onboarding setup flow.
     @Published var hasCompletedOnboarding: Bool {
-        didSet { userDefaults.set(hasCompletedOnboarding, forKey: onboardingKey) }
+        didSet {
+            userDefaults.set(hasCompletedOnboarding, forKey: onboardingKey)
+            // CloudBackupService.shared.scheduleBackup()  // BACKUP-001: auto-backup disabled, manual only
+        }
     }
 
     private let key = "memorezar_completed_tips"
@@ -43,5 +46,13 @@ final class TutorialStore: ObservableObject {
 
     private func save() {
         userDefaults.set(Array(completedTips), forKey: key)
+        // CloudBackupService.shared.scheduleBackup()  // BACKUP-001: auto-backup disabled, manual only
+    }
+
+    // MARK: - Cloud Backup Restore
+
+    func restoreFromBackup(completedTips: Set<String>, hasCompletedOnboarding: Bool) {
+        self.completedTips = completedTips
+        self.hasCompletedOnboarding = hasCompletedOnboarding
     }
 }

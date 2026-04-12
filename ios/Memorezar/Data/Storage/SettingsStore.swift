@@ -124,6 +124,7 @@ final class SettingsStore: ObservableObject {
         } catch {
             print("Failed to save settings: \(error)")
         }
+        // CloudBackupService.shared.scheduleBackup()  // BACKUP-001: auto-backup disabled, manual only
     }
 
     // MARK: - Apply Settings

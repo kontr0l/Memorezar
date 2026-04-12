@@ -99,5 +99,13 @@ final class UserEquivalencesStore: ObservableObject {
         } catch {
             print("Failed to save user equivalences: \(error)")
         }
+        // CloudBackupService.shared.scheduleBackup()  // BACKUP-001: auto-backup disabled, manual only
+    }
+
+    // MARK: - Cloud Backup Restore
+
+    func restoreFromBackup(equivalences: [String: Set<String>]) {
+        self.equivalences = equivalences
+        save()
     }
 }

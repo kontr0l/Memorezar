@@ -31,12 +31,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import com.memorezar.app.core.alert.AlertManager
 import com.memorezar.app.core.alert.SoundTheme
 import com.memorezar.app.data.models.AppTheme
 import com.memorezar.app.data.models.FontSize
 import com.memorezar.app.data.models.MemorizationMode
 import com.memorezar.app.data.services.AuthService
+import com.memorezar.app.data.services.CloudBackupService
 import com.memorezar.app.data.storage.QuoteStore
 import com.memorezar.app.data.storage.SettingsStore
 import com.memorezar.app.data.storage.TutorialStore
@@ -48,6 +51,7 @@ fun SettingsScreen(
     tutorialStore: TutorialStore,
     authService: AuthService,
     alertManager: AlertManager,
+    cloudBackupService: CloudBackupService,
     onShowAuthSheet: () -> Unit,
     onShowContactSupport: () -> Unit,
     modifier: Modifier = Modifier
@@ -160,16 +164,70 @@ fun SettingsScreen(
         // Account
         SectionHeader("Account")
         if (currentUser != null) {
-            val displayName = currentUser?.displayName
-                ?: currentUser?.email?.substringBefore("@")
-                ?: "Account"
-            InfoRow(displayName, currentUser?.email ?: "")
+            val displayEmail = currentUser?.email
+            val isPrivateRelay = displayEmail?.contains("privaterelay.appleid.com") == true
+            val accountLabel = if (!isPrivateRelay && !displayEmail.isNullOrEmpty()) {
+                displayEmail
+            } else {
+                "Apple Account"
+            }
+            InfoRow(accountLabel, "")
+
+            // Backup
+            val backupState by cloudBackupService.backupState.collectAsState()
+            val lastBackup by cloudBackupService.lastBackupDate.collectAsState()
+            val backupExists by cloudBackupService.cloudBackupExists.collectAsState()
+            var showRestoreConfirm by remember { mutableStateOf(false) }
+
+            val backupSubtext = when {
+                backupState == CloudBackupService.BackupState.BACKING_UP -> "Backing up..."
+                lastBackup != null -> cloudBackupService.formatRelativeTime(lastBackup!!)
+                else -> ""
+            }
+            val coroutineScope = rememberCoroutineScope()
+
+            ClickRow(
+                label = "Back Up Now",
+                detail = backupSubtext,
+                enabled = backupState != CloudBackupService.BackupState.BACKING_UP
+            ) {
+                coroutineScope.launch { cloudBackupService.performBackup() }
+            }
+
+            ClickRow(
+                label = "Restore from Backup",
+                enabled = backupExists && backupState != CloudBackupService.BackupState.RESTORING
+            ) {
+                showRestoreConfirm = true
+            }
+
+            if (showRestoreConfirm) {
+                AlertDialog(
+                    onDismissRequest = { showRestoreConfirm = false },
+                    title = { Text("Restore from cloud backup?") },
+                    text = { Text("This will replace all local data with your cloud backup.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showRestoreConfirm = false
+                            coroutineScope.launch { cloudBackupService.fetchAndRestore() }
+                        }) { Text("Replace with Cloud Data", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showRestoreConfirm = false }) { Text("Cancel") }
+                    }
+                )
+            }
+
+            if (lastBackup != null) {
+                SectionFooter("Last backed up ${cloudBackupService.formatRelativeTime(lastBackup!!)}")
+            }
+
             ClickRow("Sign Out", color = MaterialTheme.colorScheme.error) {
                 authService.signOut()
             }
         } else {
             ClickRow("Sign In") { onShowAuthSheet() }
-            SectionFooter("Sign in to share recordings with the community.")
+            SectionFooter("Sign in to back up your data and share recordings.")
         }
         SectionDivider()
 
@@ -183,7 +241,7 @@ fun SettingsScreen(
 
         // About
         SectionHeader("About")
-        InfoRow("Version", "v2.4.63")
+        InfoRow("Version", "v2.4.64")
         ClickRow("Contact Support") { onShowContactSupport() }
 
         Spacer(Modifier.height(80.dp))
@@ -288,15 +346,29 @@ private fun InfoRow(label: String, value: String, compact: Boolean = false) {
 }
 
 @Composable
-private fun ClickRow(label: String, color: Color = MaterialTheme.colorScheme.primary, onClick: () -> Unit) {
+private fun ClickRow(
+    label: String,
+    color: Color = MaterialTheme.colorScheme.primary,
+    detail: String = "",
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val displayColor = if (enabled) color else color.copy(alpha = 0.4f)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, color = color)
+        Text(text = label, color = displayColor, modifier = Modifier.weight(1f))
+        if (detail.isNotEmpty()) {
+            Text(
+                text = detail,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }
 

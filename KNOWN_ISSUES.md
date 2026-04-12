@@ -1010,4 +1010,21 @@ The user can always tap the mic button to manually restart if something truly br
 
 ---
 
+## BACKUP-001: Auto-Backup Disabled (Manual Only)
+
+**Severity:** N/A (design decision)
+**Status:** Intentionally disabled
+
+**What exists:** `CloudBackupService.scheduleBackup()` is wired into all store save methods (`QuoteStore.saveQuotes/saveSessions/saveCategories`, `SettingsStore.saveSettings`, `UserEquivalencesStore.save`, `TutorialStore.save` + `hasCompletedOnboarding` didSet) with a 5-second debounce. The infrastructure for automatic background backup after every data change is fully implemented.
+
+**What's disabled:** All `scheduleBackup()` calls are commented out with `// BACKUP-001: auto-backup disabled, manual only`. The "Cloud Backup" status row in SettingsScreen is also removed.
+
+**Current behavior:** Users must tap **"Back Up Now"** in Settings → Account to trigger a backup. Restore works via **"Restore from Backup"** button or the auto-restore prompt on sign-in.
+
+**To re-enable auto-backup:** Uncomment the 7 `scheduleBackup()` calls across the 4 store files, and optionally restore the "Cloud Backup" status row in SettingsScreen showing last backup time.
+
+**Why disabled:** User preference — wants backup to be an explicit user action for now. May revisit later if users request automatic sync.
+
+---
+
 *Last Updated: April 2026*

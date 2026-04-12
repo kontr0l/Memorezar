@@ -9,6 +9,7 @@ struct MemorezerApp: App {
     @StateObject private var tutorialStore = TutorialStore()
     @StateObject private var authService = AuthService.shared
     @StateObject private var purchaseService = PurchaseService.shared
+    @StateObject private var cloudBackupService = CloudBackupService.shared
 
     var body: some Scene {
         WindowGroup {
@@ -20,8 +21,15 @@ struct MemorezerApp: App {
                 .environmentObject(tutorialStore)
                 .environmentObject(authService)
                 .environmentObject(purchaseService)
+                .environmentObject(cloudBackupService)
                 .preferredColorScheme(settingsStore.colorScheme)
                 .onAppear {
+                    // Wire store references for backup service
+                    cloudBackupService.quoteStore = quoteStore
+                    cloudBackupService.settingsStore = settingsStore
+                    cloudBackupService.userEquivalencesStore = userEquivalencesStore
+                    cloudBackupService.tutorialStore = tutorialStore
+
                     purchaseService.configure()
                     authService.restoreSession()
                 }

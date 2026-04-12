@@ -6,7 +6,9 @@ struct SettingsScreen: View {
     @EnvironmentObject var tutorialStore: TutorialStore
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var purchaseService: PurchaseService
+    @EnvironmentObject var cloudBackupService: CloudBackupService
     @State private var showingResetAlert = false
+    @State private var showRestoreConfirm = false
     @State private var showingDeleteDataAlert = false
     @State private var showFlash = false
     @State private var showAuthSheet = false
@@ -192,13 +194,54 @@ struct SettingsScreen: View {
     private var accountSection: some View {
         Section {
             if authService.isSignedIn {
-                HStack {
-                    Label(accountDisplayName, systemImage: "person.crop.circle.fill")
-                    Spacer()
-                    Text(accountDetailText)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                Label(accountDisplayName, systemImage: "person.crop.circle.fill")
+
+                // Back Up Now
+                Button {
+                    Task { await cloudBackupService.performBackup() }
+                } label: {
+                    HStack {
+                        Label("Back Up Now", systemImage: "arrow.clockwise.icloud")
+                        if cloudBackupService.backupState == .backingUp {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
                 }
+                .disabled(cloudBackupService.backupState == .backingUp)
+
+                // Restore from Backup
+                Button {
+                    showRestoreConfirm = true
+                } label: {
+                    Label("Restore from Backup", systemImage: "arrow.down.circle")
+                }
+                .disabled(cloudBackupService.backupState == .restoring || !cloudBackupService.cloudBackupExists)
+                .confirmationDialog(
+                    "Restore from cloud backup?",
+                    isPresented: $showRestoreConfirm,
+                    titleVisibility: .visible
+                ) {
+                    Button("Replace with Cloud Data") {
+                        Task {
+                            do {
+                                let payload = try await cloudBackupService.fetchBackupPayload()
+                                await cloudBackupService.applyRestore(payload)
+                            } catch {
+                                print("[Settings] Restore failed: \(error.localizedDescription)")
+                            }
+                        }
+                    }
+                    Button("Cancel", role: .cancel) { }
+                } message: {
+                    if let date = cloudBackupService.cloudBackupDate {
+                        Text("This will replace all local data with your cloud backup from \(date.formatted(date: .abbreviated, time: .shortened)).")
+                    } else {
+                        Text("This will replace all local data with your cloud backup.")
+                    }
+                }
+
                 Button(role: .destructive) {
                     authService.signOut()
                 } label: {
@@ -215,7 +258,9 @@ struct SettingsScreen: View {
             Text("Account")
         } footer: {
             if !authService.isSignedIn {
-                Text("Sign in to share recordings with the community.")
+                Text("Sign in to back up your data and share recordings.")
+            } else if let date = cloudBackupService.lastBackupDate {
+                Text("Last backed up \(relativeBackupTime(date))")
             }
         }
     }
@@ -244,7 +289,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v71.32")
+                Text("v71.38")
                     .foregroundColor(.secondary)
             }
 
@@ -265,24 +310,21 @@ struct SettingsScreen: View {
     }
 
     private var accountDisplayName: String {
-        if let name = authService.currentUser?.displayName, !name.isEmpty {
-            return name
+        if let email = authService.currentUser?.email, !email.isEmpty, !isApplePrivateRelay {
+            return email
         }
-        if isApplePrivateRelay {
-            return String(localized: "Apple Account")
-        }
-        // Use part before @ as fallback
-        if let email = authService.currentUser?.email, let at = email.firstIndex(of: "@") {
-            return String(email[email.startIndex..<at])
-        }
-        return String(localized: "Account")
+        return String(localized: "Apple Account")
     }
 
-    private var accountDetailText: String {
-        if isApplePrivateRelay {
-            return String(localized: "Signed in with Apple")
-        }
-        return authService.currentUser?.email ?? ""
+    private func relativeBackupTime(_ date: Date) -> String {
+        let seconds = Int(Date().timeIntervalSince(date))
+        if seconds < 60 { return String(localized: "1 min ago") }
+        let minutes = Int(ceil(Double(seconds) / 60.0))
+        if minutes < 60 { return String(localized: "\(minutes) min ago") }
+        let hours = Int(ceil(Double(minutes) / 60.0))
+        if hours < 24 { return String(localized: "\(hours) hr ago") }
+        let days = Int(ceil(Double(hours) / 24.0))
+        return String(localized: "\(days) days ago")
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {

@@ -13,6 +13,7 @@ import androidx.compose.runtime.getValue
 import com.memorezar.app.core.alert.AlertManager
 import com.memorezar.app.data.models.AppTheme
 import com.memorezar.app.data.services.AuthService
+import com.memorezar.app.data.services.CloudBackupService
 import com.memorezar.app.data.services.PurchaseService
 import com.memorezar.app.data.services.SupportTicketService
 import com.memorezar.app.data.storage.QuoteStore
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var alertManager: AlertManager
     @Inject lateinit var purchaseService: PurchaseService
     @Inject lateinit var supportTicketService: SupportTicketService
+    @Inject lateinit var cloudBackupService: CloudBackupService
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,7 +69,8 @@ class MainActivity : ComponentActivity() {
                     authService = authService,
                     alertManager = alertManager,
                     purchaseService = purchaseService,
-                    supportTicketService = supportTicketService
+                    supportTicketService = supportTicketService,
+                    cloudBackupService = cloudBackupService
                 )
             }
         }

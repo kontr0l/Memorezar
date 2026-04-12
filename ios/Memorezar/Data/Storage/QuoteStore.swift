@@ -404,6 +404,7 @@ final class QuoteStore: ObservableObject {
         } catch {
             print("Failed to save quotes: \(error)")
         }
+        // CloudBackupService.shared.scheduleBackup()  // BACKUP-001: auto-backup disabled, manual only
     }
 
     private func loadSessions() {
@@ -422,6 +423,7 @@ final class QuoteStore: ObservableObject {
         } catch {
             print("Failed to save sessions: \(error)")
         }
+        // CloudBackupService.shared.scheduleBackup()  // BACKUP-001: auto-backup disabled, manual only
     }
 
     private func loadCategories() {
@@ -445,6 +447,7 @@ final class QuoteStore: ObservableObject {
         } catch {
             print("Failed to save categories: \(error)")
         }
+        // CloudBackupService.shared.scheduleBackup()  // BACKUP-001: auto-backup disabled, manual only
     }
 
     // MARK: - Category Image Storage
@@ -574,6 +577,22 @@ final class QuoteStore: ObservableObject {
         if let idx = categories.firstIndex(where: { $0.id == categoryId }) {
             categories[idx].imageSource = .local(filename)
             saveCategories()
+        }
+    }
+
+    // MARK: - Cloud Backup Restore
+
+    /// Replace all local data with a cloud backup snapshot.
+    func restoreFromBackup(quotes: [Quote], sessions: [PracticeSession],
+                           categories: [QuoteCategory], packVersions: [String: Int]) {
+        self.quotes = quotes
+        self.sessions = sessions
+        self.categories = categories
+        saveQuotes()
+        saveSessions()
+        saveCategories()
+        for (packId, version) in packVersions {
+            setInstalledPackVersion(packId, version: version)
         }
     }
 

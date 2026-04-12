@@ -85,6 +85,20 @@ class TutorialStore @Inject constructor(
         }
     }
 
+    /** Replace all tutorial state with a cloud backup snapshot. */
+    fun restoreFromBackup(completedTips: Set<String>, hasCompletedOnboarding: Boolean) {
+        _completedTips.value = completedTips
+        _hasCompletedOnboarding.value = hasCompletedOnboarding
+        persistTips(completedTips)
+        if (hasCompletedOnboarding) {
+            scope.launch {
+                try {
+                    context.dataStore.edit { prefs -> prefs[onboardingKey] = true }
+                } catch (_: Exception) { }
+            }
+        }
+    }
+
     // -- Persistence --------------------------------------------------------------
 
     private suspend fun load() {

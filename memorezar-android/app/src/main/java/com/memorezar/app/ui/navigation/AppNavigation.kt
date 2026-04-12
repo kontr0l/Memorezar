@@ -65,6 +65,7 @@ import com.memorezar.app.ui.screens.QuoteInputSheet
 import com.memorezar.app.ui.screens.CategoryDetailScreen
 import com.memorezar.app.ui.screens.QuoteLibraryScreen
 import com.memorezar.app.ui.screens.RecitationScreen
+import com.memorezar.app.data.services.CloudBackupService
 import com.memorezar.app.ui.screens.SettingsScreen
 import com.memorezar.app.ui.screens.StreakDetailScreen
 
@@ -83,7 +84,8 @@ fun AppNavigation(
     authService: AuthService,
     alertManager: AlertManager,
     purchaseService: PurchaseService,
-    supportTicketService: SupportTicketService
+    supportTicketService: SupportTicketService,
+    cloudBackupService: CloudBackupService
 ) {
     val context = LocalContext.current
     val hasCompletedOnboarding by tutorialStore.hasCompletedOnboarding.collectAsState()
@@ -251,6 +253,7 @@ fun AppNavigation(
                     tutorialStore = tutorialStore,
                     authService = authService,
                     alertManager = alertManager,
+                    cloudBackupService = cloudBackupService,
                     onShowAuthSheet = { showAuthSheet = true },
                     onShowContactSupport = { showContactSupport = true },
                     modifier = Modifier.padding(padding)

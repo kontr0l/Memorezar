@@ -499,6 +499,22 @@ class QuoteStore @Inject constructor(
         setInstalledPackVersion(pack.id, pack.version)
     }
 
+    /** Replace all local data with a cloud backup snapshot. */
+    fun restoreFromBackup(
+        quotes: List<Quote>,
+        sessions: List<PracticeSession>,
+        categories: List<QuoteCategory>,
+        packVersions: Map<String, Int>
+    ) {
+        _quotes.value = quotes
+        _sessions.value = sessions
+        _categories.value = categories
+        saveQuotes()
+        saveSessions()
+        saveCategories()
+        scope.launch { savePackVersions(packVersions) }
+    }
+
     /** Clear all user data (for settings reset) */
     fun clearAllData() {
         _quotes.value = emptyList()

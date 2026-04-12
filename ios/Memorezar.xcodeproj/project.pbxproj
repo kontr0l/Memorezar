@@ -63,6 +63,8 @@
 		1100000000000046 /* ContactSupportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000046 /* ContactSupportView.swift */; };
 		1100000000000047 /* SupportTicketService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000047 /* SupportTicketService.swift */; };
 		1100000000000080 /* LanguageService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000080 /* LanguageService.swift */; };
+		1100000000000081 /* BackupPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000081 /* BackupPayload.swift */; };
+		1100000000000082 /* CloudBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000082 /* CloudBackupService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -123,6 +125,8 @@
 		2200000000000046 /* ContactSupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactSupportView.swift; sourceTree = "<group>"; };
 		2200000000000047 /* SupportTicketService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportTicketService.swift; sourceTree = "<group>"; };
 		2200000000000080 /* LanguageService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageService.swift; sourceTree = "<group>"; };
+		2200000000000081 /* BackupPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupPayload.swift; sourceTree = "<group>"; };
+		2200000000000082 /* CloudBackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudBackupService.swift; sourceTree = "<group>"; };
 		3300000000000001 /* Memorezar.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Memorezar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -225,6 +229,7 @@
 				2200000000000018 /* MemorizationMode.swift */,
 				2200000000000026 /* TipDefinition.swift */,
 				2200000000000033 /* AuthUser.swift */,
+				2200000000000081 /* BackupPayload.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -319,6 +324,7 @@
 				220000000000001C /* EquivalenceService.swift */,
 				220000000000001D /* UnsplashService.swift */,
 				2200000000000080 /* LanguageService.swift */,
+				2200000000000082 /* CloudBackupService.swift */,
 				2200000000000025 /* PackService.swift */,
 				2200000000000031 /* TextToSpeechService.swift */,
 				2200000000000032 /* KeychainHelper.swift */,
@@ -437,6 +443,8 @@
 				110000000000001C /* EquivalenceService.swift in Sources */,
 				110000000000001D /* UnsplashService.swift in Sources */,
 				1100000000000080 /* LanguageService.swift in Sources */,
+				1100000000000081 /* BackupPayload.swift in Sources */,
+				1100000000000082 /* CloudBackupService.swift in Sources */,
 				1100000000000025 /* PackService.swift in Sources */,
 				1100000000000031 /* TextToSpeechService.swift in Sources */,
 				110000000000001F /* QuoteSplitView.swift in Sources */,
