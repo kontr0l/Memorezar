@@ -927,10 +927,16 @@ class RecitationViewModel @Inject constructor(
             )
         }
 
-        applyRevealPercentage()
-
-        if (_uiState.value.currentMode == MemorizationMode.MULTIPLE_CHOICE) {
-            generateChoices()
+        if (_uiState.value.isReadingMode) {
+            _uiState.update { state ->
+                val revealedWords = state.words.map { it.copy(state = WordState.UPCOMING, isRevealed = true) }
+                state.copy(words = revealedWords, currentPosition = 0, revealPercentage = 100.0, letterRevealStep = 5)
+            }
+        } else {
+            applyRevealPercentage()
+            if (_uiState.value.currentMode == MemorizationMode.MULTIPLE_CHOICE) {
+                generateChoices()
+            }
         }
 
         // Update audio hash for recordings lookup

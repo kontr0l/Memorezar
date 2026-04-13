@@ -165,12 +165,12 @@ struct RecitationScreen: View {
                                     // Title (dropdown in playback, chunk nav when split, plain otherwise)
                                     if isPlaybackMode {
                                         recordingDropdownButton
-                                            .padding(.top, 12)
+                                            .padding(.top, 7)
                                             .frame(maxWidth: .infinity)
                                             .overlay(alignment: .top) {
                                                 playbackTimeLabelRow
                                                     .padding(.horizontal, 4)
-                                                    .offset(y: -8)
+                                                    .offset(y: -13)
                                             }
                                     } else if let chunks = viewModel.splitChunks {
                                         VStack(spacing: 4) {
@@ -212,7 +212,7 @@ struct RecitationScreen: View {
                                             }
                                         }
                                         .multilineTextAlignment(.center)
-                                        .padding(.top, 12)
+                                        .padding(.top, 7)
                                     } else {
                                         HStack(spacing: 8) {
                                             Text(viewModel.activeTitle)
@@ -223,7 +223,7 @@ struct RecitationScreen: View {
                                                 languageTogglePill
                                             }
                                         }
-                                        .padding(.top, 12)
+                                        .padding(.top, 7)
                                     }
 
                                     // Reveal slider
@@ -719,6 +719,7 @@ struct RecitationScreen: View {
                 normalPlaybackControlBar
             }
         }
+        .padding(.bottom, -10)
     }
 
     private var ttsControlBar: some View {
@@ -1002,6 +1003,7 @@ struct RecitationScreen: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
+            .frame(height: 58)
             .background(
                 RoundedRectangle(cornerRadius: 36)
                     .fill(Color(hex: 0x333333))
@@ -1068,6 +1070,7 @@ struct RecitationScreen: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
+                .frame(height: 58)
                 .background(
                     RoundedRectangle(cornerRadius: 36)
                         .fill(Color(hex: 0x333333))
@@ -1136,6 +1139,7 @@ struct RecitationScreen: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 10)
+                .frame(height: 58)
                 .background(
                     RoundedRectangle(cornerRadius: 36)
                         .fill(Color(hex: 0x333333))
@@ -1353,7 +1357,7 @@ struct RecitationScreen: View {
             .buttonStyle(.borderedProminent)
             .tint(.indigo)
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, 7)
             .padding(.bottom, 16)
         }
     }
@@ -3205,6 +3209,7 @@ struct RecitationScreen: View {
 
             Spacer().frame(height: 0)
         }
+        .padding(.bottom, viewModel.currentMode == .typing ? 0 : -10)
         .offset(y: viewModel.isMasterMode ? 65 : 0)
         .animation(.easeInOut(duration: 0.4), value: viewModel.isMasterMode)
     }
@@ -3230,7 +3235,7 @@ struct RecitationScreen: View {
             }
         }
         .padding(.horizontal)
-        .padding(.top, 8)
+        .padding(.top, 7)
         .padding(.bottom, 4)
     }
 
@@ -3577,46 +3582,46 @@ struct LevelRevealSlider: View {
                 .animation(.easeInOut(duration: 0.3), value: level == 4)
                 .offset(x: offsetX)
                 .animation(.easeInOut(duration: 0.35), value: normalizedPosition)
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { drag in
-                            if !isDragging {
-                                isDragging = true
-                                dragStartLevel = level
-                                showNumber = true
-                                hideTimer?.invalidate()
-                            }
-                            let raw = (drag.location.x - thumbSize / 2) / width
-                            let clamped = min(max(raw, 0), 1)
-                            // Snap to nearest level based on thresholds
-                            var newLevel = 3
-                            for snap in Self.snapPoints.reversed() {
-                                if clamped >= snap.threshold {
-                                    newLevel = snap.level
-                                    break
-                                }
-                            }
-                            // Only allow reading mode (level 4) if the drag started from level 1 (90%)
-                            if newLevel == 4 && dragStartLevel != 1 {
-                                newLevel = 1
-                            }
-                            if newLevel != level {
-                                level = newLevel
-                            }
-                        }
-                        .onEnded { _ in
-                            isDragging = false
-                            hideTimer?.invalidate()
-                            hideTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
-                                DispatchQueue.main.async {
-                                    withAnimation(.easeInOut(duration: 0.3)) {
-                                        showNumber = false
-                                    }
-                                }
-                            }
-                        }
-                )
+                .allowsHitTesting(false)
             }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        if !isDragging {
+                            isDragging = true
+                            dragStartLevel = level
+                            showNumber = true
+                            hideTimer?.invalidate()
+                        }
+                        let raw = (drag.location.x - thumbSize / 2) / width
+                        let clamped = min(max(raw, 0), 1)
+                        var newLevel = 3
+                        for snap in Self.snapPoints.reversed() {
+                            if clamped >= snap.threshold {
+                                newLevel = snap.level
+                                break
+                            }
+                        }
+                        if newLevel == 4 && dragStartLevel != 1 {
+                            newLevel = 1
+                        }
+                        if newLevel != level {
+                            level = newLevel
+                        }
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                        hideTimer?.invalidate()
+                        hideTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
+                            DispatchQueue.main.async {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showNumber = false
+                                }
+                            }
+                        }
+                    }
+            )
             .frame(height: thumbSize)
         }
         .frame(height: 26)
@@ -4241,7 +4246,7 @@ struct ResultsView: View {
                     .scaleEffect(drainScales[i])
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, 7)
             .onAppear {
                 // Drain crowns one by one: bounce large → drain → shrink small
                 for i in 0..<previousStreak {
@@ -4332,7 +4337,7 @@ struct ResultsView: View {
                     .scaleEffect(isNewCrown ? crownBounceScale : 1.0)
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, 7)
             .onAppear {
                 // Start with previous crowns already filled
                 animatedPassStreak = quote.masteryStreak
@@ -4427,7 +4432,7 @@ struct ResultsView: View {
                     CrownFillView(fillLevel: 1.0, size: 36)
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, 7)
             .opacity(showCrownSlam ? 1 : 0)
             .animation(.easeIn(duration: 0.3).delay(0.8), value: showCrownSlam)
 

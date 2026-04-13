@@ -727,9 +727,18 @@ final class RecitationViewModel: NSObject, ObservableObject {
         previousWordWasMistake = false
         hintCount = 0
 
-        applyLevelReveal()
-
-        if currentMode == .multipleChoice { generateChoices() }
+        if isReadingMode {
+            revealPercentage = 100
+            letterRevealStep = 5
+            currentPosition = 0
+            for i in words.indices {
+                words[i].state = .pending
+                words[i].isRevealed = true
+            }
+        } else {
+            applyLevelReveal()
+            if currentMode == .multipleChoice { generateChoices() }
+        }
     }
 
     // MARK: - Master Mode
