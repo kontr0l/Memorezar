@@ -105,6 +105,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -189,7 +190,7 @@ fun QuoteLibraryScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Library",
+                    text = stringResource(R.string.library),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
@@ -197,7 +198,7 @@ fun QuoteLibraryScreen(
                 IconButton(onClick = onNavigateToQuoteInput) {
                     Icon(
                         painter = painterResource(R.drawable.icon_addquote),
-                        contentDescription = "Add Quote",
+                        contentDescription = stringResource(R.string.add_quote),
                         tint = Color.Unspecified,
                         modifier = Modifier.size(32.dp)
                     )
@@ -237,7 +238,7 @@ fun QuoteLibraryScreen(
                             DropdownMenuItem(
                                 text = {
                                     Text(
-                                        if (category.sourcePackId != null) "Remove Pack" else "Delete Category",
+                                        if (category.sourcePackId != null) stringResource(R.string.remove_pack) else stringResource(R.string.delete_category),
                                         color = MaterialTheme.colorScheme.error
                                     )
                                 },
@@ -271,13 +272,13 @@ fun QuoteLibraryScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         ActionTip(
-                            text = TipDefinition.addCategory.content,
+                            text = stringResource(TipDefinition.addCategory.contentRes),
                             visible = tutorialStore?.shouldShowTip(TipDefinition.addCategory) == true,
                             wiggle = true
                         ) {
                             Icon(
                                 painter = painterResource(R.drawable.icon_addfolder),
-                                contentDescription = "New Category",
+                                contentDescription = stringResource(R.string.new_category),
                                 tint = Color.Unspecified,
                                 modifier = Modifier.size(80.dp)
                             )
@@ -294,16 +295,17 @@ fun QuoteLibraryScreen(
     categoryToDelete?.let { cat ->
         val count = quotes.count { it.categoryId == cat.id }
         val isPack = cat.sourcePackId != null
+        val quotesWord = if (count == 1) stringResource(R.string.quote_singular) else stringResource(R.string.quote_plural)
         AlertDialog(
             onDismissRequest = { categoryToDelete = null },
             title = {
-                Text(if (isPack) "Remove ${cat.name}?" else "Delete ${cat.name}?")
+                Text(if (isPack) stringResource(R.string.remove_name, cat.name) else stringResource(R.string.delete_name, cat.name))
             },
             text = {
                 Text(
-                    if (isPack) "This will remove the pack and its $count ${if (count == 1) "quote" else "quotes"}. You can re-add it anytime from Browse."
-                    else if (count > 0) "This will permanently delete $count ${if (count == 1) "quote" else "quotes"} in this category."
-                    else "This category has no quotes."
+                    if (isPack) stringResource(R.string.remove_pack_message, count, quotesWord)
+                    else if (count > 0) stringResource(R.string.delete_category_message, count, quotesWord)
+                    else stringResource(R.string.category_no_quotes)
                 )
             },
             confirmButton = {
@@ -312,13 +314,13 @@ fun QuoteLibraryScreen(
                     categoryToDelete = null
                 }) {
                     Text(
-                        if (isPack) "Remove" else "Delete",
+                        if (isPack) stringResource(R.string.remove) else stringResource(R.string.delete),
                         color = MaterialTheme.colorScheme.error
                     )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { categoryToDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { categoryToDelete = null }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -417,7 +419,7 @@ private fun CategoryCard(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "$quoteCount ${if (quoteCount == 1) "quote" else "quotes"}",
+                    text = stringResource(R.string.quotes_format, quoteCount),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.8f)
                 )
@@ -519,13 +521,13 @@ fun CategoryDetailScreen(
                                 BrainCharacterView(character = BrainCharacter.WORK1, size = 120.dp)
                                 Spacer(Modifier.height(12.dp))
                                 Text(
-                                    text = "No quotes in this category",
+                                    text = stringResource(R.string.no_quotes_in_category),
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    text = if (isPack) "This pack appears to be empty"
-                                    else "Add a new quote to get started",
+                                    text = if (isPack) stringResource(R.string.pack_appears_empty)
+                                    else stringResource(R.string.add_quote_to_get_started),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -539,9 +541,9 @@ fun CategoryDetailScreen(
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Spacer(Modifier.height(8.dp))
-                                Text("No results found", style = MaterialTheme.typography.titleMedium)
+                                Text(stringResource(R.string.no_results_found), style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    "Try a different search term",
+                                    stringResource(R.string.try_different_search),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -630,7 +632,7 @@ fun CategoryDetailScreen(
                     ) {
                         Icon(
                             Icons.Default.ChevronLeft,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.back),
                             modifier = Modifier.size(24.dp),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
@@ -647,7 +649,7 @@ fun CategoryDetailScreen(
                         )
                     } else {
                         Text(
-                            "Library",
+                            stringResource(R.string.library),
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.bodyLarge,
                             modifier = Modifier
@@ -664,7 +666,7 @@ fun CategoryDetailScreen(
                         IconButton(onClick = { onAddQuote(categoryId) }) {
                             Icon(
                                 painter = painterResource(R.drawable.icon_addquote),
-                                contentDescription = "Add Quote",
+                                contentDescription = stringResource(R.string.add_quote),
                                 tint = Color.Unspecified,
                                 modifier = Modifier.size(28.dp)
                             )
@@ -678,16 +680,16 @@ fun CategoryDetailScreen(
     quoteToDelete?.let { q ->
         AlertDialog(
             onDismissRequest = { quoteToDelete = null },
-            title = { Text("Delete Quote") },
-            text = { Text("Delete \"${q.title}\"?") },
+            title = { Text(stringResource(R.string.delete_quote)) },
+            text = { Text(stringResource(R.string.delete_quote_name, q.title)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteQuote(q)
                     quoteToDelete = null
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                TextButton(onClick = { quoteToDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { quoteToDelete = null }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -803,7 +805,7 @@ private fun CategoryDetailHeader(
                     decorationBox = { innerTextField ->
                         if (searchText.isEmpty()) {
                             Text(
-                                "Search in ${category.name}...",
+                                stringResource(R.string.search_in_category, category.name),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -930,13 +932,13 @@ private fun CategorySettingsSheet(
                     modifier = Modifier.align(Alignment.CenterStart)
                 ) {
                     Text(
-                        if (isPack) "Done" else "Cancel",
+                        if (isPack) stringResource(R.string.done) else stringResource(R.string.cancel),
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
                 // Center: Title
                 Text(
-                    if (isPack) "Pack Settings" else "Category Settings",
+                    if (isPack) stringResource(R.string.pack_settings) else stringResource(R.string.category_settings),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.align(Alignment.Center)
@@ -954,7 +956,7 @@ private fun CategorySettingsSheet(
                         modifier = Modifier.align(Alignment.CenterEnd)
                     ) {
                         Text(
-                            "Save",
+                            stringResource(R.string.save),
                             fontWeight = FontWeight.SemiBold,
                             color = if (name.isNotBlank()) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant
@@ -973,7 +975,7 @@ private fun CategorySettingsSheet(
             ) {
                 if (!isPack) {
                     // Name section
-                    SettingsSectionHeader("NAME")
+                    SettingsSectionHeader(stringResource(R.string.name_header))
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -996,7 +998,7 @@ private fun CategorySettingsSheet(
                     Spacer(Modifier.height(20.dp))
 
                     // Cover Photo section
-                    SettingsSectionHeader("COVER PHOTO")
+                    SettingsSectionHeader(stringResource(R.string.cover_photo_header))
                     CoverPhotoSection(
                         coverImageUrl = coverImageUrl,
                         onAddPhoto = { showPhotoSourcePicker = true },
@@ -1033,7 +1035,7 @@ private fun CategorySettingsSheet(
                             )
                             Spacer(Modifier.width(12.dp))
                             Text(
-                                "Download as PDF",
+                                stringResource(R.string.download_as_pdf),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -1063,7 +1065,7 @@ private fun CategorySettingsSheet(
                         )
                         Spacer(Modifier.width(12.dp))
                         Text(
-                            if (isPack) "Remove Pack" else "Delete Category",
+                            if (isPack) stringResource(R.string.remove_pack) else stringResource(R.string.delete_category),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -1071,8 +1073,9 @@ private fun CategorySettingsSheet(
                 }
 
                 if (isPack) {
+                    val quotesWord = if (quoteCount == 1) stringResource(R.string.quote_singular) else stringResource(R.string.quote_plural)
                     Text(
-                        "This will remove the pack and its $quoteCount ${if (quoteCount == 1) "quote" else "quotes"}. You can re-add it anytime from Browse.",
+                        stringResource(R.string.remove_pack_message, quoteCount, quotesWord),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp)
@@ -1097,16 +1100,17 @@ private fun CategorySettingsSheet(
     }
 
     if (showDeleteConfirmation) {
+        val quotesWord = if (quoteCount == 1) stringResource(R.string.quote_singular) else stringResource(R.string.quote_plural)
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = {
-                Text(if (isPack) "Remove ${category.name}?" else "Delete ${category.name}?")
+                Text(if (isPack) stringResource(R.string.remove_name, category.name) else stringResource(R.string.delete_name, category.name))
             },
             text = {
                 Text(
-                    if (isPack) "This will remove the pack and its $quoteCount ${if (quoteCount == 1) "quote" else "quotes"}. You can re-add it anytime from Browse."
-                    else if (quoteCount > 0) "This will permanently delete $quoteCount ${if (quoteCount == 1) "quote" else "quotes"} in this category."
-                    else "This category has no quotes."
+                    if (isPack) stringResource(R.string.remove_pack_message, quoteCount, quotesWord)
+                    else if (quoteCount > 0) stringResource(R.string.delete_category_message, quoteCount, quotesWord)
+                    else stringResource(R.string.category_no_quotes)
                 )
             },
             confirmButton = {
@@ -1115,13 +1119,13 @@ private fun CategorySettingsSheet(
                     onDelete()
                 }) {
                     Text(
-                        if (isPack) "Remove" else "Delete",
+                        if (isPack) stringResource(R.string.remove) else stringResource(R.string.delete),
                         color = MaterialTheme.colorScheme.error
                     )
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteConfirmation = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteConfirmation = false }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }
@@ -1166,7 +1170,7 @@ private fun SwipeableQuoteRow(
                 ) {
                     Icon(
                         Icons.Default.Edit,
-                        contentDescription = "Edit",
+                        contentDescription = stringResource(R.string.edit),
                         tint = Color.White
                     )
                 }
@@ -1181,7 +1185,7 @@ private fun SwipeableQuoteRow(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.icon_trash),
-                        contentDescription = "Delete",
+                        contentDescription = stringResource(R.string.delete),
                         tint = Color.White,
                         modifier = Modifier.size(24.dp)
                     )
@@ -1243,7 +1247,7 @@ private fun QuoteListRow(
                 val chunkCount = quote.chunks?.size ?: 0
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "$chunkCount parts",
+                    text = stringResource(R.string.parts_format, chunkCount),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = IndigoColor,
@@ -1259,7 +1263,7 @@ private fun QuoteListRow(
             if (quote.practiceCount > 0) {
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "\uD83C\uDFAF ${quote.practiceCount} attempts ${(quote.bestAccuracy * 100).toInt()}%",
+                    text = stringResource(R.string.attempts_accuracy_format, quote.practiceCount, (quote.bestAccuracy * 100).toInt()),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1275,7 +1279,7 @@ private fun QuoteListRow(
             Spacer(Modifier.weight(1f))
 
             Text(
-                text = "${quote.wordCount} words",
+                text = stringResource(R.string.words_format, quote.wordCount),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1327,7 +1331,7 @@ private fun NewCategorySheet(
                 .padding(24.dp)
         ) {
             Text(
-                "New Category",
+                stringResource(R.string.new_category),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
@@ -1346,7 +1350,7 @@ private fun NewCategorySheet(
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it },
-                label = { Text("Category Name") },
+                label = { Text(stringResource(R.string.category_name_label)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1355,12 +1359,12 @@ private fun NewCategorySheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                 Spacer(Modifier.width(8.dp))
                 TextButton(
                     onClick = { onSave(name.trim(), coverImageUrl) },
                     enabled = name.isNotBlank()
-                ) { Text("Save") }
+                ) { Text(stringResource(R.string.save)) }
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -1400,7 +1404,7 @@ private fun CoverPhotoSection(
         ) {
             AsyncImage(
                 model = if (coverImageUrl.startsWith("/")) Uri.fromFile(File(coverImageUrl)) else coverImageUrl,
-                contentDescription = "Cover photo",
+                contentDescription = stringResource(R.string.cover_photo),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1409,7 +1413,7 @@ private fun CoverPhotoSection(
             // Remove button
             Icon(
                 Icons.Default.Close,
-                contentDescription = "Remove photo",
+                contentDescription = stringResource(R.string.remove),
                 tint = Color.White,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -1441,7 +1445,7 @@ private fun CoverPhotoSection(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Add Cover Photo",
+                    stringResource(R.string.add_cover_photo),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1484,7 +1488,7 @@ private fun PhotoSourcePickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Cover Photo") },
+        title = { Text(stringResource(R.string.cover_photo)) },
         text = {
             Column {
                 Row(
@@ -1496,7 +1500,7 @@ private fun PhotoSourcePickerDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("🖼️", style = MaterialTheme.typography.titleMedium)
-                    Text("Choose from Gallery", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.choose_from_gallery), style = MaterialTheme.typography.bodyLarge)
                 }
                 HorizontalDivider()
                 Row(
@@ -1508,13 +1512,13 @@ private fun PhotoSourcePickerDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text("🔍", style = MaterialTheme.typography.titleMedium)
-                    Text("Search Online", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.search_online), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         }
     )
 }
@@ -1548,14 +1552,14 @@ private fun UnsplashSearchContent(
         ) {
             Icon(
                 Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.back),
                 modifier = Modifier
                     .size(24.dp)
                     .clickable(onClick = onBack),
                 tint = MaterialTheme.colorScheme.primary
             )
             Text(
-                "Search Online",
+                stringResource(R.string.search_online),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
@@ -1568,7 +1572,7 @@ private fun UnsplashSearchContent(
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text("Search photos...") },
+            placeholder = { Text(stringResource(R.string.search_photos)) },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
@@ -1609,7 +1613,7 @@ private fun UnsplashSearchContent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "No photos found",
+                    stringResource(R.string.no_photos_found),
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1646,7 +1650,7 @@ private fun UnsplashPhotoCard(
         Box {
             AsyncImage(
                 model = photo.smallURL,
-                contentDescription = "Photo by ${photo.photographerName}",
+                contentDescription = stringResource(R.string.photo_by, photo.photographerName),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1802,8 +1806,8 @@ private fun generateAndSharePdf(context: android.content.Context, packName: Stri
         )
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_clock)
-            .setContentTitle("PDF Downloaded")
-            .setContentText("$fileName saved to Downloads")
+            .setContentTitle(context.getString(R.string.pdf_downloaded))
+            .setContentText(context.getString(R.string.pdf_saved_to_downloads, fileName))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
@@ -1814,7 +1818,7 @@ private fun generateAndSharePdf(context: android.content.Context, packName: Stri
         }
 
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            Toast.makeText(context, "PDF saved to Downloads", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.pdf_saved_toast), Toast.LENGTH_SHORT).show()
             // Open the PDF immediately
             try {
                 context.startActivity(openIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -1825,7 +1829,7 @@ private fun generateAndSharePdf(context: android.content.Context, packName: Stri
     } else {
         document.close()
         android.os.Handler(android.os.Looper.getMainLooper()).post {
-            Toast.makeText(context, "Failed to save PDF", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.pdf_save_failed), Toast.LENGTH_SHORT).show()
         }
     }
 }

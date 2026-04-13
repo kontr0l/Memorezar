@@ -38,11 +38,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.memorezar.app.R
 import com.memorezar.app.data.services.AuthService
 import kotlinx.coroutines.launch
 
@@ -81,7 +83,7 @@ fun AuthSheet(
             title = {},
             actions = {
                 IconButton(onClick = onDismiss) {
-                    Icon(Icons.Default.Close, "Close")
+                    Icon(Icons.Default.Close, stringResource(R.string.close))
                 }
             }
         )
@@ -93,11 +95,11 @@ fun AuthSheet(
             tint = MaterialTheme.colorScheme.primary
         )
         Text(
-            text = if (isSignUp) "Create Account" else "Sign In",
+            text = if (isSignUp) stringResource(R.string.create_account) else stringResource(R.string.sign_in),
             style = MaterialTheme.typography.headlineSmall
         )
         Text(
-            text = "Sign in to share recordings with the community",
+            text = stringResource(R.string.sign_in_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -110,19 +112,19 @@ fun AuthSheet(
             onClick = onGoogleSignIn,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Sign in with Google")
+            Text(stringResource(R.string.sign_in_google))
         }
 
         // Divider
         HorizontalDivider()
-        Text("or", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(stringResource(R.string.or), color = MaterialTheme.colorScheme.onSurfaceVariant)
 
         // Email form
         if (isSignUp) {
             OutlinedTextField(
                 value = displayName,
                 onValueChange = { displayName = it },
-                label = { Text("Name") },
+                label = { Text(stringResource(R.string.name)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
@@ -132,7 +134,7 @@ fun AuthSheet(
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") },
+            label = { Text(stringResource(R.string.email)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             keyboardOptions = KeyboardOptions(
@@ -144,7 +146,7 @@ fun AuthSheet(
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password") },
+            label = { Text(stringResource(R.string.password)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
@@ -179,14 +181,14 @@ fun AuthSheet(
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
             } else {
-                Text(if (isSignUp) "Create Account" else "Sign In")
+                Text(if (isSignUp) stringResource(R.string.create_account) else stringResource(R.string.sign_in))
             }
         }
 
         TextButton(onClick = { isSignUp = !isSignUp; errorMessage = null }) {
             Text(
-                if (isSignUp) "Already have an account? Sign In"
-                else "Don't have an account? Sign Up"
+                if (isSignUp) stringResource(R.string.already_have_account)
+                else stringResource(R.string.no_account)
             )
         }
     }

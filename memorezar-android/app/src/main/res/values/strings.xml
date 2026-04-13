@@ -36,7 +36,7 @@
     <string name="visual_flash">Visual Flash</string>
     <string name="haptic_feedback">Haptic Feedback</string>
     <string name="test_mistake_alert">Test Mistake Alert</string>
-    <string name="alert_footer">Choose how you want to be notified during recitation.</string>
+    <string name="alert_footer">Choose how you want to be notified during recitation. Default plays clean tones, Memes plays random funny sounds.</string>
     <string name="display">Display</string>
     <string name="default_mode">Default Mode</string>
     <string name="first_letter_mode">First Letter Mode</string>
@@ -50,7 +50,16 @@
     <string name="account">Account</string>
     <string name="sign_in">Sign In</string>
     <string name="sign_out">Sign Out</string>
-    <string name="sign_in_footer">Sign in to share recordings with the community.</string>
+    <string name="sign_in_footer">Sign in to back up your data and share recordings.</string>
+    <string name="apple_account">Apple Account</string>
+    <string name="signed_in_with_apple">Signed in with Apple</string>
+    <string name="back_up_now">Back Up Now</string>
+    <string name="restore_from_backup">Restore from Backup</string>
+    <string name="restore_from_cloud_title">Restore from cloud backup?</string>
+    <string name="restore_from_cloud_message">This will replace all local data with your cloud backup.</string>
+    <string name="replace_with_cloud_data">Replace with Cloud Data</string>
+    <string name="backing_up">Backing up…</string>
+    <string name="last_backed_up">Last backed up %1$s</string>
     <string name="data">Data</string>
     <string name="reset_settings">Reset Settings</string>
     <string name="delete_all_data">Delete All Data</string>
@@ -71,13 +80,18 @@
     <string name="mistakes_format">%1$d mistake%2$s out of %3$d words</string>
 
     <!-- Onboarding -->
-    <string name="how_practice">How would you like to practice?</string>
-    <string name="change_later">You can change this later in Settings</string>
+    <string name="how_practice">How do you want to practice?</string>
+    <string name="change_later">You can always change this later.</string>
     <string name="voice">Voice</string>
     <string name="recite_out_loud">Recite out loud</string>
     <string name="typing">Typing</string>
     <string name="type_from_memory">Type from memory</string>
-    <string name="how_hidden">How should words be hidden?</string>
+    <string name="how_hidden">How should we hide the words?</string>
+    <string name="how_much_type">How much do you want to type?</string>
+    <string name="lets_try">Let\'s try</string>
+    <string name="tutorial_quote_display">"\"Happy birthday to you\""</string>
+    <string name="type_full_missing_word">Type full\nmissing word</string>
+    <string name="type_only_first_letter">Type only\nfirst letter</string>
     <string name="normal">Normal</string>
     <string name="words_fully_hidden">Words are fully hidden</string>
     <string name="first_letter">First Letter</string>
@@ -150,8 +164,87 @@
     <string name="familiar">Familiar</string>
     <string name="proficient">Proficient</string>
 
+    <!-- Home (additional) -->
+    <string name="no_quotes_yet_home">No quotes yet</string>
+    <string name="add_quote_get_started">Add a quote or browse packs to get started!</string>
+    <string name="add_your_own">Add your own</string>
+    <string name="streak">Streak</string>
+    <string name="see_all">See All</string>
+    <string name="request_quote_pack">Request a\nQuote Pack</string>
+    <string name="today">Today</string>
+    <string name="memorezar_logo">Memorezar</string>
+    <string name="quotes_count_format">%d quotes</string>
+
+    <!-- Contact Support (additional) -->
+    <string name="whats_this_about">What\'s this about?</string>
+    <string name="your_email">Your Email</string>
+    <string name="email_explanation">So we can get back to you.</string>
+    <string name="failed_to_submit">Failed to submit</string>
+
+    <!-- Auth (additional) -->
+    <string name="close">Close</string>
+    <string name="sign_in_subtitle">Sign in to share recordings with the community</string>
+
+    <!-- Accuracy (additional) -->
+    <string name="unknown_quote">Unknown</string>
+
+    <!-- Streak (additional) -->
+    <string name="practiced">Practiced</string>
+
     <!-- Reset/Delete alerts -->
     <string name="reset_settings_message">This will reset all settings to their default values.</string>
     <string name="reset">Reset</string>
     <string name="delete_all_data_message">This will delete all your quotes, practice history, and statistics. This action cannot be undone.</string>
+
+    <!-- Library (additional) -->
+    <string name="remove_pack">Remove Pack</string>
+    <string name="new_category">New Category</string>
+    <string name="no_quotes_in_category">No quotes in this category</string>
+    <string name="pack_appears_empty">This pack appears to be empty</string>
+    <string name="add_quote_to_get_started">Add a new quote to get started</string>
+    <string name="no_results_found">No results found</string>
+    <string name="try_different_search">Try a different search term</string>
+    <string name="remove_name">Remove %1$s?</string>
+    <string name="delete_name">Delete %1$s?</string>
+    <string name="remove_pack_message">This will remove the pack and its %1$d %2$s. You can re-add it anytime from Browse.</string>
+    <string name="delete_category_message">This will permanently delete %1$d %2$s in this category.</string>
+    <string name="category_no_quotes">This category has no quotes.</string>
+    <string name="remove">Remove</string>
+    <string name="delete_quote_name">Delete \"%1$s\"?</string>
+    <string name="pack_settings">Pack Settings</string>
+    <string name="category_settings">Category Settings</string>
+    <string name="save">Save</string>
+    <string name="name_header">NAME</string>
+    <string name="cover_photo_header">COVER PHOTO</string>
+    <string name="download_as_pdf">Download as PDF</string>
+    <string name="quote_singular">quote</string>
+    <string name="quote_plural">quotes</string>
+    <string name="parts_format">%d parts</string>
+    <string name="attempts_accuracy_format">\uD83C\uDFAF %1$d attempts %2$d%%</string>
+    <string name="category_name_label">Category Name</string>
+    <string name="cover_photo">Cover Photo</string>
+    <string name="choose_from_gallery">Choose from Gallery</string>
+    <string name="search_online">Search Online</string>
+    <string name="search_photos">Search photos\u2026</string>
+    <string name="no_photos_found">No photos found</string>
+    <string name="add_cover_photo">Add Cover Photo</string>
+    <string name="search_in_category">Search in %1$s\u2026</string>
+    <string name="edit">Edit</string>
+    <string name="photo_by">Photo by %1$s</string>
+    <string name="pdf_downloaded">PDF Downloaded</string>
+    <string name="pdf_saved_to_downloads">%1$s saved to Downloads</string>
+    <string name="pdf_saved_toast">PDF saved to Downloads</string>
+    <string name="pdf_save_failed">Failed to save PDF</string>
+
+    <!-- Tips -->
+    <string name="tip_add_own_quote">Add your\nown quote</string>
+    <string name="tip_add_category">Add your own\ncategory</string>
+    <string name="tip_browse_packs">Explore curated packs\nof quotes to add\nto your library</string>
+    <string name="tip_split_long_quote">Try splitting into smaller chunks</string>
+
+    <!-- Default category -->
+    <string name="my_quotes">My Quotes</string>
+
+    <!-- Pack detail -->
+    <string name="add_to_library">Add to Library</string>
 </resources>

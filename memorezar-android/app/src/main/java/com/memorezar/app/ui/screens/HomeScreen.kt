@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -125,7 +126,7 @@ fun HomeScreen(
         ) {
             Image(
                 painter = painterResource(R.drawable.memorezar_logo),
-                contentDescription = "Memorezar",
+                contentDescription = stringResource(R.string.memorezar_logo),
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
                     .height(40.dp),
@@ -144,13 +145,13 @@ fun HomeScreen(
             //                     the section header (top-right trailing)
             val showTrailingAdd = continuePracticing.size > 2
             SectionHeaderWithIcon(
-                title = "Continue Practicing",
+                title = stringResource(R.string.continue_practicing),
                 icon = "play",
                 color = Color(0xFF2196F3),
                 trailing = if (showTrailingAdd) {
                     {
                         Text(
-                            text = "Add Quote",
+                            text = stringResource(R.string.add_quote),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF2196F3),
                             modifier = Modifier.clickable {
@@ -178,7 +179,7 @@ fun HomeScreen(
                             )
                         }
                         ActionTip(
-                            text = TipDefinition.addOwnQuote.content,
+                            text = stringResource(TipDefinition.addOwnQuote.contentRes),
                             visible = shouldShowTip(TipDefinition.addOwnQuote),
                             wiggle = true,
                             horizontalAlign = com.memorezar.app.ui.components.TipHorizontalAlign.Center
@@ -207,7 +208,7 @@ fun HomeScreen(
                             )
                         }
                         ActionTip(
-                            text = TipDefinition.addOwnQuote.content,
+                            text = stringResource(TipDefinition.addOwnQuote.contentRes),
                             visible = shouldShowTip(TipDefinition.addOwnQuote),
                             wiggle = true,
                             horizontalAlign = com.memorezar.app.ui.components.TipHorizontalAlign.Center
@@ -242,7 +243,7 @@ fun HomeScreen(
         } else {
           Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             SectionHeaderWithIcon(
-                title = "Get Started",
+                title = stringResource(R.string.get_started),
                 icon = "play",
                 color = Color(0xFF2196F3)
             )
@@ -266,13 +267,13 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            "No quotes yet",
+                            stringResource(R.string.no_quotes_yet_home),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            "Add a quote or browse packs to get started!",
+                            stringResource(R.string.add_quote_get_started),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -280,7 +281,7 @@ fun HomeScreen(
                 }
                 // Add quote tile
                 ActionTip(
-                    text = TipDefinition.addOwnQuote.content,
+                    text = stringResource(TipDefinition.addOwnQuote.contentRes),
                     visible = shouldShowTip(TipDefinition.addOwnQuote),
                     wiggle = true
                 ) {
@@ -304,14 +305,14 @@ fun HomeScreen(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                "Add your own",
+                                stringResource(R.string.add_your_own),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(Modifier.height(8.dp))
                             Icon(
                                 painter = painterResource(R.drawable.icon_addquote),
-                                contentDescription = "Add Quote",
+                                contentDescription = stringResource(R.string.add_quote),
                                 tint = Color.Unspecified,
                                 modifier = Modifier.size(36.dp)
                             )
@@ -325,7 +326,7 @@ fun HomeScreen(
         // Stats Section
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SectionHeaderWithIcon(
-            title = "Your Progress",
+            title = stringResource(R.string.your_progress),
             icon = "chart",
             color = Color(0xFF34C759)
         )
@@ -338,25 +339,25 @@ fun HomeScreen(
             val avg = viewModel.quoteStore.averageAccuracy
 
             StatCard(
-                iconText = "👑",
+                iconText = "\uD83D\uDC51",
                 value = "$mastered",
-                label = "Mastered",
+                label = stringResource(R.string.mastered),
                 color = Color(0xFFFFC107),
                 modifier = Modifier.weight(1f),
                 onClick = onNavigateToMasteredQuotes
             )
             StatCard(
-                iconText = "🔥",
+                iconText = "\uD83D\uDD25",
                 value = "${streak}d",
-                label = "Streak",
+                label = stringResource(R.string.streak),
                 color = Color(0xFFFF5722),
                 modifier = Modifier.weight(1f),
                 onClick = onNavigateToStreakDetail
             )
             StatCard(
-                iconText = "🎯",
+                iconText = "\uD83C\uDFAF",
                 value = "${(avg * 100).toInt()}%",
-                label = "Accuracy",
+                label = stringResource(R.string.accuracy),
                 color = Color(0xFF34C759),
                 modifier = Modifier.weight(1f),
                 onClick = onNavigateToAccuracyDetail
@@ -368,17 +369,17 @@ fun HomeScreen(
         if (availablePacks.isNotEmpty()) {
           Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ActionTip(
-                text = TipDefinition.browsePacks.content,
+                text = stringResource(TipDefinition.browsePacks.contentRes),
                 visible = shouldShowTip(TipDefinition.browsePacks),
                 delayMs = 1000L
             ) {
                 SectionHeaderWithIcon(
-                    title = "Browse Quote Packs",
+                    title = stringResource(R.string.browse_quote_packs),
                     icon = "search",
                     color = IndigoColor,
                     trailing = {
                         Text(
-                            text = "See All",
+                            text = stringResource(R.string.see_all),
                             style = MaterialTheme.typography.bodyMedium,
                             color = IndigoColor,
                             modifier = Modifier.clickable {
@@ -457,9 +458,9 @@ private fun SectionHeaderWithIcon(
             )
             // Use emoji icons for play and chart to avoid needing extra drawables
             if (icon == "play") {
-                Text("▶", color = color, modifier = Modifier.padding(end = 6.dp))
+                Text("\u25B6", color = color, modifier = Modifier.padding(end = 6.dp))
             } else if (icon == "chart") {
-                Text("📊", modifier = Modifier.padding(end = 6.dp))
+                Text("\uD83D\uDCCA", modifier = Modifier.padding(end = 6.dp))
             } else {
                 Spacer(Modifier.width(6.dp))
             }
@@ -482,7 +483,7 @@ private fun SectionHeaderWithIcon(
 private fun AddQuoteIconButton(onClick: () -> Unit) {
     Icon(
         painter = painterResource(R.drawable.icon_addquote),
-        contentDescription = "Add Quote",
+        contentDescription = stringResource(R.string.add_quote),
         tint = Color.Unspecified,
         modifier = Modifier
             .size(36.dp)
@@ -555,7 +556,7 @@ private fun AddQuoteCard(onClick: () -> Unit) {
                 .padding(12.dp)
         ) {
             Text(
-                "Add your own",
+                stringResource(R.string.add_your_own),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold
             )
@@ -567,7 +568,7 @@ private fun AddQuoteCard(onClick: () -> Unit) {
             ) {
                 Icon(
                     painter = painterResource(R.drawable.icon_addquote),
-                    contentDescription = "Add Quote",
+                    contentDescription = stringResource(R.string.add_quote),
                     tint = Color.Unspecified,
                     modifier = Modifier.size(48.dp)
                 )
@@ -673,7 +674,7 @@ fun PackCard(pack: SuggestionPack, onClick: () -> Unit = {}) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${pack.quotes.size} quotes",
+                    text = stringResource(R.string.quotes_count_format, pack.quotes.size),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.8f)
                 )
@@ -710,12 +711,12 @@ fun PackRequestCard(onClick: () -> Unit) {
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "📩",
+                    text = "\uD83D\uDCE9",
                     style = MaterialTheme.typography.headlineLarge
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Request a\nQuote Pack",
+                    text = stringResource(R.string.request_quote_pack),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = IndigoColor,

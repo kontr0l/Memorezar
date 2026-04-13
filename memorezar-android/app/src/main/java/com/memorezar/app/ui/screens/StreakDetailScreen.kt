@@ -33,8 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.memorezar.app.R
 import com.memorezar.app.data.storage.QuoteStore
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -81,10 +83,10 @@ fun StreakDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Streak") },
+                title = { Text(stringResource(R.string.streak)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
                     }
                 }
             )
@@ -111,7 +113,7 @@ fun StreakDetailScreen(
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🔥", style = MaterialTheme.typography.headlineMedium)
+                    Text("\uD83D\uDD25", style = MaterialTheme.typography.headlineMedium)
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -121,7 +123,7 @@ fun StreakDetailScreen(
                     color = Color(0xFFFF5722)
                 )
                 Text(
-                    "Current Streak",
+                    stringResource(R.string.current_streak),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -132,13 +134,13 @@ fun StreakDetailScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                StatBox("Total Days", "$totalDays", Modifier.weight(1f))
-                StatBox("This Week", "$sessionsThisWeek", Modifier.weight(1f))
+                StatBox(stringResource(R.string.total_days), "$totalDays", Modifier.weight(1f))
+                StatBox(stringResource(R.string.this_week), "$sessionsThisWeek", Modifier.weight(1f))
             }
 
             // Practice History
             if (last30Days.any { it.sessionCount > 0 }) {
-                Text("Last 30 Days", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.last_30_days), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Card {
                     Column {
                         last30Days.forEachIndexed { index, day ->
@@ -151,7 +153,7 @@ fun StreakDetailScreen(
                                 if (day.sessionCount > 0) {
                                     Icon(
                                         Icons.Default.Check,
-                                        contentDescription = "Practiced",
+                                        contentDescription = stringResource(R.string.practiced),
                                         tint = Color(0xFF34C759),
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -166,7 +168,7 @@ fun StreakDetailScreen(
                                 )
                                 if (day.sessionCount > 0) {
                                     Text(
-                                        "${day.sessionCount} sessions",
+                                        stringResource(R.string.sessions_format, day.sessionCount),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

@@ -36,7 +36,7 @@
     <string name="visual_flash">Destello Visual</string>
     <string name="haptic_feedback">Retroalimentación Háptica</string>
     <string name="test_mistake_alert">Probar Alerta de Error</string>
-    <string name="alert_footer">Elige cómo quieres ser notificado durante la recitación.</string>
+    <string name="alert_footer">Elige cómo quieres ser notificado durante la recitación. Predeterminado reproduce tonos limpios, Memes reproduce sonidos graciosos al azar.</string>
     <string name="display">Pantalla</string>
     <string name="default_mode">Modo Predeterminado</string>
     <string name="first_letter_mode">Modo Primera Letra</string>
@@ -50,7 +50,16 @@
     <string name="account">Cuenta</string>
     <string name="sign_in">Iniciar Sesión</string>
     <string name="sign_out">Cerrar Sesión</string>
-    <string name="sign_in_footer">Inicia sesión para compartir grabaciones con la comunidad.</string>
+    <string name="sign_in_footer">Inicia sesión para respaldar tus datos y compartir grabaciones.</string>
+    <string name="apple_account">Cuenta Apple</string>
+    <string name="signed_in_with_apple">Sesión con Apple</string>
+    <string name="back_up_now">Respaldar Ahora</string>
+    <string name="restore_from_backup">Restaurar de Respaldo</string>
+    <string name="restore_from_cloud_title">¿Restaurar de respaldo en la nube?</string>
+    <string name="restore_from_cloud_message">Esto reemplazará todos los datos locales con tu respaldo en la nube.</string>
+    <string name="replace_with_cloud_data">Reemplazar con Datos de la Nube</string>
+    <string name="backing_up">Respaldando…</string>
+    <string name="last_backed_up">Último respaldo %1$s</string>
     <string name="data">Datos</string>
     <string name="reset_settings">Restablecer Ajustes</string>
     <string name="delete_all_data">Eliminar Todos los Datos</string>
@@ -71,13 +80,18 @@
     <string name="mistakes_format">%1$d error%2$s de %3$d palabras</string>
 
     <!-- Onboarding -->
-    <string name="how_practice">¿Cómo te gustaría practicar?</string>
-    <string name="change_later">Puedes cambiarlo después en Ajustes</string>
+    <string name="how_practice">¿Cómo quieres practicar?</string>
+    <string name="change_later">Siempre puedes cambiarlo después.</string>
     <string name="voice">Voz</string>
     <string name="recite_out_loud">Recita en voz alta</string>
     <string name="typing">Escritura</string>
     <string name="type_from_memory">Escribe de memoria</string>
-    <string name="how_hidden">¿Cómo se deben ocultar las palabras?</string>
+    <string name="how_hidden">¿Cómo ocultamos las palabras?</string>
+    <string name="how_much_type">¿Cuánto quieres escribir?</string>
+    <string name="lets_try">Probemos</string>
+    <string name="tutorial_quote_display">"\"Feliz cumpleaños a ti\""</string>
+    <string name="type_full_missing_word">Escribe la palabra\ncompleta</string>
+    <string name="type_only_first_letter">Escribe solo\nla primera letra</string>
     <string name="normal">Normal</string>
     <string name="words_fully_hidden">Las palabras están completamente ocultas</string>
     <string name="first_letter">Primera Letra</string>
@@ -150,8 +164,87 @@
     <string name="familiar">Familiar</string>
     <string name="proficient">Competente</string>
 
+    <!-- Home (additional) -->
+    <string name="no_quotes_yet_home">Aún no hay citas</string>
+    <string name="add_quote_get_started">¡Agrega una cita o explora paquetes para empezar!</string>
+    <string name="add_your_own">Agrega la tuya</string>
+    <string name="streak">Racha</string>
+    <string name="see_all">Ver Todo</string>
+    <string name="request_quote_pack">Solicitar un\nPaquete de Citas</string>
+    <string name="today">Hoy</string>
+    <string name="memorezar_logo">Memorezar</string>
+    <string name="quotes_count_format">%d citas</string>
+
+    <!-- Contact Support (additional) -->
+    <string name="whats_this_about">¿De qué se trata?</string>
+    <string name="your_email">Tu Correo Electrónico</string>
+    <string name="email_explanation">Para poder responderte.</string>
+    <string name="failed_to_submit">Error al enviar</string>
+
+    <!-- Auth (additional) -->
+    <string name="close">Cerrar</string>
+    <string name="sign_in_subtitle">Inicia sesión para compartir grabaciones con la comunidad</string>
+
+    <!-- Accuracy (additional) -->
+    <string name="unknown_quote">Desconocido</string>
+
+    <!-- Streak (additional) -->
+    <string name="practiced">Practicado</string>
+
     <!-- Reset/Delete alerts -->
     <string name="reset_settings_message">Esto restablecerá todos los ajustes a sus valores predeterminados.</string>
     <string name="reset">Restablecer</string>
     <string name="delete_all_data_message">Esto eliminará todas tus citas, historial de práctica y estadísticas. Esta acción no se puede deshacer.</string>
+
+    <!-- Library (additional) -->
+    <string name="remove_pack">Eliminar paquete</string>
+    <string name="new_category">Nueva categoría</string>
+    <string name="no_quotes_in_category">No hay citas en esta categoría</string>
+    <string name="pack_appears_empty">Este paquete parece estar vacío</string>
+    <string name="add_quote_to_get_started">Agrega una nueva cita para empezar</string>
+    <string name="no_results_found">No se encontraron resultados</string>
+    <string name="try_different_search">Prueba con otro término de búsqueda</string>
+    <string name="remove_name">¿Eliminar %1$s?</string>
+    <string name="delete_name">¿Eliminar %1$s?</string>
+    <string name="remove_pack_message">Esto eliminará el paquete y sus %1$d %2$s. Puedes volver a agregarlo desde Explorar.</string>
+    <string name="delete_category_message">Esto eliminará permanentemente %1$d %2$s en esta categoría.</string>
+    <string name="category_no_quotes">Esta categoría no tiene citas.</string>
+    <string name="remove">Eliminar</string>
+    <string name="delete_quote_name">¿Eliminar \"%1$s\"?</string>
+    <string name="pack_settings">Ajustes del paquete</string>
+    <string name="category_settings">Ajustes de categoría</string>
+    <string name="save">Guardar</string>
+    <string name="name_header">NOMBRE</string>
+    <string name="cover_photo_header">FOTO DE PORTADA</string>
+    <string name="download_as_pdf">Descargar como PDF</string>
+    <string name="quote_singular">cita</string>
+    <string name="quote_plural">citas</string>
+    <string name="parts_format">%d partes</string>
+    <string name="attempts_accuracy_format">\uD83C\uDFAF %1$d intentos %2$d%%</string>
+    <string name="category_name_label">Nombre de Categoría</string>
+    <string name="cover_photo">Foto de Portada</string>
+    <string name="choose_from_gallery">Elegir de la galería</string>
+    <string name="search_online">Buscar en línea</string>
+    <string name="search_photos">Buscar fotos\u2026</string>
+    <string name="no_photos_found">No se encontraron fotos</string>
+    <string name="add_cover_photo">Agregar foto de portada</string>
+    <string name="search_in_category">Buscar en %1$s\u2026</string>
+    <string name="edit">Editar</string>
+    <string name="photo_by">Foto de %1$s</string>
+    <string name="pdf_downloaded">PDF Descargado</string>
+    <string name="pdf_saved_to_downloads">%1$s guardado en Descargas</string>
+    <string name="pdf_saved_toast">PDF guardado en Descargas</string>
+    <string name="pdf_save_failed">Error al guardar PDF</string>
+
+    <!-- Tips -->
+    <string name="tip_add_own_quote">Agrega tu\npropia cita</string>
+    <string name="tip_add_category">Agrega tu propia\ncategoría</string>
+    <string name="tip_browse_packs">Explora paquetes curados\nde citas para agregar\na tu biblioteca</string>
+    <string name="tip_split_long_quote">Intenta dividir en secciones más pequeñas</string>
+
+    <!-- Default category -->
+    <string name="my_quotes">Mis Citas</string>
+
+    <!-- Pack detail -->
+    <string name="add_to_library">Agregar a la biblioteca</string>
 </resources>

@@ -133,7 +133,7 @@ fun AppNavigation(
 
     val showBottomBar = currentRoute != null && !currentRoute.startsWith("recitation/")
             && currentRoute != "streak_detail" && currentRoute != "accuracy_detail"
-            && currentRoute != "pack_detail" && currentRoute != "pack_search"
+            && currentRoute != "pack_search"
             && currentRoute != "mastered_quotes"
 
     Scaffold(
@@ -304,6 +304,7 @@ fun AppNavigation(
                         pack = pack,
                         isAdded = isAdded,
                         isPro = purchaseService.hasFullAccess,
+                        bottomNavHeight = padding.calculateBottomPadding(),
                         onAddToLibrary = { p ->
                             quoteStore.addSuggestionPack(p)
                             // Pop pack_detail off the stack first, then switch to Library tab

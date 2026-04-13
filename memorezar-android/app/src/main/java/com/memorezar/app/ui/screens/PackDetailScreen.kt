@@ -1,10 +1,11 @@
 package com.memorezar.app.ui.screens
 
+import android.graphics.Typeface
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -26,7 +27,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -40,15 +40,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import com.memorezar.app.R
 import com.memorezar.app.data.models.LanguageHelper
 import com.memorezar.app.data.models.SuggestionPack
 import com.memorezar.app.data.models.SuggestionQuote
@@ -61,6 +68,7 @@ fun PackDetailScreen(
     pack: SuggestionPack,
     isAdded: Boolean,
     isPro: Boolean,
+    bottomNavHeight: Dp = 0.dp,
     onAddToLibrary: (SuggestionPack) -> Unit,
     onShowPaywall: () -> Unit,
     onBack: () -> Unit
@@ -69,243 +77,264 @@ fun PackDetailScreen(
     var added by remember { mutableStateOf(isAdded) }
     val scrollState = rememberScrollState()
 
-    // Show pack name in toolbar once scrolled past the cover image
     val showTitleInBar by remember {
         derivedStateOf { scrollState.value > 400 }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (showTitleInBar) {
-                        Text(
-                            text = pack.localizedName(lang),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = if (showTitleInBar) MaterialTheme.colorScheme.onSurface else Color.White
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = if (showTitleInBar)
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
-                    else
-                        Color.Transparent
-                )
-            )
-        },
-        containerColor = Color.Transparent
-    ) { innerPadding ->
-        // Scrollable content — cover image goes behind the transparent toolbar
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-        ) {
-            // Cover image header
-            Box(
+    // Paint for Canvas-drawn quote marks (bypasses Compose text clipping)
+    val quoteColor = IndigoColor.copy(alpha = 0.25f)
+    val density = LocalDensity.current
+    val quoteFontSizePx = with(density) { 80.sp.toPx() }
+    val quotePaint = remember {
+        android.graphics.Paint().apply {
+            textSize = quoteFontSizePx
+            typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
+            color = quoteColor.toArgb()
+            isAntiAlias = true
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = bottomNavHeight)
+    ) {
+        // Main layout: scrollable content + pinned button
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Scrollable content
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(260.dp)
+                    .weight(1f)
+                    .verticalScroll(scrollState)
             ) {
-                // Cover image or gradient fallback
-                if (pack.coverURL != null) {
-                    AsyncImage(
-                        model = pack.coverURL,
-                        contentDescription = pack.localizedName(lang),
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
+                // Cover image header
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(260.dp)
+                ) {
+                    if (pack.coverURL != null) {
+                        AsyncImage(
+                            model = pack.coverURL,
+                            contentDescription = pack.localizedName(lang),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            IndigoColor.copy(alpha = 0.6f),
+                                            Color(0xFF9C27B0).copy(alpha = 0.8f)
+                                        )
+                                    )
+                                )
+                        )
+                    }
+
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(
-                                Brush.linearGradient(
+                                Brush.verticalGradient(
                                     colors = listOf(
-                                        IndigoColor.copy(alpha = 0.6f),
-                                        Color(0xFF9C27B0).copy(alpha = 0.8f)
-                                    )
+                                        Color.Transparent,
+                                        Color.Black.copy(alpha = 0.7f)
+                                    ),
+                                    startY = 130f
                                 )
                             )
                     )
-                }
 
-                // Dark gradient overlay
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.7f)
-                                ),
-                                startY = 130f
-                            )
-                        )
-                )
-
-                // Name and quote count
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = pack.localizedName(lang),
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Text(
-                        text = "${pack.quotes.size} quotes",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
-            }
-
-            // Content below cover
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                // Description
-                Text(
-                    text = pack.localizedDescription(lang),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Quote preview section
-                Column {
-                    // Opening quote mark
-                    Text(
-                        text = "\u201C",
-                        fontSize = 80.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Serif,
-                        color = IndigoColor.copy(alpha = 0.25f),
-                        lineHeight = 80.sp,
-                        modifier = Modifier.padding(bottom = 0.dp)
-                    )
-
-                    // Preview snippets
                     Column(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .align(Alignment.BottomStart)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        pack.quotes.take(3).forEach { quote ->
-                            Text(
-                                text = snippetDisplay(quote, lang),
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontStyle = FontStyle.Italic,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                        Text(
+                            text = pack.localizedName(lang),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "${pack.quotes.size} quotes",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
                     }
-
-                    // Closing quote mark
-                    Text(
-                        text = "\u201D",
-                        fontSize = 80.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Serif,
-                        color = IndigoColor.copy(alpha = 0.25f),
-                        lineHeight = 80.sp,
-                        textAlign = TextAlign.End,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
 
-                // Add to Library button
-                val canAccess = pack.isFree || isPro
-                Button(
-                    onClick = {
-                        if (!added) {
-                            if (canAccess) {
-                                onAddToLibrary(pack)
-                                added = true
-                            } else {
-                                onShowPaywall()
+                // Content below cover
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    Text(
+                        text = pack.localizedDescription(lang),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Quote preview section
+                    Column {
+                        // Opening quote mark — Canvas to avoid Compose text clipping
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                        ) {
+                            val text = "\u201C"
+                            val bounds = android.graphics.Rect()
+                            quotePaint.getTextBounds(text, 0, text.length, bounds)
+                            val y = (size.height + bounds.height()) / 2f
+                            drawIntoCanvas { canvas ->
+                                canvas.nativeCanvas.drawText(text, 0f, y, quotePaint)
                             }
                         }
-                    },
-                    enabled = !added,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = IndigoColor,
-                        disabledContainerColor = IndigoColor.copy(alpha = 0.5f)
-                    ),
-                    shape = CircleShape,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                ) {
-                    if (added) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Added to Library",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    } else {
-                        Text(
-                            "Add to Library",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Icon(
-                            Icons.Default.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        if (!pack.isFree && !isPro) {
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = "PRO",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                modifier = Modifier
-                                    .background(
-                                        Color(0xFFFF9800),
-                                        RoundedCornerShape(4.dp)
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+
+                        // Preview snippets
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            pack.quotes.take(3).forEach { quote ->
+                                Text(
+                                    text = snippetDisplay(quote, lang),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontStyle = FontStyle.Italic,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+
+                        // Closing quote mark — Canvas
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(60.dp)
+                        ) {
+                            val text = "\u201D"
+                            val bounds = android.graphics.Rect()
+                            quotePaint.getTextBounds(text, 0, text.length, bounds)
+                            val y = (size.height + bounds.height()) / 2f
+                            val x = size.width - bounds.width() - bounds.left
+                            drawIntoCanvas { canvas ->
+                                canvas.nativeCanvas.drawText(text, x, y, quotePaint)
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            // Add to Library button — pinned just above the bottom nav
+            val canAccess = pack.isFree || isPro
+            Button(
+                onClick = {
+                    if (!added) {
+                        if (canAccess) {
+                            onAddToLibrary(pack)
+                            added = true
+                        } else {
+                            onShowPaywall()
+                        }
+                    }
+                },
+                enabled = !added,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = IndigoColor,
+                    disabledContainerColor = IndigoColor.copy(alpha = 0.5f)
+                ),
+                shape = CircleShape,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 8.dp, bottom = 12.dp)
+                    .height(50.dp)
+            ) {
+                if (added) {
+                    Icon(
+                        Icons.Default.Check,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Added to Library",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                } else {
+                    Text(
+                        stringResource(R.string.add_to_library),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    if (!pack.isFree && !isPro) {
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "PRO",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier
+                                .background(
+                                    Color(0xFFFF9800),
+                                    RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
         }
+
+        // Floating TopAppBar overlay
+        TopAppBar(
+            title = {
+                if (showTitleInBar) {
+                    Text(
+                        text = pack.localizedName(lang),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = if (showTitleInBar) MaterialTheme.colorScheme.onSurface else Color.White
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = if (showTitleInBar)
+                    MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                else
+                    Color.Transparent
+            )
+        )
     }
 }
 

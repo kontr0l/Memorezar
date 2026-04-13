@@ -33,8 +33,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.memorezar.app.R
 import com.memorezar.app.data.storage.QuoteStore
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,10 +62,10 @@ fun AccuracyDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Accuracy") },
+                title = { Text(stringResource(R.string.accuracy)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
                     }
                 }
             )
@@ -90,7 +92,7 @@ fun AccuracyDetailScreen(
                         .background(MaterialTheme.colorScheme.surfaceVariant),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🎯", style = MaterialTheme.typography.headlineMedium)
+                    Text("\uD83C\uDFAF", style = MaterialTheme.typography.headlineMedium)
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
@@ -100,13 +102,13 @@ fun AccuracyDetailScreen(
                     color = accuracyColor(avgAccuracy)
                 )
                 Text(
-                    "Overall Accuracy",
+                    stringResource(R.string.overall_accuracy),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 improvement?.let {
                     val sign = if (it >= 0) "+" else ""
-                    val arrow = if (it >= 0) "↑" else "↓"
+                    val arrow = if (it >= 0) "\u2191" else "\u2193"
                     Text(
                         text = "$arrow ${sign}${(it * 100).toInt()}% vs previous",
                         style = MaterialTheme.typography.bodySmall,
@@ -117,7 +119,7 @@ fun AccuracyDetailScreen(
 
             // Per-Quote Breakdown
             if (practicedQuotes.isNotEmpty()) {
-                Text("Per-Quote Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.per_quote_breakdown), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Card {
                     Column {
                         practicedQuotes.forEachIndexed { index, quote ->
@@ -130,7 +132,7 @@ fun AccuracyDetailScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(quote.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                                     Text(
-                                        "${quote.practiceCount} sessions",
+                                        stringResource(R.string.sessions_format, quote.practiceCount),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -152,7 +154,7 @@ fun AccuracyDetailScreen(
 
             // Recent Sessions
             if (recentSessions.isNotEmpty()) {
-                Text("Recent Sessions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.recent_sessions), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Card {
                     Column {
                         recentSessions.forEachIndexed { index, session ->
@@ -165,7 +167,7 @@ fun AccuracyDetailScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        quote?.title ?: "Unknown",
+                                        quote?.title ?: stringResource(R.string.unknown_quote),
                                         style = MaterialTheme.typography.bodyMedium
                                     )
                                     Text(

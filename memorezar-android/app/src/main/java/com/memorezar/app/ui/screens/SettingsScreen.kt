@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -122,23 +123,23 @@ fun SettingsScreen(
         ) {
             // Title (scrolls away)
             Text(
-                text = "Settings",
+                text = stringResource(R.string.settings),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
             )
 
             // ── Alerts ──
-            SectionHeader("Alerts")
+            SectionHeader(stringResource(R.string.alerts))
             SettingsCard {
-                IconToggleRow(ImageVector.vectorResource(R.drawable.ic_speaker_wave), "Sound Alerts", settings.audioAlertEnabled) {
+                IconToggleRow(ImageVector.vectorResource(R.drawable.ic_speaker_wave), stringResource(R.string.sound_alerts), settings.audioAlertEnabled) {
                     settingsStore.updateSettings(settings.copy(audioAlertEnabled = it))
                 }
                 if (settings.audioAlertEnabled) {
                     CardDivider()
                     IconPickerRow(
                         icon = ImageVector.vectorResource(R.drawable.ic_music_note),
-                        label = "Sound Theme",
+                        label = stringResource(R.string.sound_theme),
                         value = settings.soundTheme.displayName,
                         options = SoundTheme.entries.map { it.displayName },
                         onSelect = { selected ->
@@ -149,29 +150,29 @@ fun SettingsScreen(
                     )
                 }
                 CardDivider()
-                IconToggleRow(ImageVector.vectorResource(R.drawable.ic_lightbulb), "Visual Flash", settings.visualAlertEnabled) {
+                IconToggleRow(ImageVector.vectorResource(R.drawable.ic_lightbulb), stringResource(R.string.visual_flash), settings.visualAlertEnabled) {
                     settingsStore.updateSettings(settings.copy(visualAlertEnabled = it))
                 }
                 CardDivider()
-                IconToggleRow(ImageVector.vectorResource(R.drawable.ic_vibration), "Haptic Feedback", settings.hapticAlertEnabled) {
+                IconToggleRow(ImageVector.vectorResource(R.drawable.ic_vibration), stringResource(R.string.haptic_feedback), settings.hapticAlertEnabled) {
                     settingsStore.updateSettings(settings.copy(hapticAlertEnabled = it))
                 }
                 CardDivider()
-                IconClickRow(ImageVector.vectorResource(R.drawable.ic_bell), "Test Mistake Alert") {
+                IconClickRow(ImageVector.vectorResource(R.drawable.ic_bell), stringResource(R.string.test_mistake_alert)) {
                     alertManager.triggerMistakeAlert()
                     if (settings.visualAlertEnabled) {
                         showTestFlash = true
                     }
                 }
             }
-            SectionFooter("Choose how you want to be notified during recitation. Default plays clean tones, Memes plays random funny sounds.")
+            SectionFooter(stringResource(R.string.alert_footer))
 
             // ── Display ──
-            SectionHeader("Display")
+            SectionHeader(stringResource(R.string.display))
             SettingsCard {
                 IconPickerRow(
                     icon = ImageVector.vectorResource(R.drawable.ic_view_module),
-                    label = "Default Mode",
+                    label = stringResource(R.string.default_mode),
                     value = settings.defaultMemorizationMode.displayName,
                     options = MemorizationMode.entries.filter { it != MemorizationMode.AUDIO }.map { it.displayName },
                     onSelect = { selected ->
@@ -183,14 +184,14 @@ fun SettingsScreen(
                     settings.defaultMemorizationMode == MemorizationMode.TYPING
                 ) {
                     CardDivider()
-                    IconToggleRow(ImageVector.vectorResource(R.drawable.ic_abc), "First Letter Mode", settings.firstLetterModeEnabled) {
+                    IconToggleRow(ImageVector.vectorResource(R.drawable.ic_abc), stringResource(R.string.first_letter_mode), settings.firstLetterModeEnabled) {
                         settingsStore.updateSettings(settings.copy(firstLetterModeEnabled = it))
                     }
                 }
                 CardDivider()
                 IconPickerRow(
                     icon = ImageVector.vectorResource(R.drawable.ic_font_download),
-                    label = "Font Size",
+                    label = stringResource(R.string.font_size),
                     value = settings.fontSize.displayName,
                     options = FontSize.entries.map { it.displayName },
                     onSelect = { selected ->
@@ -201,7 +202,7 @@ fun SettingsScreen(
                 CardDivider()
                 IconPickerRow(
                     icon = ImageVector.vectorResource(R.drawable.ic_palette),
-                    label = "Theme",
+                    label = stringResource(R.string.theme),
                     value = settings.theme.displayName,
                     options = AppTheme.entries.map { it.displayName },
                     onSelect = { selected ->
@@ -212,19 +213,19 @@ fun SettingsScreen(
             }
 
             // ── Statistics ──
-            SectionHeader("Statistics")
+            SectionHeader(stringResource(R.string.statistics))
             SettingsCard {
-                IconInfoRow(ImageVector.vectorResource(R.drawable.ic_repeat), "Total Sessions", "${quoteStore.totalPracticeSessions}")
+                IconInfoRow(ImageVector.vectorResource(R.drawable.ic_repeat), stringResource(R.string.total_sessions), "${quoteStore.totalPracticeSessions}")
                 CardDivider()
-                IconInfoRow(ImageVector.vectorResource(R.drawable.ic_crown), "Quotes Mastered", "${quoteStore.masteredQuotesCount}")
+                IconInfoRow(ImageVector.vectorResource(R.drawable.ic_crown), stringResource(R.string.quotes_mastered), "${quoteStore.masteredQuotesCount}")
                 CardDivider()
-                IconInfoRow(ImageVector.vectorResource(R.drawable.ic_target), "Average Accuracy", "${(quoteStore.averageAccuracy * 100).toInt()}%")
+                IconInfoRow(ImageVector.vectorResource(R.drawable.ic_target), stringResource(R.string.average_accuracy), "${(quoteStore.averageAccuracy * 100).toInt()}%")
                 CardDivider()
-                IconInfoRow(ImageVector.vectorResource(R.drawable.ic_clock), "Total Practice Time", formatDuration(quoteStore.totalPracticeTime))
+                IconInfoRow(ImageVector.vectorResource(R.drawable.ic_clock), stringResource(R.string.total_practice_time), formatDuration(quoteStore.totalPracticeTime))
             }
 
             // ── Account ──
-            SectionHeader("Account")
+            SectionHeader(stringResource(R.string.account))
             SettingsCard {
                 if (currentUser != null) {
                     val displayEmail = currentUser?.email
@@ -232,9 +233,9 @@ fun SettingsScreen(
                     val displayName = if (!isPrivateRelay && !displayEmail.isNullOrEmpty()) {
                         currentUser?.displayName ?: displayEmail.substringBefore("@")
                     } else {
-                        "Apple Account"
+                        stringResource(R.string.apple_account)
                     }
-                    IconInfoRow(Icons.Default.Person, displayName, if (isPrivateRelay) "Signed in with Apple" else (displayEmail ?: ""))
+                    IconInfoRow(Icons.Default.Person, displayName, if (isPrivateRelay) stringResource(R.string.signed_in_with_apple) else (displayEmail ?: ""))
                     CardDivider()
 
                     // Backup
@@ -243,71 +244,71 @@ fun SettingsScreen(
                     val backupExists by cloudBackupService.cloudBackupExists.collectAsState()
                     var showRestoreConfirm by remember { mutableStateOf(false) }
                     val backupSubtext = when {
-                        backupState == CloudBackupService.BackupState.BACKING_UP -> "Backing up..."
+                        backupState == CloudBackupService.BackupState.BACKING_UP -> stringResource(R.string.backing_up)
                         lastBackup != null -> cloudBackupService.formatRelativeTime(lastBackup!!)
                         else -> ""
                     }
                     val coroutineScope = rememberCoroutineScope()
 
-                    IconClickRow(Icons.Default.ArrowUpward, "Back Up Now") {
+                    IconClickRow(Icons.Default.ArrowUpward, stringResource(R.string.back_up_now)) {
                         coroutineScope.launch { cloudBackupService.performBackup() }
                     }
                     CardDivider()
-                    IconClickRow(Icons.Default.ArrowDownward, "Restore from Backup") {
+                    IconClickRow(Icons.Default.ArrowDownward, stringResource(R.string.restore_from_backup)) {
                         showRestoreConfirm = true
                     }
 
                     if (showRestoreConfirm) {
                         AlertDialog(
                             onDismissRequest = { showRestoreConfirm = false },
-                            title = { Text("Restore from cloud backup?") },
-                            text = { Text("This will replace all local data with your cloud backup.") },
+                            title = { Text(stringResource(R.string.restore_from_cloud_title)) },
+                            text = { Text(stringResource(R.string.restore_from_cloud_message)) },
                             confirmButton = {
                                 TextButton(onClick = {
                                     showRestoreConfirm = false
                                     coroutineScope.launch { cloudBackupService.fetchAndRestore() }
-                                }) { Text("Replace with Cloud Data", color = MaterialTheme.colorScheme.error) }
+                                }) { Text(stringResource(R.string.replace_with_cloud_data), color = MaterialTheme.colorScheme.error) }
                             },
                             dismissButton = {
-                                TextButton(onClick = { showRestoreConfirm = false }) { Text("Cancel") }
+                                TextButton(onClick = { showRestoreConfirm = false }) { Text(stringResource(R.string.cancel)) }
                             }
                         )
                     }
 
                     CardDivider()
-                    IconClickRow(Icons.AutoMirrored.Outlined.ExitToApp, "Sign Out", color = MaterialTheme.colorScheme.error) {
+                    IconClickRow(Icons.AutoMirrored.Outlined.ExitToApp, stringResource(R.string.sign_out), color = MaterialTheme.colorScheme.error) {
                         authService.signOut()
                     }
                 } else {
-                    IconClickRow(Icons.Default.Person, "Sign In") { onShowAuthSheet() }
+                    IconClickRow(Icons.Default.Person, stringResource(R.string.sign_in)) { onShowAuthSheet() }
                 }
             }
             if (currentUser != null) {
                 val lastBackup by cloudBackupService.lastBackupDate.collectAsState()
                 if (lastBackup != null) {
-                    SectionFooter("Last backed up ${cloudBackupService.formatRelativeTime(lastBackup!!)}")
+                    SectionFooter(stringResource(R.string.last_backed_up, cloudBackupService.formatRelativeTime(lastBackup!!)))
                 }
             }
             if (currentUser == null) {
-                SectionFooter("Sign in to back up your data and share recordings.")
+                SectionFooter(stringResource(R.string.sign_in_footer))
             }
 
             // ── Data ──
-            SectionHeader("Data")
+            SectionHeader(stringResource(R.string.data))
             SettingsCard {
-                IconClickRow(Icons.Default.Refresh, "Reset Settings") { showResetAlert = true }
+                IconClickRow(Icons.Default.Refresh, stringResource(R.string.reset_settings)) { showResetAlert = true }
                 CardDivider()
-                IconClickRow(Icons.Default.Delete, "Delete All Data", color = MaterialTheme.colorScheme.error) {
+                IconClickRow(Icons.Default.Delete, stringResource(R.string.delete_all_data), color = MaterialTheme.colorScheme.error) {
                     showDeleteDataAlert = true
                 }
             }
 
             // ── About ──
-            SectionHeader("About")
+            SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, "Version", "v2.5.0")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.17")
                 CardDivider()
-                IconClickRow(Icons.Default.Email, "Contact Support") { onShowContactSupport() }
+                IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
 
             Spacer(Modifier.height(80.dp))
@@ -353,7 +354,7 @@ fun SettingsScreen(
                 ) {
                     if (showNavTitle) {
                         Text(
-                            text = "Settings",
+                            text = stringResource(R.string.settings),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -366,16 +367,16 @@ fun SettingsScreen(
         if (showResetAlert) {
             AlertDialog(
                 onDismissRequest = { showResetAlert = false },
-                title = { Text("Reset Settings") },
-                text = { Text("This will reset all settings to their default values.") },
+                title = { Text(stringResource(R.string.reset_settings)) },
+                text = { Text(stringResource(R.string.reset_settings_message)) },
                 confirmButton = {
                     TextButton(onClick = {
                         settingsStore.resetToDefaults()
                         showResetAlert = false
-                    }) { Text("Reset", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(stringResource(R.string.reset), color = MaterialTheme.colorScheme.error) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showResetAlert = false }) { Text("Cancel") }
+                    TextButton(onClick = { showResetAlert = false }) { Text(stringResource(R.string.cancel)) }
                 }
             )
         }
@@ -383,17 +384,17 @@ fun SettingsScreen(
         if (showDeleteDataAlert) {
             AlertDialog(
                 onDismissRequest = { showDeleteDataAlert = false },
-                title = { Text("Delete All Data") },
-                text = { Text("This will delete all your quotes, practice history, and statistics. This action cannot be undone.") },
+                title = { Text(stringResource(R.string.delete_all_data)) },
+                text = { Text(stringResource(R.string.delete_all_data_message)) },
                 confirmButton = {
                     TextButton(onClick = {
                         quoteStore.clearAllData()
                         tutorialStore.resetAll()
                         showDeleteDataAlert = false
-                    }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showDeleteDataAlert = false }) { Text("Cancel") }
+                    TextButton(onClick = { showDeleteDataAlert = false }) { Text(stringResource(R.string.cancel)) }
                 }
             )
         }

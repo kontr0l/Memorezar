@@ -34,8 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.memorezar.app.R
 import com.memorezar.app.data.services.AuthService
 import com.memorezar.app.data.services.SupportReason
 import com.memorezar.app.data.services.SupportTicketService
@@ -61,8 +63,8 @@ fun ContactSupportScreen(
     var showSuccess by remember { mutableStateOf(false) }
 
     val isValid = email.contains("@") && message.isNotBlank()
-    val title = if (initialReason == SupportReason.QUOTE_PACK_REQUEST) "Quote Pack Request"
-        else "Contact Support"
+    val title = if (initialReason == SupportReason.QUOTE_PACK_REQUEST) stringResource(R.string.quote_pack_request)
+        else stringResource(R.string.contact_support)
 
     val fieldShape = RoundedCornerShape(12.dp)
     val fieldColors = TextFieldDefaults.colors(
@@ -74,6 +76,7 @@ fun ContactSupportScreen(
 
     val pillShape = RoundedCornerShape(50)
     val pillColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+    val failedToSubmitText = stringResource(R.string.failed_to_submit)
 
     Column(
         modifier = Modifier
@@ -96,7 +99,7 @@ fun ContactSupportScreen(
                 modifier = Modifier
                     .background(pillColor, pillShape)
             ) {
-                Text("Cancel", style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.cancel), style = MaterialTheme.typography.bodyLarge)
             }
             Text(
                 title,
@@ -112,7 +115,7 @@ fun ContactSupportScreen(
                             supportTicketService.submitTicket(reason, message, email)
                             showSuccess = true
                         } catch (e: Exception) {
-                            errorMessage = e.message ?: "Failed to submit"
+                            errorMessage = e.message ?: failedToSubmitText
                         } finally {
                             isSubmitting = false
                         }
@@ -128,14 +131,14 @@ fun ContactSupportScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Send", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.send), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
 
         // What's this about?
         Text(
-            "What's this about?",
+            stringResource(R.string.whats_this_about),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -147,10 +150,10 @@ fun ContactSupportScreen(
             onExpandedChange = { reasonExpanded = it }
         ) {
             TextField(
-                value = reason.displayName,
+                value = reason.displayName(),
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Reason") },
+                label = { Text(stringResource(R.string.reason)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = reasonExpanded) },
                 colors = fieldColors,
                 shape = fieldShape,
@@ -164,7 +167,7 @@ fun ContactSupportScreen(
             ) {
                 SupportReason.entries.forEach { r ->
                     DropdownMenuItem(
-                        text = { Text(r.displayName) },
+                        text = { Text(r.displayName()) },
                         onClick = {
                             reason = r
                             reasonExpanded = false
@@ -178,7 +181,7 @@ fun ContactSupportScreen(
 
         // Your Email
         Text(
-            "Your Email",
+            stringResource(R.string.your_email),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -186,14 +189,14 @@ fun ContactSupportScreen(
         TextField(
             value = email,
             onValueChange = { email = it },
-            placeholder = { Text("Email") },
+            placeholder = { Text(stringResource(R.string.email)) },
             colors = fieldColors,
             shape = fieldShape,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
         Text(
-            "So we can get back to you.",
+            stringResource(R.string.email_explanation),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp)
@@ -203,7 +206,7 @@ fun ContactSupportScreen(
 
         // Message
         Text(
-            "Message",
+            stringResource(R.string.message),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 6.dp)
@@ -235,20 +238,20 @@ fun ContactSupportScreen(
     if (showSuccess) {
         AlertDialog(
             onDismissRequest = { showSuccess = false; onDismiss() },
-            title = { Text("Message Sent!") },
-            text = { Text("Thanks for reaching out. We'll get back to you soon.") },
+            title = { Text(stringResource(R.string.message_sent)) },
+            text = { Text(stringResource(R.string.thanks_reaching_out)) },
             confirmButton = {
-                TextButton(onClick = { showSuccess = false; onDismiss() }) { Text("OK") }
+                TextButton(onClick = { showSuccess = false; onDismiss() }) { Text(stringResource(R.string.ok)) }
             }
         )
     }
 }
 
-private val SupportReason.displayName: String
-    get() = when (this) {
-        SupportReason.FEATURE_REQUEST -> "Feature Request"
-        SupportReason.QUOTE_PACK_REQUEST -> "Quote Pack Request"
-        SupportReason.BUG_REPORT -> "Bug Report"
-        SupportReason.AWESOME -> "Just Saying Hi!"
-        SupportReason.OTHER -> "Other"
-    }
+@Composable
+private fun SupportReason.displayName(): String = when (this) {
+    SupportReason.FEATURE_REQUEST -> stringResource(R.string.feature_request)
+    SupportReason.QUOTE_PACK_REQUEST -> stringResource(R.string.quote_pack_request)
+    SupportReason.BUG_REPORT -> stringResource(R.string.bug_report)
+    SupportReason.AWESOME -> stringResource(R.string.just_saying_hi)
+    SupportReason.OTHER -> stringResource(R.string.other)
+}

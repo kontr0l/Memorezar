@@ -34,8 +34,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
+import com.memorezar.app.R
 import com.memorezar.app.data.models.Quote
 import com.memorezar.app.data.models.QuoteCategory
 import com.memorezar.app.data.storage.QuoteStore
@@ -82,13 +84,13 @@ fun QuoteInputSheet(
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
         ) {
             Text(
-                if (editQuote != null) "Edit Quote" else "Add Quote",
+                if (editQuote != null) stringResource(R.string.edit_quote) else stringResource(R.string.add_quote),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
             )
             Icon(
                 Icons.Default.Close,
-                contentDescription = "Close",
+                contentDescription = stringResource(R.string.close),
                 modifier = Modifier
                     .size(28.dp)
                     .clickable { onDismiss() },
@@ -102,7 +104,7 @@ fun QuoteInputSheet(
         OutlinedTextField(
             value = title,
             onValueChange = { title = it },
-            label = { Text("Title") },
+            label = { Text(stringResource(R.string.title)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -118,7 +120,7 @@ fun QuoteInputSheet(
                 value = categories.firstOrNull { it.id == selectedCategoryId }?.name ?: "",
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Category") },
+                label = { Text(stringResource(R.string.category)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -146,7 +148,7 @@ fun QuoteInputSheet(
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
-            label = { Text("Quote Text") },
+            label = { Text(stringResource(R.string.quote_text)) },
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 120.dp),
@@ -155,7 +157,7 @@ fun QuoteInputSheet(
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Text(
-                "$wordCount words",
+                stringResource(R.string.words_format, wordCount),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -165,7 +167,7 @@ fun QuoteInputSheet(
 
         // Word preview
         if (text.isNotBlank()) {
-            Text("Preview", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.preview), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(4.dp))
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -191,9 +193,9 @@ fun QuoteInputSheet(
         // Tips for new quotes
         if (editQuote == null) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TipRow("💡", "Start with short quotes (1-2 sentences)")
-                TipRow("➡️", "Work up to longer texts as you improve")
-                TipRow("🔄", "Practice regularly for best results")
+                TipRow("\uD83D\uDCA1", stringResource(R.string.tip_short_quotes))
+                TipRow("➡\uFE0F", stringResource(R.string.tip_longer_texts))
+                TipRow("\uD83D\uDD04", stringResource(R.string.tip_practice_regularly))
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -223,7 +225,7 @@ fun QuoteInputSheet(
             modifier = Modifier.fillMaxWidth(),
             enabled = isValid
         ) {
-            Text(if (editQuote != null) "Save Changes" else "Add Quote")
+            Text(if (editQuote != null) stringResource(R.string.save_changes) else stringResource(R.string.add_quote))
         }
     }
 }

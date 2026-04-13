@@ -50,7 +50,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
+import com.memorezar.app.R
 import com.memorezar.app.data.models.MemorizationMode
 import com.memorezar.app.data.models.Quote
 import com.memorezar.app.data.services.AuthService
@@ -131,7 +133,7 @@ fun OnboardingFlow(
 
 @Composable
 private fun ModeChoiceStep(onSelectMode: (MemorizationMode) -> Unit) {
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Top section — centered content
         Column(
             modifier = Modifier
@@ -144,13 +146,13 @@ private fun ModeChoiceStep(onSelectMode: (MemorizationMode) -> Unit) {
             BrainCharacterView(character = BrainCharacter.PRAY1, size = 130.dp)
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "How do you want to practice?",
+                text = stringResource(R.string.how_practice),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
             Text(
-                text = "You can always change this later.",
+                text = stringResource(R.string.change_later),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -176,12 +178,12 @@ private fun ModeChoiceStep(onSelectMode: (MemorizationMode) -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         Icons.Default.Mic,
-                        contentDescription = "Voice",
+                        contentDescription = stringResource(R.string.voice),
                         modifier = Modifier.size(34.dp),
                         tint = BlueColor
                     )
                     Spacer(Modifier.height(10.dp))
-                    Text("Voice", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.voice), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
 
@@ -199,12 +201,12 @@ private fun ModeChoiceStep(onSelectMode: (MemorizationMode) -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
                         Icons.Default.Keyboard,
-                        contentDescription = "Typing",
+                        contentDescription = stringResource(R.string.typing),
                         modifier = Modifier.size(34.dp),
                         tint = IndigoColor
                     )
                     Spacer(Modifier.height(10.dp))
-                    Text("Typing", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.typing), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -236,7 +238,7 @@ private fun FirstLetterChoiceStep(
         wordAlpha.animateTo(0f, tween(1000))
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         // Top section — same 0.55f + Arrangement.Center as screen 1
         // Extra ~26dp spacer before character compensates for the extra content
         // (Let's try + words) so the character lands at the same Y as screen 1
@@ -254,7 +256,7 @@ private fun FirstLetterChoiceStep(
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = if (isVoice) "How should we hide the words?" else "How much do you want to type?",
+                text = if (isVoice) stringResource(R.string.how_hidden) else stringResource(R.string.how_much_type),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
@@ -265,12 +267,12 @@ private fun FirstLetterChoiceStep(
             // "Let's try" + tutorial phrase
             if (isVoice) {
                 Text(
-                    text = "Let's try",
+                    text = stringResource(R.string.lets_try),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "\"Happy birthday to you\"",
+                    text = stringResource(R.string.tutorial_quote_display),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     fontStyle = FontStyle.Italic,
@@ -278,7 +280,7 @@ private fun FirstLetterChoiceStep(
                 )
             } else {
                 Text(
-                    text = "Let's try",
+                    text = stringResource(R.string.lets_try),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -360,7 +362,7 @@ private fun FirstLetterChoiceStep(
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = BlueColor)
                     ) {
-                        Text("Normal", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(stringResource(R.string.normal), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
 
@@ -396,7 +398,7 @@ private fun FirstLetterChoiceStep(
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = IndigoColor)
                     ) {
-                        Text("First Letter", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(stringResource(R.string.first_letter), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
             }
@@ -411,7 +413,7 @@ private fun FirstLetterChoiceStep(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "Back",
+                    stringResource(R.string.back),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -485,7 +487,7 @@ private fun VoiceWordPreview(words: List<WordPreviewItem>) {
 @Composable
 private fun TypingPreview(word: String, fullWord: Boolean) {
     val letters = if (fullWord) word.toList() else listOf(word.first())
-    val description = if (fullWord) "Type full\nmissing word" else "Type only\nfirst letter"
+    val description = if (fullWord) stringResource(R.string.type_full_missing_word) else stringResource(R.string.type_only_first_letter)
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(

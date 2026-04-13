@@ -36,9 +36,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.memorezar.app.R
 import com.memorezar.app.data.services.PurchaseService
 import kotlinx.coroutines.launch
 
@@ -63,7 +65,7 @@ fun PaywallSheet(
         // Close button
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, "Close")
+                Icon(Icons.Default.Close, stringResource(R.string.close))
             }
         }
 
@@ -75,12 +77,12 @@ fun PaywallSheet(
             tint = Color(0xFFFFC107)
         )
         Text(
-            "Unlock Memorezar Pro",
+            stringResource(R.string.unlock_pro),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
         Text(
-            "Get the most out of your memorization practice",
+            stringResource(R.string.pro_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -89,11 +91,11 @@ fun PaywallSheet(
         Spacer(Modifier.height(8.dp))
 
         // Features
-        FeatureRow("Unlimited custom quotes")
-        FeatureRow("All sound themes")
-        FeatureRow("Text-to-speech for any quote")
-        FeatureRow("Community recordings")
-        FeatureRow("Access all quote packs")
+        FeatureRow(stringResource(R.string.unlimited_quotes))
+        FeatureRow(stringResource(R.string.all_sound_themes))
+        FeatureRow(stringResource(R.string.tts_feature))
+        FeatureRow(stringResource(R.string.community_recordings))
+        FeatureRow(stringResource(R.string.all_quote_packs))
 
         Spacer(Modifier.height(16.dp))
 
@@ -109,9 +111,9 @@ fun PaywallSheet(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Yearly", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.yearly), fontWeight = FontWeight.Bold)
                 Text(
-                    "Best Value — Save 44%",
+                    stringResource(R.string.best_value),
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF34C759)
                 )
@@ -125,7 +127,7 @@ fun PaywallSheet(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Monthly", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.monthly), fontWeight = FontWeight.Bold)
             }
         }
 
@@ -136,9 +138,9 @@ fun PaywallSheet(
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Lifetime", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.lifetime), fontWeight = FontWeight.Bold)
                 Text(
-                    "One-time purchase",
+                    stringResource(R.string.one_time_purchase),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -166,7 +168,7 @@ fun PaywallSheet(
                 }
             }
         }) {
-            Text("Restore Purchases")
+            Text(stringResource(R.string.restore_purchases))
         }
     }
 }

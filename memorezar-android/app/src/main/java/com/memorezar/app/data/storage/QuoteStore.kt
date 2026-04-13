@@ -46,6 +46,11 @@ private const val GRADIENT_PALETTE_COUNT = 12
 class QuoteStore @Inject constructor(
     @ApplicationContext context: Context
 ) {
+    private val localizedDefaultCategory = QuoteCategory(
+        id = DEFAULT_CATEGORY_ID,
+        name = context.getString(com.memorezar.app.R.string.my_quotes),
+        isDefault = true
+    )
     private val dataStore = context.dataStore
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -78,9 +83,18 @@ class QuoteStore @Inject constructor(
         loadSessions()
 
         // Ensure default category exists
-        if (_categories.value.none { it.id == QuoteCategory.defaultCategory.id }) {
-            val updated = listOf(QuoteCategory.defaultCategory) + _categories.value
+        if (_categories.value.none { it.id == localizedDefaultCategory.id }) {
+            val updated = listOf(localizedDefaultCategory) + _categories.value
             _categories.value = updated
+            saveCategories()
+        }
+
+        // Keep default category name in sync with current locale
+        val defaultCat = _categories.value.find { it.id == DEFAULT_CATEGORY_ID }
+        if (defaultCat != null && defaultCat.name != localizedDefaultCategory.name) {
+            _categories.value = _categories.value.map {
+                if (it.id == DEFAULT_CATEGORY_ID) it.copy(name = localizedDefaultCategory.name) else it
+            }
             saveCategories()
         }
 
@@ -519,7 +533,7 @@ class QuoteStore @Inject constructor(
     fun clearAllData() {
         _quotes.value = emptyList()
         _sessions.value = emptyList()
-        _categories.value = listOf(QuoteCategory.defaultCategory)
+        _categories.value = listOf(localizedDefaultCategory)
         saveQuotes()
         saveSessions()
         saveCategories()
@@ -578,14 +592,14 @@ class QuoteStore @Inject constructor(
         val prefs = dataStore.data.first()
         val raw = prefs[CATEGORIES_KEY]
         if (raw == null) {
-            _categories.value = listOf(QuoteCategory.defaultCategory)
+            _categories.value = listOf(localizedDefaultCategory)
             return
         }
         try {
             _categories.value = json.decodeFromString(ListSerializer(QuoteCategory.serializer()), raw)
         } catch (e: Exception) {
             android.util.Log.e("QuoteStore", "Failed to load categories", e)
-            _categories.value = listOf(QuoteCategory.defaultCategory)
+            _categories.value = listOf(localizedDefaultCategory)
         }
     }
 
