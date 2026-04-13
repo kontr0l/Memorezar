@@ -318,14 +318,45 @@ final class RecitationViewModel: NSObject, ObservableObject {
         applyLevelReveal()
     }
 
-    /// Set the reveal level (1-3) temporarily for this session without persisting.
+    /// Set the reveal level (1-4) temporarily for this session without persisting.
     /// The level is only saved when the user completes a session and meets the advancement threshold.
+    /// Level 4 = reading mode (100% revealed, not persisted).
     func setLevel(_ newLevel: Int) {
         let wasTutorialReveal = tutorialRevealActive
         tutorialRevealActive = false
+
+        let wasReadingMode = isReadingMode
+
+        // If entering reading mode, reset the practice session and reveal all words
+        if newLevel == 4 {
+            reset()
+            displayLevel = newLevel
+            revealPercentage = 100
+            letterRevealStep = 5
+            // Mark all words as pending + revealed (no "current" word in reading mode)
+            for i in words.indices {
+                words[i].state = .pending
+                words[i].isRevealed = true
+            }
+            return
+        }
+
+        // If leaving reading mode, reset to a clean practice session
+        if wasReadingMode {
+            displayLevel = newLevel
+            applyLevelRevealForLevel(newLevel)
+            reset()
+            // re-apply the new level's reveal after reset (reset uses old revealPercentage)
+            applyLevelRevealForLevel(newLevel)
+            return
+        }
+
         displayLevel = newLevel
         applyLevelRevealForLevel(newLevel)
     }
+
+    /// Whether the slider is at level 4 (reading mode — 100% revealed, practice controls dimmed)
+    var isReadingMode: Bool { displayLevel == 4 }
 
     /// Apply reveal percentage and letter step for a specific level (without persisting)
     private func applyLevelRevealForLevel(_ level: Int) {
@@ -336,6 +367,9 @@ final class RecitationViewModel: NSObject, ObservableObject {
         case 3:
             revealPercentage = 20
             letterRevealStep = 1
+        case 4:
+            revealPercentage = 100
+            letterRevealStep = 5
         default:
             revealPercentage = 90
             letterRevealStep = 3
@@ -477,6 +511,14 @@ final class RecitationViewModel: NSObject, ObservableObject {
     }
 
     func switchMode(to newMode: MemorizationMode) {
+        // Exit reading mode — restore to the quote's saved practice level
+        if isReadingMode {
+            currentMode = newMode
+            let savedLevel = max(1, quote.revealLevel)
+            setLevel(savedLevel)
+            return
+        }
+
         let oldMode = currentMode
         guard newMode != oldMode else { return }
 
@@ -1333,6 +1375,15 @@ final class RecitationViewModel: NSObject, ObservableObject {
         saveCurrentChunkState()
         activeChunkIndex = index
         loadChunk(at: index, preserveReveal: true)
+
+        // Re-apply reading mode state after loading the chunk
+        if isReadingMode {
+            for i in words.indices {
+                words[i].state = .pending
+                words[i].isRevealed = true
+            }
+            currentPosition = 0
+        }
     }
 
     /// Merge chunk at `index` with the chunk at `index + 1`

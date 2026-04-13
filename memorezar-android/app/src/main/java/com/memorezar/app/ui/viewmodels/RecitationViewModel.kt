@@ -140,7 +140,8 @@ data class RecitationUiState(
     // Mode
     val currentMode: MemorizationMode = MemorizationMode.VOICE,
     // Reveal system
-    val displayLevel: Int = 1,         // 1=easy(90%), 2=medium(50%), 3=hard(20%)
+    val displayLevel: Int = 1,         // 1=easy(90%), 2=medium(50%), 3=hard(20%), 4=reading(100%)
+    val isReadingMode: Boolean = false,
     val revealPercentage: Double = 90.0,
     val letterRevealStep: Int = 3,     // letters shown in first-letter mode
     val isFirstLetterToggle: Boolean = false,
@@ -332,6 +333,14 @@ class RecitationViewModel @Inject constructor(
     }
 
     fun switchMode(mode: MemorizationMode) {
+        // Exit reading mode — restore to the quote's saved practice level
+        if (_uiState.value.isReadingMode) {
+            _uiState.update { it.copy(currentMode = mode) }
+            val savedLevel = (quote?.revealLevel ?: 1).coerceAtLeast(1)
+            setDisplayLevel(savedLevel)
+            return
+        }
+
         // Block mode switching in master mode
         if (_uiState.value.isMasterMode) return
 
@@ -951,6 +960,7 @@ class RecitationViewModel @Inject constructor(
         1 -> 90.0
         2 -> 50.0
         3 -> 20.0
+        4 -> 100.0
         else -> 90.0
     }
 
@@ -958,6 +968,7 @@ class RecitationViewModel @Inject constructor(
         1 -> 3
         2 -> 2
         3 -> 1
+        4 -> 5
         else -> 3
     }
 
@@ -973,12 +984,45 @@ class RecitationViewModel @Inject constructor(
 
     fun setDisplayLevel(level: Int) {
         if (_uiState.value.isMasterMode) return // locked in master mode
-        val clamped = level.coerceIn(1, 3)
+        val clamped = level.coerceIn(1, 4)
         if (clamped == _uiState.value.displayLevel) return
+
+        val wasReadingMode = _uiState.value.isReadingMode
         tutorialRevealActive = false
+
+        // Entering reading mode: reset session, reveal all words
+        if (clamped == 4) {
+            resetSession(recalculateReveal = false)
+            _uiState.update { state ->
+                val revealedWords = state.words.map { it.copy(state = WordState.UPCOMING, isRevealed = true) }
+                state.copy(
+                    displayLevel = 4,
+                    isReadingMode = true,
+                    revealPercentage = 100.0,
+                    letterRevealStep = 5,
+                    words = revealedWords
+                )
+            }
+            return
+        }
+
+        // Leaving reading mode: reset to clean practice session
+        if (wasReadingMode) {
+            val pct = revealPercentageForLevel(clamped)
+            val step = letterStepForLevel(clamped)
+            _uiState.update { it.copy(displayLevel = clamped, isReadingMode = false, revealPercentage = pct, letterRevealStep = step) }
+            resetSession(recalculateReveal = false)
+            // Re-apply after reset since reset uses saved values
+            val pct2 = revealPercentageForLevel(clamped)
+            val step2 = letterStepForLevel(clamped)
+            _uiState.update { it.copy(displayLevel = clamped, revealPercentage = pct2, letterRevealStep = step2) }
+            applyRevealPercentage()
+            return
+        }
+
         val pct = revealPercentageForLevel(clamped)
         val step = letterStepForLevel(clamped)
-        _uiState.update { it.copy(displayLevel = clamped, revealPercentage = pct, letterRevealStep = step) }
+        _uiState.update { it.copy(displayLevel = clamped, isReadingMode = false, revealPercentage = pct, letterRevealStep = step) }
         applyRevealPercentage()
         // Regenerate MC choices when reveal changes
         if (_uiState.value.currentMode == MemorizationMode.MULTIPLE_CHOICE) {
@@ -2241,6 +2285,14 @@ class RecitationViewModel @Inject constructor(
         loadChunk(index)
         publishSplitState()
         _uiState.update { it.copy(isComplete = false) }
+
+        // Re-apply reading mode state after loading the chunk
+        if (_uiState.value.isReadingMode) {
+            _uiState.update { state ->
+                val revealedWords = state.words.map { it.copy(state = WordState.UPCOMING, isRevealed = true) }
+                state.copy(words = revealedWords, currentPosition = 0)
+            }
+        }
     }
 
     private fun saveCurrentChunkState() {

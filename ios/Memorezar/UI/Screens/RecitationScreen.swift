@@ -165,11 +165,12 @@ struct RecitationScreen: View {
                                     // Title (dropdown in playback, chunk nav when split, plain otherwise)
                                     if isPlaybackMode {
                                         recordingDropdownButton
-                                            .padding(.top)
+                                            .padding(.top, 12)
                                             .frame(maxWidth: .infinity)
                                             .overlay(alignment: .top) {
                                                 playbackTimeLabelRow
                                                     .padding(.horizontal, 4)
+                                                    .offset(y: -8)
                                             }
                                     } else if let chunks = viewModel.splitChunks {
                                         VStack(spacing: 4) {
@@ -190,13 +191,13 @@ struct RecitationScreen: View {
                                                     }
                                                 } label: {
                                                     Image(systemName: "chevron.left")
-                                                        .font(.title2.bold())
+                                                        .font(.headline)
                                                         .foregroundColor(viewModel.activeChunkIndex > 0 ? .blue : Color(.systemGray4))
                                                 }
                                                 .disabled(viewModel.activeChunkIndex <= 0)
 
                                                 Text(String(localized: "\(viewModel.activeChunkIndex + 1) of \(chunks.count)", comment: "Chunk X of Y navigation"))
-                                                    .font(.title2.bold())
+                                                    .font(.headline)
 
                                                 Button {
                                                     if viewModel.activeChunkIndex < chunks.count - 1 {
@@ -204,14 +205,14 @@ struct RecitationScreen: View {
                                                     }
                                                 } label: {
                                                     Image(systemName: "chevron.right")
-                                                        .font(.title2.bold())
+                                                        .font(.headline)
                                                         .foregroundColor(viewModel.activeChunkIndex < chunks.count - 1 ? .blue : Color(.systemGray4))
                                                 }
                                                 .disabled(viewModel.activeChunkIndex >= chunks.count - 1)
                                             }
                                         }
                                         .multilineTextAlignment(.center)
-                                        .padding(.top)
+                                        .padding(.top, 12)
                                     } else {
                                         HStack(spacing: 8) {
                                             Text(viewModel.activeTitle)
@@ -222,7 +223,7 @@ struct RecitationScreen: View {
                                                 languageTogglePill
                                             }
                                         }
-                                        .padding(.top)
+                                        .padding(.top, 12)
                                     }
 
                                     // Reveal slider
@@ -560,6 +561,7 @@ struct RecitationScreen: View {
             .sheet(isPresented: $showRecordingPicker) {
                 recordingPickerSheet
                     .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.hidden)
             }
             .alert(String(localized: "Replace Recording?"), isPresented: $showReplaceRecordingAlert) {
                 Button("Replace", role: .destructive) {
@@ -1141,7 +1143,7 @@ struct RecitationScreen: View {
                 .padding(.horizontal, 8)
             }
 
-            Spacer().frame(height: 2)
+            Spacer().frame(height: 0)
         }
     }
 
@@ -2068,7 +2070,7 @@ struct RecitationScreen: View {
                     WordView(
                         word: wordState.word,
                         state: wordState.state,
-                        isCurrentWord: index == viewModel.currentPosition,
+                        isCurrentWord: !viewModel.isReadingMode && index == viewModel.currentPosition,
                         fontSize: settingsStore.fontSize.pointSize,
                         isVisible: viewModel.shouldShowWord(at: index),
                         displayMode: viewModel.wordDisplayMode(at: index),
@@ -3019,13 +3021,15 @@ struct RecitationScreen: View {
     private var controlBar: some View {
         VStack(spacing: 8) {
             // MC choices above everything
-            if viewModel.currentMode == .multipleChoice {
+            if viewModel.currentMode == .multipleChoice && !viewModel.isReadingMode {
                 multipleChoiceGrid
             }
 
-            // Input area above the pill
+            // Input area above the pill (hidden in reading mode to dismiss keyboard)
             Group {
-                if viewModel.currentMode == .typing {
+                if viewModel.isReadingMode {
+                    EmptyView()
+                } else if viewModel.currentMode == .typing {
                     // Typing mode: info/streak left, text input center, crown right
                     HStack(spacing: 12) {
                         infoOrStreakButton
@@ -3089,92 +3093,115 @@ struct RecitationScreen: View {
             }
             .frame(height: 80, alignment: .bottom)
 
-            // Dark pill
+            // Dark pill (shrinks to info-only in reading mode, left-aligned)
             HStack(spacing: 0) {
-                // Left: Info
-                Button {
-                    showQuoteAccuracy = true
-                } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: "info.circle")
-                            .font(.system(size: 18))
-                        Text("INFO")
-                            .font(.system(size: 9, weight: .semibold))
+                HStack(spacing: 0) {
+                    // Info button
+                    Button {
+                        showQuoteAccuracy = true
+                    } label: {
+                        VStack(spacing: 3) {
+                            Image(systemName: "info.circle")
+                                .font(.system(size: 18))
+                            Text("INFO")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 50)
                     }
-                    .foregroundColor(.white.opacity(0.7))
-                    .frame(width: 50)
+
+                    if !viewModel.isReadingMode {
+                        Spacer()
+
+                        // Center: Stats
+                        HStack(spacing: 20) {
+                            VStack(spacing: 3) {
+                                Text("\(viewModel.correctCount)")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .monospacedDigit()
+                                    .foregroundColor(.green)
+                                    .frame(height: 24)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.green.opacity(0.7))
+                                    .frame(height: 14)
+                            }
+                            .frame(width: 40)
+
+                            VStack(spacing: 3) {
+                                Text("\(viewModel.mistakeCount)")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .monospacedDigit()
+                                    .foregroundColor(.red)
+                                    .frame(height: 24)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.red.opacity(0.7))
+                                    .frame(height: 14)
+                            }
+                            .frame(width: 40)
+
+                            VStack(spacing: 3) {
+                                Text("\(viewModel.hintCount)")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .monospacedDigit()
+                                    .foregroundColor(.yellow)
+                                    .frame(height: 24)
+                                Image(systemName: "lightbulb.fill")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundColor(.yellow.opacity(0.7))
+                                    .frame(height: 14)
+                            }
+                            .frame(width: 40)
+                        }
+
+                        Spacer()
+
+                        // Right: Reset
+                        Button {
+                            viewModel.reset()
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 18))
+                                Text("RESET")
+                                    .font(.system(size: 9, weight: .semibold))
+                            }
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 50)
+                        }
+                    }
                 }
-
-                Spacer()
-
-                // Center: Stats
-                HStack(spacing: 20) {
-                    VStack(spacing: 3) {
-                        Text("\(viewModel.correctCount)")
-                            .font(.system(size: 20, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundColor(.green)
-                            .frame(height: 24)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.green.opacity(0.7))
-                            .frame(height: 14)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .frame(height: 58)
+                .animation(nil, value: viewModel.isReadingMode)
+                .background(
+                    GeometryReader { geo in
+                        let fullWidth = geo.size.width
+                        let collapsedWidth: CGFloat = 58
+                        // Info button center: 16 (padding) + 25 (half of 50 width) = 41pt from left
+                        let infoCenterX: CGFloat = 41
+                        RoundedRectangle(cornerRadius: 36)
+                            .fill(Color(hex: 0x333333))
+                            .frame(width: viewModel.isReadingMode ? collapsedWidth : fullWidth)
+                            .position(
+                                x: viewModel.isReadingMode ? infoCenterX : fullWidth / 2,
+                                y: geo.size.height / 2
+                            )
+                            .animation(.easeInOut(duration: 0.3), value: viewModel.isReadingMode)
                     }
-                    .frame(width: 40)
+                )
 
-                    VStack(spacing: 3) {
-                        Text("\(viewModel.mistakeCount)")
-                            .font(.system(size: 20, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundColor(.red)
-                            .frame(height: 24)
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.red.opacity(0.7))
-                            .frame(height: 14)
-                    }
-                    .frame(width: 40)
-
-                    VStack(spacing: 3) {
-                        Text("\(viewModel.hintCount)")
-                            .font(.system(size: 20, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundColor(.yellow)
-                            .frame(height: 24)
-                        Image(systemName: "lightbulb.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.yellow.opacity(0.7))
-                            .frame(height: 14)
-                    }
-                    .frame(width: 40)
-                }
-
-                Spacer()
-
-                // Right: Reset
-                Button {
-                    viewModel.reset()
-                } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 18))
-                        Text("RESET")
-                            .font(.system(size: 9, weight: .semibold))
-                    }
-                    .foregroundColor(.white.opacity(0.7))
-                    .frame(width: 50)
+                if viewModel.isReadingMode {
+                    Spacer()
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 36)
-                    .fill(Color(hex: 0x333333))
-            )
             .padding(.horizontal, 8)
             .spotlightAnchor("infoBar")
             .offset(y: viewModel.isMasterMode ? 60 : 0)
             .animation(.easeInOut(duration: 0.4), value: viewModel.isMasterMode)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.isReadingMode)
 
             Spacer().frame(height: 0)
         }
@@ -3470,26 +3497,40 @@ struct VoiceWaveformView: View {
 /// 3-step slider that looks like the old unified slider (eye icon, same track)
 /// but snaps to 3 discrete levels. Level 1 (90%) on the RIGHT, level 3 (10%) on the LEFT.
 struct LevelRevealSlider: View {
-    @Binding var level: Int  // 1, 2, or 3
+    @Binding var level: Int  // 1, 2, 3, or 4 (reading mode)
     var isLetterMode: Bool
 
     @State private var isDragging = false
     @State private var showNumber = false
     @State private var hideTimer: Timer?
+    @State private var dragStartLevel: Int = 1
 
     private let trackHeight: CGFloat = 4
     private let thumbSize: CGFloat = 26
-    private let stepCount = 3
+    private let bookIconSize: CGFloat = 14
 
-    /// Normalized thumb position 0-1 (level 1 = right, level 3 = left)
+    // Slider positions: levels 1-3 occupy 90% of the track, level 4 (reading) the final 10%
+    // Normalized positions for each level on the 0-1 track
+    private static let levelPositions: [Int: CGFloat] = [3: 0.0, 2: 0.45, 1: 0.9, 4: 1.0]
+    // Snap thresholds: midpoints between positions for drag snapping
+    private static let snapPoints: [(threshold: CGFloat, level: Int)] = [
+        (0.0, 3),    // 0.0 - 0.225 → level 3
+        (0.225, 2),  // 0.225 - 0.675 → level 2
+        (0.675, 1),  // 0.675 - 0.95 → level 1
+        (0.95, 4),   // 0.95 - 1.0 → level 4 (reading)
+    ]
+
+    /// Normalized thumb position 0-1 (level 3 = left, level 4 = right)
     private var normalizedPosition: CGFloat {
-        CGFloat(stepCount - level) / CGFloat(stepCount - 1)
+        Self.levelPositions[level] ?? 0.9
     }
 
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width - thumbSize
             let offsetX = normalizedPosition * width
+            // Book icon sits at the far right (level 4 position)
+            let bookX = width + thumbSize / 2
 
             ZStack(alignment: .leading) {
                 // Track background
@@ -3498,14 +3539,28 @@ struct LevelRevealSlider: View {
                     .frame(height: trackHeight)
                     .padding(.horizontal, thumbSize / 2)
 
+                // Book icon at right end (reading mode destination)
+                Image(systemName: "book.fill")
+                    .font(.system(size: bookIconSize, weight: .medium))
+                    .foregroundColor(level == 4 ? .white : Color(.systemGray3))
+                    .position(x: bookX, y: thumbSize / 2)
+                    .allowsHitTesting(false)
+                    .opacity(level == 4 ? 0 : 1) // Hide when thumb is on top
+                    .animation(.easeInOut(duration: 0.3), value: level)
+
                 // Thumb
                 ZStack {
                     Circle()
-                        .fill(Color.blue)
+                        .fill(level == 4 ? Color(.systemGray) : Color.blue)
                         .frame(width: thumbSize, height: thumbSize)
                         .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
 
-                    if showNumber {
+                    if level == 4 {
+                        Image(systemName: "book.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                            .transition(.opacity)
+                    } else if showNumber {
                         Text(thumbLabel)
                             .font(.system(size: 10, weight: .bold))
                             .foregroundColor(.white)
@@ -3519,6 +3574,7 @@ struct LevelRevealSlider: View {
                     }
                 }
                 .animation(.easeInOut(duration: 0.3), value: showNumber)
+                .animation(.easeInOut(duration: 0.3), value: level == 4)
                 .offset(x: offsetX)
                 .animation(.easeInOut(duration: 0.35), value: normalizedPosition)
                 .gesture(
@@ -3526,14 +3582,24 @@ struct LevelRevealSlider: View {
                         .onChanged { drag in
                             if !isDragging {
                                 isDragging = true
+                                dragStartLevel = level
                                 showNumber = true
                                 hideTimer?.invalidate()
                             }
                             let raw = (drag.location.x - thumbSize / 2) / width
                             let clamped = min(max(raw, 0), 1)
-                            // Invert: left = level 3, right = level 1
-                            let snapped = stepCount - Int(round(clamped * CGFloat(stepCount - 1)))
-                            let newLevel = min(max(snapped, 1), stepCount)
+                            // Snap to nearest level based on thresholds
+                            var newLevel = 3
+                            for snap in Self.snapPoints.reversed() {
+                                if clamped >= snap.threshold {
+                                    newLevel = snap.level
+                                    break
+                                }
+                            }
+                            // Only allow reading mode (level 4) if the drag started from level 1 (90%)
+                            if newLevel == 4 && dragStartLevel != 1 {
+                                newLevel = 1
+                            }
                             if newLevel != level {
                                 level = newLevel
                             }
@@ -3558,7 +3624,6 @@ struct LevelRevealSlider: View {
 
     private var thumbLabel: String {
         if isLetterMode {
-            // Show letter count for this level
             switch level {
             case 1: return "3"
             case 2: return "2"
@@ -3566,11 +3631,11 @@ struct LevelRevealSlider: View {
             default: return "3"
             }
         } else {
-            // Show reveal percentage for this level
             switch level {
             case 1: return "90"
             case 2: return "50"
             case 3: return "20"
+            case 4: return "100"
             default: return "90"
             }
         }

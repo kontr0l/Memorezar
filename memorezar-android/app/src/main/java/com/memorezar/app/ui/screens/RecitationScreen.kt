@@ -81,6 +81,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -109,6 +110,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -535,8 +537,10 @@ fun RecitationScreen(
                             Spacer(Modifier.height(4.dp))
                         }
 
-                        // Input area — varies by mode
-                        when (uiState.currentMode) {
+                        // Input area — varies by mode (hidden in reading mode)
+                        if (uiState.isReadingMode) {
+                            // No input controls in reading mode
+                        } else when (uiState.currentMode) {
                             MemorizationMode.VOICE -> {
                                 val wavePhase = liquidWavePhase.value * (Math.PI.toFloat() * 2f)
                                 VoiceInputRow(
@@ -1322,9 +1326,12 @@ private fun RevealSlider(
     modifier: Modifier = Modifier
 ) {
     val thumbSize = 26.dp
+    val bookIconSize = 14.dp
     var showNumber by remember { mutableStateOf(false) }
     var isDragging by remember { mutableStateOf(false) }
+    var dragStartLevel by remember { mutableIntStateOf(displayLevel) }
     val currentLevel by rememberUpdatedState(displayLevel)
+    val isReading = displayLevel == 4
 
     LaunchedEffect(isDragging) {
         if (!isDragging && showNumber) {
@@ -1333,9 +1340,9 @@ private fun RevealSlider(
         }
     }
 
-    // Thumb always derives from level — matches iOS normalizedPosition
+    // Non-uniform positions: levels 1-3 occupy 90% of track, level 4 the final 10%
     val targetFraction = when (displayLevel) {
-        3 -> 0f; 2 -> 0.5f; else -> 1f
+        3 -> 0f; 2 -> 0.45f; 1 -> 0.9f; 4 -> 1f; else -> 0.9f
     }
     val thumbFraction by animateFloatAsState(
         targetValue = targetFraction,
@@ -1343,10 +1350,20 @@ private fun RevealSlider(
         label = "thumbPos"
     )
 
+    // Snap thresholds: midpoints between positions
+    fun snapToLevel(fraction: Float): Int {
+        return when {
+            fraction >= 0.95f -> 4   // reading mode
+            fraction >= 0.675f -> 1  // 90%
+            fraction >= 0.225f -> 2  // 50%
+            else -> 3                // 20%
+        }
+    }
+
     val thumbLabel = if (isLetterMode) {
-        when (displayLevel) { 1 -> "3"; 2 -> "2"; else -> "1" }
+        when (displayLevel) { 1 -> "3"; 2 -> "2"; 3 -> "1"; 4 -> "100"; else -> "3" }
     } else {
-        when (displayLevel) { 1 -> "90"; 2 -> "50"; else -> "20" }
+        when (displayLevel) { 1 -> "90"; 2 -> "50"; 3 -> "20"; 4 -> "100"; else -> "90" }
     }
 
     val density = LocalDensity.current
@@ -1369,18 +1386,21 @@ private fun RevealSlider(
                             while (true) {
                                 val down = awaitFirstDown(requireUnconsumed = false)
                                 isDragging = true
+                                dragStartLevel = currentLevel
                                 showNumber = true
                                 val totalWidth = size.width - thumbSizePx
-                                // Snap to nearest level based on finger position (matches iOS round() approach)
                                 val raw = ((down.position.x - thumbSizePx / 2) / totalWidth).coerceIn(0f, 1f)
-                                val snapped = 3 - (raw * 2f).roundToInt().coerceIn(0, 2)
+                                var snapped = snapToLevel(raw)
+                                // Only allow reading mode if drag started from level 1
+                                if (snapped == 4 && dragStartLevel != 1) snapped = 1
                                 if (snapped != currentLevel) onLevelChanged(snapped)
                                 do {
                                     val event = awaitPointerEvent()
                                     val pos = event.changes.firstOrNull()?.position ?: break
                                     event.changes.forEach { it.consume() }
                                     val rawDrag = ((pos.x - thumbSizePx / 2) / totalWidth).coerceIn(0f, 1f)
-                                    val newLevel = 3 - (rawDrag * 2f).roundToInt().coerceIn(0, 2)
+                                    var newLevel = snapToLevel(rawDrag)
+                                    if (newLevel == 4 && dragStartLevel != 1) newLevel = 1
                                     if (newLevel != currentLevel) onLevelChanged(newLevel)
                                 } while (event.changes.any { it.pressed })
                                 isDragging = false
@@ -1400,6 +1420,21 @@ private fun RevealSlider(
                     .background(MaterialTheme.colorScheme.surfaceVariant)
             )
 
+            // Book icon at far right
+            if (!isReading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                        contentDescription = null,
+                        tint = Color.Gray.copy(alpha = 0.5f),
+                        modifier = Modifier.size(bookIconSize).offset(x = -(thumbSize / 2 - bookIconSize / 2))
+                    )
+                }
+            }
+
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val trackStart = thumbSizePx / 2
                 val trackEnd = size.width - thumbSizePx / 2
@@ -1407,7 +1442,7 @@ private fun RevealSlider(
                 val thumbCenterX = trackStart + thumbFraction * trackWidth
 
                 drawCircle(
-                    color = iOSBlue,
+                    color = if (isReading) Color.Gray else iOSBlue,
                     radius = thumbSizePx / 2,
                     center = Offset(thumbCenterX, size.height / 2)
                 )
@@ -1421,18 +1456,27 @@ private fun RevealSlider(
                     modifier = Modifier.size(thumbSize),
                     contentAlignment = Alignment.Center
                 ) {
-                    val iconAlpha by animateFloatAsState(
-                        targetValue = if (showNumber) 0f else 1f,
-                        animationSpec = tween(300, easing = EaseInOut), label = "ia"
-                    )
-                    val numberAlpha by animateFloatAsState(
-                        targetValue = if (showNumber) 1f else 0f,
-                        animationSpec = tween(300, easing = EaseInOut), label = "na"
-                    )
-                    Icon(Icons.Default.Visibility, contentDescription = null, tint = Color.White.copy(alpha = iconAlpha), modifier = Modifier.size(14.dp))
-                    if (showNumber) {
-                        Text(thumbLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                            color = Color.White.copy(alpha = numberAlpha), textAlign = TextAlign.Center)
+                    if (isReading) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    } else {
+                        val iconAlpha by animateFloatAsState(
+                            targetValue = if (showNumber) 0f else 1f,
+                            animationSpec = tween(300, easing = EaseInOut), label = "ia"
+                        )
+                        val numberAlpha by animateFloatAsState(
+                            targetValue = if (showNumber) 1f else 0f,
+                            animationSpec = tween(300, easing = EaseInOut), label = "na"
+                        )
+                        Icon(Icons.Default.Visibility, contentDescription = null, tint = Color.White.copy(alpha = iconAlpha), modifier = Modifier.size(14.dp))
+                        if (showNumber) {
+                            Text(thumbLabel, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
+                                color = Color.White.copy(alpha = numberAlpha), textAlign = TextAlign.Center)
+                        }
                     }
                 }
                 if (thumbFraction < 0.99f) {
@@ -1788,62 +1832,94 @@ private fun ControlPill(
     onInfo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(50))
-            .background(Color(0xFF333333))
-            .padding(horizontal = 12.dp).padding(top = 7.dp, bottom = 3.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top
+    val isReading = uiState.isReadingMode
+    val pillHeight = 50.dp
+
+    // Info button content (shared between modes)
+    val infoButton = @Composable {
+        Column(
+            modifier = Modifier.width(50.dp).clickable { onInfo() },
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Info button: icon + label as one tap target
-            Column(
-                modifier = Modifier.width(50.dp).clickable { onInfo() },
-                horizontalAlignment = Alignment.CenterHorizontally
+            Icon(painter = painterResource(id = R.drawable.ic_info), "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+            Text("INFO", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.offset(y = (-3).dp))
+        }
+    }
+
+    Box(modifier = modifier.fillMaxWidth().height(pillHeight)) {
+        // Background pill — animates width
+        val pillWidthFraction by animateFloatAsState(
+            targetValue = if (isReading) 0f else 1f,
+            animationSpec = tween(300, easing = EaseInOut), label = "pillWidth"
+        )
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .then(
+                    if (pillWidthFraction > 0.99f) Modifier.fillMaxWidth()
+                    else Modifier.width(58.dp + (pillWidthFraction * 500).dp) // lerp to full
+                )
+                .height(pillHeight)
+                .clip(RoundedCornerShape(50))
+                .background(Color(0xFF333333))
+        )
+
+        // Full pill content
+        if (!isReading) {
+            Row(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(painter = painterResource(id = R.drawable.ic_info), "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-                Text("INFO", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.offset(y = (-3).dp))
-            }
-            Spacer(Modifier.weight(1f))
-            // Center: numbers + legend icons
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                    Text("${uiState.correctCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace, color = CorrectGreen,
-                        textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
-                    Text("${uiState.mistakeCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace, color = MismatchRed,
-                        textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
-                    Text("${uiState.hintCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace, color = PendingYellow,
-                        textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.offset(y = 1.dp)) {
-                    Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Check, null, tint = CorrectGreen.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                infoButton()
+                Spacer(Modifier.weight(1f))
+                // Center: numbers + legend icons
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Text("${uiState.correctCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace, color = CorrectGreen,
+                            textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+                        Text("${uiState.mistakeCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace, color = MismatchRed,
+                            textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
+                        Text("${uiState.hintCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace, color = PendingYellow,
+                            textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
                     }
-                    Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.Close, null, tint = MismatchRed.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
-                    }
-                    Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
-                        Icon(painter = painterResource(id = R.drawable.ic_lightbulb), null, tint = PendingYellow.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.offset(y = 1.dp)) {
+                        Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Check, null, tint = CorrectGreen.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                        }
+                        Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.Close, null, tint = MismatchRed.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                        }
+                        Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
+                            Icon(painter = painterResource(id = R.drawable.ic_lightbulb), null, tint = PendingYellow.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                        }
                     }
                 }
+                Spacer(Modifier.weight(1f))
+                // Reset button
+                Column(
+                    modifier = Modifier.width(50.dp).clickable { onReset() },
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                    Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.offset(y = (-3).dp))
+                }
             }
-            Spacer(Modifier.weight(1f))
-            // Reset button: icon + label as one tap target
-            Column(
-                modifier = Modifier.width(50.dp).clickable { onReset() },
-                horizontalAlignment = Alignment.CenterHorizontally
+        } else {
+            // Reading mode: just the info button in a circle
+            Box(
+                modifier = Modifier
+                    .size(58.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xFF333333)),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-                Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.offset(y = (-3).dp))
+                infoButton()
             }
         }
     }
