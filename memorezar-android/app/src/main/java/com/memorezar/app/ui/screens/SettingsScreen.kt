@@ -241,7 +241,7 @@ fun SettingsScreen(
 
         // About
         SectionHeader("About")
-        InfoRow("Version", "v2.4.67")
+        InfoRow("Version", "v2.5.36")
         ClickRow("Contact Support") { onShowContactSupport() }
 
         Spacer(Modifier.height(80.dp))

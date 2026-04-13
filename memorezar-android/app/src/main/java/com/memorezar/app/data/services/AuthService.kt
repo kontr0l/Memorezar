@@ -66,13 +66,27 @@ class AuthService @Inject constructor(
         val masterKey = MasterKey.Builder(appContext)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        EncryptedSharedPreferences.create(
-            appContext,
-            "memorezar_secure_prefs",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
+        try {
+            EncryptedSharedPreferences.create(
+                appContext,
+                "memorezar_secure_prefs",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (_: Exception) {
+            // Corrupted prefs (e.g. after uninstall/reinstall with stale KeyStore key)
+            appContext.getSharedPreferences("memorezar_secure_prefs", Context.MODE_PRIVATE).edit().clear().apply()
+            val prefsFile = java.io.File(appContext.filesDir.parent, "shared_prefs/memorezar_secure_prefs.xml")
+            prefsFile.delete()
+            EncryptedSharedPreferences.create(
+                appContext,
+                "memorezar_secure_prefs",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        }
     }
 
     // MARK: - Session Restore

@@ -1,7 +1,5 @@
 package com.memorezar.app.ui.screens
 
-import android.graphics.Typeface
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -40,12 +39,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +58,7 @@ import com.memorezar.app.data.models.SuggestionPack
 import com.memorezar.app.data.models.SuggestionQuote
 
 private val IndigoColor = Color(0xFF7A71F0)
+private val SerifQuoteFont = FontFamily(Font(R.font.noto_serif_bold))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,19 +77,6 @@ fun PackDetailScreen(
 
     val showTitleInBar by remember {
         derivedStateOf { scrollState.value > 400 }
-    }
-
-    // Paint for Canvas-drawn quote marks (bypasses Compose text clipping)
-    val quoteColor = IndigoColor.copy(alpha = 0.25f)
-    val density = LocalDensity.current
-    val quoteFontSizePx = with(density) { 80.sp.toPx() }
-    val quotePaint = remember {
-        android.graphics.Paint().apply {
-            textSize = quoteFontSizePx
-            typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD)
-            color = quoteColor.toArgb()
-            isAntiAlias = true
-        }
     }
 
     Box(
@@ -180,27 +165,25 @@ fun PackDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    // Quote preview section
-                    Column {
-                        // Opening quote mark — Canvas to avoid Compose text clipping
-                        Canvas(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(60.dp)
-                        ) {
-                            val text = "\u201C"
-                            val bounds = android.graphics.Rect()
-                            quotePaint.getTextBounds(text, 0, text.length, bounds)
-                            val y = (size.height + bounds.height()) / 2f
-                            drawIntoCanvas { canvas ->
-                                canvas.nativeCanvas.drawText(text, 0f, y, quotePaint)
-                            }
+                    // Quote preview section (negative offsets inside eat ~110dp; trim via layout)
+                    Column(modifier = Modifier.layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        layout(placeable.width, (placeable.height - 110.dp.roundToPx()).coerceAtLeast(0)) {
+                            placeable.placeRelative(0, 0)
                         }
+                    }) {
+                        // Opening quote mark
+                        QuoteMarkView(
+                            glyph = "\u201C",
+                            alignEnd = false,
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
                         // Preview snippets
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .offset(y = (-50).dp)
                                 .padding(horizontal = 20.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -219,21 +202,12 @@ fun PackDetailScreen(
                             }
                         }
 
-                        // Closing quote mark — Canvas
-                        Canvas(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(60.dp)
-                        ) {
-                            val text = "\u201D"
-                            val bounds = android.graphics.Rect()
-                            quotePaint.getTextBounds(text, 0, text.length, bounds)
-                            val y = (size.height + bounds.height()) / 2f
-                            val x = size.width - bounds.width() - bounds.left
-                            drawIntoCanvas { canvas ->
-                                canvas.nativeCanvas.drawText(text, x, y, quotePaint)
-                            }
-                        }
+                        // Closing quote mark
+                        QuoteMarkView(
+                            glyph = "\u201D",
+                            alignEnd = true,
+                            modifier = Modifier.fillMaxWidth().offset(y = (-60).dp)
+                        )
                     }
                 }
             }
@@ -336,6 +310,27 @@ fun PackDetailScreen(
             )
         )
     }
+}
+
+// ── Quote Mark Rendering ────────────────────────────────────────
+
+/**
+ * Renders a large decorative quote mark as plain Compose Text.
+ */
+@Composable
+private fun QuoteMarkView(
+    glyph: String,
+    alignEnd: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = glyph,
+        fontSize = 100.sp,
+        fontFamily = SerifQuoteFont,
+        color = IndigoColor.copy(alpha = 0.25f),
+        textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
+        modifier = modifier
+    )
 }
 
 // ── Snippet Generation ──────────────────────────────────────────
