@@ -1838,44 +1838,53 @@ private fun ControlPill(
     // Info button content (shared between modes)
     val infoButton = @Composable {
         Column(
-            modifier = Modifier.width(50.dp).clickable { onInfo() },
-            horizontalAlignment = Alignment.CenterHorizontally
+            modifier = Modifier.width(50.dp).height(pillHeight).clickable { onInfo() }.offset(y = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Icon(painter = painterResource(id = R.drawable.ic_info), "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+            Icon(painter = painterResource(id = R.drawable.ic_info), "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp).offset(y = 2.dp))
             Text("INFO", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.offset(y = (-3).dp))
         }
     }
 
     Box(modifier = modifier.fillMaxWidth().height(pillHeight)) {
-        // Background pill — animates width
+        // Background pill — animates width and offset to center on info icon
         val pillWidthFraction by animateFloatAsState(
             targetValue = if (isReading) 0f else 1f,
             animationSpec = tween(300, easing = EaseInOut), label = "pillWidth"
+        )
+        val pillOffset by animateDpAsState(
+            targetValue = if (isReading) 12.dp else 0.dp,
+            animationSpec = tween(300, easing = EaseInOut), label = "pillOffset"
         )
 
         Box(
             modifier = Modifier
                 .align(Alignment.CenterStart)
+                .offset(x = pillOffset)
                 .then(
                     if (pillWidthFraction > 0.99f) Modifier.fillMaxWidth()
-                    else Modifier.width(58.dp + (pillWidthFraction * 500).dp) // lerp to full
+                    else Modifier.width(pillHeight + (pillWidthFraction * 500).dp)
                 )
                 .height(pillHeight)
                 .clip(RoundedCornerShape(50))
                 .background(Color(0xFF333333))
         )
 
-        // Full pill content
+        // Full pill content (scores + reset) — only when not reading
         if (!isReading) {
-            Row(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
             ) {
-                infoButton()
                 Spacer(Modifier.weight(1f))
-                // Center: numbers + legend icons
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                // Top row: spacer for info | numbers | RESET icon
+                Row(
+                    modifier = Modifier.fillMaxWidth().offset(y = 2.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Spacer(Modifier.width(50.dp))
+                    Spacer(Modifier.weight(1f))
                     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         Text("${uiState.correctCount}", fontSize = 18.sp, lineHeight = 18.sp, fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace, color = CorrectGreen,
@@ -1887,7 +1896,19 @@ private fun ControlPill(
                             fontFamily = FontFamily.Monospace, color = PendingYellow,
                             textAlign = TextAlign.Center, modifier = Modifier.width(40.dp))
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp), modifier = Modifier.offset(y = 1.dp)) {
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
+                        Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                    }
+                }
+                // Bottom row: spacer for info | legend icons | RESET label
+                Row(
+                    modifier = Modifier.fillMaxWidth().offset(y = (-3).dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Spacer(Modifier.width(50.dp))
+                    Spacer(Modifier.weight(1f))
+                    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         Box(Modifier.width(40.dp), contentAlignment = Alignment.Center) {
                             Icon(Icons.Default.Check, null, tint = CorrectGreen.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
                         }
@@ -1898,29 +1919,25 @@ private fun ControlPill(
                             Icon(painter = painterResource(id = R.drawable.ic_lightbulb), null, tint = PendingYellow.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
                         }
                     }
-                }
-                Spacer(Modifier.weight(1f))
-                // Reset button
-                Column(
-                    modifier = Modifier.width(50.dp).clickable { onReset() },
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
-                    Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.offset(y = (-3).dp))
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.width(50.dp).clickable { onReset() }, contentAlignment = Alignment.Center) {
+                        Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+                    }
                 }
             }
-        } else {
-            // Reading mode: just the info button in a circle
-            Box(
-                modifier = Modifier
-                    .size(58.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(Color(0xFF333333)),
-                contentAlignment = Alignment.Center
-            ) {
-                infoButton()
-            }
+        }
+
+        // Info button — always rendered at the same fixed position (overlays both modes)
+        Box(
+            modifier = Modifier
+                .padding(start = 12.dp)
+                .width(50.dp)
+                .height(pillHeight)
+                .align(Alignment.CenterStart)
+                .clickable { onInfo() },
+            contentAlignment = Alignment.Center
+        ) {
+            infoButton()
         }
     }
 }

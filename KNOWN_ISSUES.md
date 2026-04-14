@@ -13,6 +13,18 @@ All text that is part of the app UI (buttons, labels, messages, section headers,
 - **iOS:** Use `String(localized:)` or SwiftUI's automatic localization via `Text("...")`. Ensure new strings appear in `Localizable.xcstrings`.
 - **Android:** Use string resources (`strings.xml`) or ensure text is wrapped in translation-ready patterns.
 
+### GIT WORKFLOW: Mandatory safeguards on every pull and push
+
+**IMPORTANT:** Multiple devices contribute to this repo. Stale local branches have already caused silent regressions (see GIT-001 below). These three safeguards are **required** on every pull/push:
+
+1. **Always `git pull --rebase` before committing.** This catches stale branches before they become a commit. Do this at the START of every work session, not just before pushing.
+
+2. **Review your own commit before pushing.** Run `git show HEAD --stat` and inspect the numbers. If a file has a suspicious ratio (e.g., large deletions in a commit that's supposed to be a small feature addition), STOP and investigate with `git diff HEAD~1 -- <file>` before pushing.
+
+3. **When resolving conflicts, read BOTH sides carefully before choosing.** Never blindly pick `--ours` or `--theirs` to move on. Use `git diff <commit>:<file>` to compare versions. If the conflict is large, the "other side" often contains teammates' work that would be silently erased.
+
+For major refactors or multi-device work, use feature branches + PRs so reviewers can catch regressions before they hit main.
+
 ---
 
 ## Active Issues
@@ -132,6 +144,31 @@ Root cause: "Just" is sent immediately (T=0), but "Juxta" doesn't arrive until ~
 | Issue | Status | Description | Workaround |
 |-------|--------|-------------|------------|
 | DATA-001 | resolved | Ruhi Book 1 pack lost French and Italian translations | Restored from conversation transcript; see details below |
+
+### Git / Workflow
+
+| Issue | Status | Description | Workaround |
+|-------|--------|-------------|------------|
+| GIT-001 | resolved | Stale local branch on second machine silently reverted Android SettingsScreen redesign + Spanish localization when a reading-mode commit was pushed | Restored file from `edd66ff`; safeguards added to Development Rules above |
+
+#### GIT-001: Stale Branch Silently Reverted SettingsScreen.kt
+
+**Severity:** High
+**Resolved:** 2026-04-14
+**File:** `memorezar-android/app/src/main/java/com/memorezar/app/ui/screens/SettingsScreen.kt`
+
+**What happened:**
+Commit `d082997` ("feat: add reading mode to reveal slider") was authored from a Mac whose local copy of SettingsScreen.kt was missing two prior commits: `ff22e15` (icon/card redesign) and `edd66ff` (Spanish localization). When the reading-mode changes were committed and pushed, git also captured the Mac's outdated copy of SettingsScreen.kt alongside the intended RecitationScreen changes — silently erasing ~153 lines of UI work. The commit stat showed **220 insertions vs 373 deletions** on a file that was unrelated to the commit's stated purpose, which should have been a red flag.
+
+A subsequent merge conflict was resolved with `git checkout --ours`, which picked the post-pull (regressed) version rather than the stashed work, compounding the loss.
+
+**Resolution:**
+Restored SettingsScreen.kt from commit `edd66ff` (which has the redesign + localization) via `git checkout edd66ff -- <file>`.
+
+**Lessons (now enforced in GIT WORKFLOW rule above):**
+1. Always `git pull --rebase` before committing from any device.
+2. Run `git show HEAD --stat` before pushing — investigate any file with a suspicious deletions ratio.
+3. Never blindly pick `--ours`/`--theirs` in a conflict. Compare both sides first.
 
 #### DATA-001: Ruhi Book 1 Translations Lost During Supabase Migration
 
