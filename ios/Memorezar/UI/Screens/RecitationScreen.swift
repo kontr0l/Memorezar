@@ -3514,14 +3514,14 @@ struct LevelRevealSlider: View {
     private let thumbSize: CGFloat = 26
     private let bookIconSize: CGFloat = 14
 
-    // Slider positions: levels 1-3 occupy 90% of the track, level 4 (reading) the final 10%
+    // Slider positions: level 2 visually centered (0.5); level 4 (reading) takes the final 10%
     // Normalized positions for each level on the 0-1 track
-    private static let levelPositions: [Int: CGFloat] = [3: 0.0, 2: 0.45, 1: 0.9, 4: 1.0]
+    private static let levelPositions: [Int: CGFloat] = [3: 0.0, 2: 0.5, 1: 0.9, 4: 1.0]
     // Snap thresholds: midpoints between positions for drag snapping
     private static let snapPoints: [(threshold: CGFloat, level: Int)] = [
-        (0.0, 3),    // 0.0 - 0.225 → level 3
-        (0.225, 2),  // 0.225 - 0.675 → level 2
-        (0.675, 1),  // 0.675 - 0.95 → level 1
+        (0.0, 3),    // 0.0 - 0.25 → level 3
+        (0.25, 2),   // 0.25 - 0.7 → level 2
+        (0.7, 1),    // 0.7 - 0.95 → level 1
         (0.95, 4),   // 0.95 - 1.0 → level 4 (reading)
     ]
 

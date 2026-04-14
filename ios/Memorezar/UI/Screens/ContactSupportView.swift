@@ -4,7 +4,14 @@ struct ContactSupportView: View {
     @EnvironmentObject var authService: AuthService
     @Environment(\.dismiss) private var dismiss
 
-    @State private var reason: SupportReason = .featureRequest
+    let initialReason: SupportReason
+
+    init(initialReason: SupportReason = .featureRequest) {
+        self.initialReason = initialReason
+        _reason = State(initialValue: initialReason)
+    }
+
+    @State private var reason: SupportReason
     @State private var message = ""
     @State private var email = ""
     @State private var isSubmitting = false
@@ -51,7 +58,7 @@ struct ContactSupportView: View {
                     }
                 }
             }
-            .navigationTitle("Contact Support")
+            .navigationTitle(initialReason == .quotePackRequest ? "Quote Pack Request" : "Contact Support")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

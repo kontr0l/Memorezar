@@ -428,7 +428,8 @@ fun HomeScreen(
                 authService = authService,
                 supportTicketService = supportTicketService,
                 onDismiss = { showPackRequest = false },
-                initialReason = SupportReason.QUOTE_PACK_REQUEST
+                initialReason = SupportReason.QUOTE_PACK_REQUEST,
+                compact = true
             )
         }
     }

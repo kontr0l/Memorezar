@@ -11,6 +11,7 @@ struct HomeScreen: View {
     @State private var showAccuracyDetail = false
     @State private var remotePacks: [SuggestionPack] = []
     @State private var showPackSearch = false
+    @State private var showPackRequest = false
     /// Last 5 actually practiced quotes, most recent first
     private var continuePracticingQuotes: [Quote] {
         Array(quoteStore.quotes
@@ -302,8 +303,19 @@ struct HomeScreen: View {
                         removal: .scale(scale: 0.5).combined(with: .opacity)
                     ))
                 }
+                Button {
+                    showPackRequest = true
+                } label: {
+                    PackRequestCard()
+                }
+                .buttonStyle(.plain)
             }
 
+        }
+        .sheet(isPresented: $showPackRequest) {
+            ContactSupportView(initialReason: .quotePackRequest)
+                .presentationDetents([.fraction(0.78), .large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -395,6 +407,34 @@ struct SuggestionPackCard: View {
         }
         .frame(height: 200)
         .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))
+    }
+}
+
+// MARK: - Pack Request Card
+
+struct PackRequestCard: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color.indigo.opacity(0.15), Color.indigo.opacity(0.05)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(spacing: 8) {
+                Text("\u{1F4E9}")
+                    .font(.system(size: 40))
+                Text("Request a Quote Pack")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.indigo)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(12)
+        }
+        .frame(height: 200)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))
     }

@@ -1340,9 +1340,9 @@ private fun RevealSlider(
         }
     }
 
-    // Non-uniform positions: levels 1-3 occupy 90% of track, level 4 the final 10%
+    // Non-uniform positions: level 2 visually centered (0.5); level 4 takes the final 10%
     val targetFraction = when (displayLevel) {
-        3 -> 0f; 2 -> 0.45f; 1 -> 0.9f; 4 -> 1f; else -> 0.9f
+        3 -> 0f; 2 -> 0.5f; 1 -> 0.9f; 4 -> 1f; else -> 0.9f
     }
     val thumbFraction by animateFloatAsState(
         targetValue = targetFraction,
@@ -1353,10 +1353,10 @@ private fun RevealSlider(
     // Snap thresholds: midpoints between positions
     fun snapToLevel(fraction: Float): Int {
         return when {
-            fraction >= 0.95f -> 4   // reading mode
-            fraction >= 0.675f -> 1  // 90%
-            fraction >= 0.225f -> 2  // 50%
-            else -> 3                // 20%
+            fraction >= 0.95f -> 4  // reading mode
+            fraction >= 0.7f -> 1   // 90% — midpoint of 0.5 and 0.9
+            fraction >= 0.25f -> 2  // 50% — midpoint of 0.0 and 0.5
+            else -> 3               // 20%
         }
     }
 
@@ -3359,7 +3359,7 @@ private fun AudioPlayButton(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(90.dp),
+            .height(80.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -3368,7 +3368,7 @@ private fun AudioPlayButton(
                 // Large red record/stop button (timer is in the control pill)
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
+                        .size(70.dp)
                         .shadow(4.dp, CircleShape)
                         .clip(CircleShape)
                         .background(AudioRed)
@@ -3378,7 +3378,7 @@ private fun AudioPlayButton(
                     if (isRecording) {
                         Box(Modifier.size(28.dp).background(Color.White, RoundedCornerShape(4.dp)))
                     } else {
-                        Icon(Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(34.dp))
+                        Icon(Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(42.dp))
                     }
                 }
             }
@@ -3392,7 +3392,7 @@ private fun AudioPlayButton(
                 // Large orange play/stop button
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
+                        .size(70.dp)
                         .shadow(4.dp, CircleShape)
                         .clip(CircleShape)
                         .background(AudioOrange)
@@ -3403,11 +3403,11 @@ private fun AudioPlayButton(
                     contentAlignment = Alignment.Center
                 ) {
                     if (audioState.isTTSLoading) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(34.dp), strokeWidth = 3.dp)
+                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(42.dp), strokeWidth = 3.dp)
                     } else {
                         Icon(
                             if (ttsPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            null, tint = Color.White, modifier = Modifier.size(34.dp)
+                            null, tint = Color.White, modifier = Modifier.size(42.dp)
                         )
                     }
                 }
@@ -3415,9 +3415,9 @@ private fun AudioPlayButton(
 
             audioState.isLoadingAudio -> {
                 Box(
-                    modifier = Modifier.size(80.dp).clip(CircleShape).background(iOSBlue),
+                    modifier = Modifier.size(70.dp).clip(CircleShape).background(iOSBlue),
                     contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator(color = Color.White, modifier = Modifier.size(34.dp), strokeWidth = 3.dp) }
+                ) { CircularProgressIndicator(color = Color.White, modifier = Modifier.size(42.dp), strokeWidth = 3.dp) }
             }
 
             audioState.currentSource != null -> {
@@ -3442,7 +3442,7 @@ private fun AudioPlayButton(
                     // Large blue play/pause button
                     Box(
                         modifier = Modifier
-                            .size(80.dp)
+                            .size(70.dp)
                             .shadow(4.dp, CircleShape)
                             .clip(CircleShape)
                             .background(iOSBlue)
@@ -3451,7 +3451,7 @@ private fun AudioPlayButton(
                     ) {
                         Icon(
                             if (audioState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            null, tint = Color.White, modifier = Modifier.size(34.dp)
+                            null, tint = Color.White, modifier = Modifier.size(42.dp)
                         )
                     }
 
@@ -3493,81 +3493,106 @@ private fun AudioControlPill(
     onCancelRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(36.dp))
+            .height(50.dp)
+            .clip(RoundedCornerShape(50))
             .background(DarkPillBg)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
     ) {
-        when {
-            audioState.isRecordingMode && isRecording -> {
-                // CANCEL | timer | spacer
-                PillButton(icon = Icons.Default.Close, label = "CANCEL", onClick = onCancelRecording, width = 60.dp)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    formatTime(audioState.recordingDuration),
-                    style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
-                    color = AudioRed
-                )
-                Spacer(Modifier.weight(1f))
-                Spacer(Modifier.width(60.dp))
+        // Timer (centered overlay — only shown in recording mode, not subject to lockup positioning)
+        if (audioState.isRecordingMode) {
+            Text(
+                text = if (isRecording) formatTime(audioState.recordingDuration) else "0:00",
+                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
+                color = if (isRecording) AudioRed else Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+
+        // Two-row lockup structure matching voice-mode ControlPill RESET positioning:
+        //   top row (icons) offset y=+2dp; bottom row (labels) offset y=-3dp
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
+        ) {
+            Spacer(Modifier.weight(1f))
+            // Top row: icons
+            Row(
+                modifier = Modifier.fillMaxWidth().offset(y = 2.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                when {
+                    audioState.isRecordingMode -> {
+                        PillIconSlot(Icons.Default.Close, PillButtonInactive)
+                        Spacer(Modifier.weight(1f))
+                        if (!isRecording) {
+                            PillIconSlot(Icons.AutoMirrored.Filled.List, PillButtonInactive)
+                        } else {
+                            Spacer(Modifier.width(50.dp))
+                        }
+                    }
+                    audioState.currentSource != null -> {
+                        PillIconSlot(Icons.Default.Refresh, if (audioState.playbackRepeat) AudioGreen else PillButtonInactive)
+                        Spacer(Modifier.weight(1f))
+                        PillIconSlot(Icons.Default.Edit, PillButtonInactive)
+                        Spacer(Modifier.weight(1f))
+                        PillIconSlot(Icons.Default.Delete, AudioRed.copy(alpha = 0.8f))
+                        Spacer(Modifier.weight(1f))
+                        PillIconSlot(Icons.AutoMirrored.Filled.List, PillButtonInactive)
+                    }
+                    else -> {
+                        PillIconSlot(Icons.Default.Refresh, if (audioState.playbackRepeat) AudioGreen else PillButtonInactive)
+                        Spacer(Modifier.weight(1f))
+                        PillIconSlot(Icons.AutoMirrored.Filled.List, PillButtonInactive)
+                    }
+                }
             }
-            audioState.isRecordingMode -> {
-                // CANCEL | 0:00 | BROWSE
-                PillButton(icon = Icons.Default.Close, label = "CANCEL", onClick = onCancelRecording, width = 60.dp)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    "0:00",
-                    style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace),
-                    color = Color.White.copy(alpha = 0.5f)
-                )
-                Spacer(Modifier.weight(1f))
-                PillButton(icon = Icons.Default.GridView, label = "BROWSE", onClick = onBrowse, width = 60.dp)
-            }
-            audioState.currentSource != null -> {
-                // REPEAT | EDIT | DELETE | BROWSE (4 buttons like iOS)
-                PillButton(
-                    icon = Icons.Default.Refresh, label = "REPEAT", onClick = onToggleRepeat,
-                    tint = if (audioState.playbackRepeat) AudioGreen else PillButtonInactive
-                )
-                Spacer(Modifier.weight(1f))
-                PillButton(icon = Icons.Default.Edit, label = "EDIT", onClick = onEdit)
-                Spacer(Modifier.weight(1f))
-                PillButton(icon = Icons.Default.Delete, label = "DELETE", onClick = onDelete, tint = AudioRed.copy(alpha = 0.8f))
-                Spacer(Modifier.weight(1f))
-                PillButton(icon = Icons.AutoMirrored.Filled.List, label = "BROWSE", onClick = onBrowse)
-            }
-            else -> {
-                // REPEAT | BROWSE (TTS or empty state)
-                PillButton(
-                    icon = Icons.Default.Refresh, label = "REPEAT", onClick = onToggleRepeat,
-                    tint = if (audioState.playbackRepeat) AudioGreen else PillButtonInactive
-                )
-                Spacer(Modifier.weight(1f))
-                PillButton(icon = Icons.AutoMirrored.Filled.List, label = "BROWSE", onClick = onBrowse)
+            // Bottom row: labels (clickable)
+            Row(
+                modifier = Modifier.fillMaxWidth().offset(y = (-3).dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                when {
+                    audioState.isRecordingMode -> {
+                        PillLabelSlot("CANCEL", PillButtonInactive, onCancelRecording)
+                        Spacer(Modifier.weight(1f))
+                        if (!isRecording) {
+                            PillLabelSlot("BROWSE", PillButtonInactive, onBrowse)
+                        } else {
+                            Spacer(Modifier.width(50.dp))
+                        }
+                    }
+                    audioState.currentSource != null -> {
+                        PillLabelSlot("REPEAT", if (audioState.playbackRepeat) AudioGreen else PillButtonInactive, onToggleRepeat)
+                        Spacer(Modifier.weight(1f))
+                        PillLabelSlot("EDIT", PillButtonInactive, onEdit)
+                        Spacer(Modifier.weight(1f))
+                        PillLabelSlot("DELETE", AudioRed.copy(alpha = 0.8f), onDelete)
+                        Spacer(Modifier.weight(1f))
+                        PillLabelSlot("BROWSE", PillButtonInactive, onBrowse)
+                    }
+                    else -> {
+                        PillLabelSlot("REPEAT", if (audioState.playbackRepeat) AudioGreen else PillButtonInactive, onToggleRepeat)
+                        Spacer(Modifier.weight(1f))
+                        PillLabelSlot("BROWSE", PillButtonInactive, onBrowse)
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun PillButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    tint: Color = PillButtonInactive,
-    width: androidx.compose.ui.unit.Dp = 50.dp
-) {
-    Column(
-        modifier = Modifier.width(width).height(41.dp).clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(icon, label, tint = tint, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.height(3.dp))
-        Text(label, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = tint)
+private fun PillIconSlot(icon: ImageVector, tint: Color) {
+    Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun PillLabelSlot(label: String, tint: Color, onClick: () -> Unit) {
+    Box(Modifier.width(50.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Text(label, fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = tint)
     }
 }
 

@@ -1,6 +1,13 @@
 package com.memorezar.app.ui.screens
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,7 +16,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -43,13 +54,14 @@ import com.memorezar.app.data.services.SupportReason
 import com.memorezar.app.data.services.SupportTicketService
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ContactSupportScreen(
     authService: AuthService,
     supportTicketService: SupportTicketService,
     onDismiss: () -> Unit,
-    initialReason: SupportReason? = null
+    initialReason: SupportReason? = null,
+    compact: Boolean = false
 ) {
     val currentUser by authService.currentUser.collectAsState()
     val scope = rememberCoroutineScope()
@@ -78,10 +90,37 @@ fun ContactSupportScreen(
     val pillColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
     val failedToSubmitText = stringResource(R.string.failed_to_submit)
 
+    // Absorbs leftover vertical scroll from descendants (e.g. multiline TextField)
+    // so the bottom sheet's drag-to-dismiss handler never sees it.
+    val absorbVerticalScroll = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset = Offset(0f, available.y)
+        }
+    }
+
+    val imeVisible = WindowInsets.isImeVisible
+    // Compact mode shows a short sheet (0.65) at rest but expands when keyboard opens
+    // so the message field isn't covered. Non-compact is always near-full-height.
+    val targetHeightFraction = when {
+        !compact -> 0.93f
+        imeVisible -> 0.85f
+        else -> 0.65f
+    }
+    val heightFraction by animateFloatAsState(
+        targetValue = targetHeightFraction,
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        label = "sheetHeight"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .fillMaxHeight(0.93f)
+            .fillMaxHeight(heightFraction)
+            .imePadding()
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
@@ -219,7 +258,8 @@ fun ContactSupportScreen(
             shape = fieldShape,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 180.dp),
+                .heightIn(min = if (compact) 100.dp else 180.dp)
+                .nestedScroll(absorbVerticalScroll),
             maxLines = 10
         )
 

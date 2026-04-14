@@ -306,7 +306,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.37")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.47")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
