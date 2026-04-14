@@ -6,14 +6,18 @@ struct QuoteLibraryScreen: View {
     @State private var showingQuoteInput = false
     @State private var showingNewCategory = false
     @State private var categoryToDelete: QuoteCategory?
-    @State private var navigationPath = NavigationPath()
+    @Binding var path: NavigationPath
     private let columns = [
         GridItem(.flexible(), spacing: 12),
         GridItem(.flexible(), spacing: 12),
     ]
 
+    init(path: Binding<NavigationPath> = .constant(NavigationPath())) {
+        self._path = path
+    }
+
     var body: some View {
-        NavigationStack(path: $navigationPath) {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     // Large inline title + add quote
@@ -121,7 +125,7 @@ struct QuoteLibraryScreen: View {
                 if let category = quoteStore.pendingCategoryNavigation {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         withAnimation {
-                            navigationPath.append(category)
+                            path.append(category)
                         }
                         quoteStore.pendingCategoryNavigation = nil
                     }
@@ -598,6 +602,7 @@ struct CategorySettingsView: View {
     @State private var showingUnsplashSearch = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showingDeleteConfirmation = false
+    @State private var showingPdfLanguagePicker = false
 
     init(category: QuoteCategory, onDeleted: (() -> Void)? = nil) {
         self.category = category
@@ -669,7 +674,12 @@ struct CategorySettingsView: View {
                     Section {
                         Button {
                             let quotes = quoteStore.quotes(inCategory: category.id)
-                            generateAndOpenPdf(packName: category.name, quotes: quotes)
+                            let langs = availablePdfLanguages(in: quotes)
+                            if langs.count > 1 {
+                                showingPdfLanguagePicker = true
+                            } else {
+                                generateAndOpenPdf(packName: category.name, quotes: quotes, languageCode: langs.first)
+                            }
                         } label: {
                             Label(String(localized: "Download as PDF"), systemImage: "arrow.down.doc")
                         }
@@ -766,7 +776,48 @@ struct CategorySettingsView: View {
                     Text("This category has no quotes.")
                 }
             }
+            .confirmationDialog(
+                String(localized: "Choose Language"),
+                isPresented: $showingPdfLanguagePicker,
+                titleVisibility: .visible
+            ) {
+                let quotes = quoteStore.quotes(inCategory: category.id)
+                ForEach(availablePdfLanguages(in: quotes), id: \.self) { lang in
+                    Button(pdfLanguageDisplayName(lang)) {
+                        generateAndOpenPdf(packName: category.name, quotes: quotes, languageCode: lang)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            }
         }
+    }
+
+    /// Every distinct language across the pack: each quote's primaryLanguage (or "en") plus all translation keys.
+    private func availablePdfLanguages(in quotes: [Quote]) -> [String] {
+        var seen: [String] = []
+        for q in quotes {
+            let primary = q.primaryLanguage ?? "en"
+            if !seen.contains(primary) { seen.append(primary) }
+            if let translations = q.translations {
+                for lang in translations.keys where !seen.contains(lang) { seen.append(lang) }
+            }
+        }
+        return seen
+    }
+
+    private func pdfLanguageDisplayName(_ code: String) -> String {
+        let locale = Locale(identifier: code)
+        let name = locale.localizedString(forLanguageCode: code) ?? Locale.current.localizedString(forLanguageCode: code) ?? code
+        return name.prefix(1).capitalized + name.dropFirst()
+    }
+
+    /// Returns (title, text) in the requested language, falling back to the quote's primary fields.
+    private func localizedTitleText(_ quote: Quote, languageCode: String?) -> (String, String) {
+        guard let code = languageCode else { return (quote.title, quote.text) }
+        let primary = quote.primaryLanguage ?? "en"
+        if code == primary { return (quote.title, quote.text) }
+        if let t = quote.translations?[code] { return (t.title, t.text) }
+        return (quote.title, quote.text)
     }
 
     private func handleLocalImage(_ data: Data) {
@@ -786,7 +837,7 @@ struct CategorySettingsView: View {
         dismiss()
     }
 
-    private func generateAndOpenPdf(packName: String, quotes: [Quote]) {
+    private func generateAndOpenPdf(packName: String, quotes: [Quote], languageCode: String? = nil) {
         let pageWidth: CGFloat = 595
         let pageHeight: CGFloat = 842
         let margin: CGFloat = 50
@@ -817,7 +868,8 @@ struct CategorySettingsView: View {
             context.beginPage()
 
             for (index, quote) in quotes.enumerated() {
-                let titleText = "\(index + 1). \(quote.title)"
+                let (locTitle, locText) = localizedTitleText(quote, languageCode: languageCode)
+                let titleText = "\(index + 1). \(locTitle)"
                 let titleAttrs: [NSAttributedString.Key: Any] = [.font: quoteTitleFont]
                 let bodyAttrs: [NSAttributedString.Key: Any] = [.font: bodyFont]
 
@@ -826,7 +878,7 @@ struct CategorySettingsView: View {
                     options: [.usesLineFragmentOrigin],
                     attributes: titleAttrs, context: nil
                 )
-                let bodyRect = quote.text.boundingRect(
+                let bodyRect = locText.boundingRect(
                     with: CGSize(width: usableWidth, height: .greatestFiniteMagnitude),
                     options: [.usesLineFragmentOrigin],
                     attributes: bodyAttrs, context: nil
@@ -841,7 +893,7 @@ struct CategorySettingsView: View {
                 titleText.draw(in: CGRect(x: margin, y: y, width: usableWidth, height: titleRect.height), withAttributes: titleAttrs)
                 y += titleRect.height + 6
 
-                quote.text.draw(in: CGRect(x: margin, y: y, width: usableWidth, height: bodyRect.height), withAttributes: bodyAttrs)
+                locText.draw(in: CGRect(x: margin, y: y, width: usableWidth, height: bodyRect.height), withAttributes: bodyAttrs)
                 y += bodyRect.height + 16
             }
 
@@ -852,7 +904,8 @@ struct CategorySettingsView: View {
         }
 
         // Save to temp file and open
-        let fileName = packName.replacingOccurrences(of: "[^a-zA-Z0-9 ]", with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        let cleanName = packName.replacingOccurrences(of: "[^a-zA-Z0-9 ]", with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        let fileName = languageCode != nil ? "\(cleanName) (\(languageCode!))" : cleanName
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("\(fileName).pdf")
         try? data.write(to: tempURL)
 

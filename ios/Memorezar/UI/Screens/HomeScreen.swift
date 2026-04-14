@@ -12,6 +12,11 @@ struct HomeScreen: View {
     @State private var remotePacks: [SuggestionPack] = []
     @State private var showPackSearch = false
     @State private var showPackRequest = false
+    @Binding var path: NavigationPath
+
+    init(path: Binding<NavigationPath> = .constant(NavigationPath())) {
+        self._path = path
+    }
     /// Last 5 actually practiced quotes, most recent first
     private var continuePracticingQuotes: [Quote] {
         Array(quoteStore.quotes
@@ -21,7 +26,7 @@ struct HomeScreen: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             ScrollView {
                 VStack(spacing: 24) {
                     // Hero Section

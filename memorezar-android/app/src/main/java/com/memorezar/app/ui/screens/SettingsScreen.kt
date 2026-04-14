@@ -306,7 +306,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.47")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.62")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
@@ -335,32 +335,7 @@ fun SettingsScreen(
                         )
                     )
             )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(toolbarHeight)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {}
-                    )
-            ) {
-                Spacer(Modifier.windowInsetsPadding(WindowInsets.statusBars))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (showNavTitle) {
-                        Text(
-                            text = stringResource(R.string.settings),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
+            // (Mini scroll title intentionally removed)
         }
 
         // Alerts

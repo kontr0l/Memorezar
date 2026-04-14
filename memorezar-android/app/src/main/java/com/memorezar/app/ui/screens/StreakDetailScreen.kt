@@ -47,7 +47,8 @@ import java.util.Locale
 @Composable
 fun StreakDetailScreen(
     quoteStore: QuoteStore,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val sessions by quoteStore.sessions.collectAsState()
 
@@ -81,6 +82,7 @@ fun StreakDetailScreen(
     }
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.streak)) },

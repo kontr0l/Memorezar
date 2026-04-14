@@ -4,7 +4,10 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -143,6 +146,13 @@ fun AppNavigation(
                 androidx.compose.foundation.layout.Column(
                     modifier = Modifier
                         .background(MaterialTheme.colorScheme.surface)
+                        // Consume all taps inside the bottom bar so non-icon
+                        // areas (padding strip, divider) don't pass clicks through
+                        // to content behind the bar.
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { }
                         .windowInsetsPadding(WindowInsets.navigationBars)
                 ) {
                     HorizontalDivider()
@@ -152,28 +162,61 @@ fun AppNavigation(
                             .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Routes that belong to each tab's hierarchy. Bottom-nav icon
+                        // stays highlighted and pop-to-root works when the user is
+                        // anywhere inside the tab.
+                        val homeRoutes = setOf(
+                            "home",
+                            "pack_detail",
+                            "pack_search",
+                            "streak_detail",
+                            "accuracy_detail",
+                            "mastered_quotes"
+                        )
                         bottomNavItems.forEach { item ->
-                            val selected = if (item.route == "library") {
-                                currentRoute == "library" || currentRoute?.startsWith("category_detail") == true
-                            } else {
-                                navBackStackEntry?.destination?.hierarchy?.any {
+                            val selected = when (item.route) {
+                                "library" -> currentRoute == "library" ||
+                                    currentRoute?.startsWith("category_detail") == true
+                                "home" -> currentRoute in homeRoutes
+                                else -> navBackStackEntry?.destination?.hierarchy?.any {
                                     it.route == item.route
                                 } == true
                             }
+
+                            val interactionSource = remember { MutableInteractionSource() }
+                            val isPressed by interactionSource.collectIsPressedAsState()
+                            // Subtle press feedback matching iOS Button style — icon dims
+                            // near-instantly on touch, then fades back smoothly on release.
+                            // No minimum-hold: the instant press-in guarantees the dim is
+                            // visible even on quick taps, and a single fade-out prevents
+                            // the "double press" look from post-release hold.
+                            val pressAlpha by animateFloatAsState(
+                                targetValue = if (isPressed) 0.4f else 1f,
+                                animationSpec = tween(durationMillis = if (isPressed) 20 else 230),
+                                label = "pressAlpha"
+                            )
+                            val baseAlpha = if (selected) 1f else 0.4f
 
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
+                                        interactionSource = interactionSource,
                                         indication = null
                                     ) {
-                                        navController.navigate(item.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) {
-                                                saveState = true
+                                        // If we're already inside this tab's hierarchy but not at
+                                        // its root (e.g. a category/pack detail), pop back to the
+                                        // tab root instead of re-navigating.
+                                        if (selected && currentRoute != item.route) {
+                                            navController.popBackStack(item.route, false)
+                                        } else {
+                                            navController.navigate(item.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
                                             }
-                                            launchSingleTop = true
-                                            restoreState = true
                                         }
                                     },
                                 contentAlignment = Alignment.Center
@@ -184,7 +227,7 @@ fun AppNavigation(
                                     contentScale = ContentScale.Fit,
                                     modifier = Modifier
                                         .height(32.dp)
-                                        .alpha(if (selected) 1f else 0.4f)
+                                        .alpha(baseAlpha * pressAlpha)
                                 )
                             }
                         }
@@ -277,20 +320,23 @@ fun AppNavigation(
             composable("streak_detail") {
                 StreakDetailScreen(
                     quoteStore = quoteStore,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.padding(padding)
                 )
             }
             composable("accuracy_detail") {
                 AccuracyDetailScreen(
                     quoteStore = quoteStore,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    modifier = Modifier.padding(padding)
                 )
             }
             composable("mastered_quotes") {
                 MasteredQuotesScreen(
                     quoteStore = quoteStore,
                     onBack = { navController.popBackStack() },
-                    onNavigateToRecitation = { navController.navigate("recitation/$it") }
+                    onNavigateToRecitation = { navController.navigate("recitation/$it") },
+                    modifier = Modifier.padding(padding)
                 )
             }
             composable("pack_detail") {

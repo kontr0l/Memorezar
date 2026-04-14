@@ -1711,10 +1711,10 @@ private fun FirstLetterButton(isToggled: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            painter = painterResource(id = R.drawable.ic_font_download),
+            painter = painterResource(id = R.drawable.ic_abc),
             contentDescription = "First Letter",
             tint = Color.White,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(22.dp)
         )
     }
 }

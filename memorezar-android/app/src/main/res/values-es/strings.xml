@@ -217,6 +217,7 @@
     <string name="name_header">NOMBRE</string>
     <string name="cover_photo_header">FOTO DE PORTADA</string>
     <string name="download_as_pdf">Descargar como PDF</string>
+    <string name="choose_pdf_language">Elegir idioma</string>
     <string name="quote_singular">cita</string>
     <string name="quote_plural">citas</string>
     <string name="parts_format">%d partes</string>

@@ -43,7 +43,8 @@ import com.memorezar.app.data.storage.QuoteStore
 @Composable
 fun AccuracyDetailScreen(
     quoteStore: QuoteStore,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val quotes by quoteStore.quotes.collectAsState()
     val sessions by quoteStore.sessions.collectAsState()
@@ -60,6 +61,7 @@ fun AccuracyDetailScreen(
         .take(10)
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.accuracy)) },

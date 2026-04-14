@@ -4,6 +4,8 @@ struct ContentView: View {
     @EnvironmentObject var quoteStore: QuoteStore
     @EnvironmentObject var tutorialStore: TutorialStore
     @State private var selectedTab = 0
+    @State private var homePath = NavigationPath()
+    @State private var libraryPath = NavigationPath()
 
     private static let iconHeight: CGFloat = 28
 
@@ -15,10 +17,10 @@ struct ContentView: View {
                 // Content area
                 Group {
                     switch selectedTab {
-                    case 0: HomeScreen()
-                    case 1: QuoteLibraryScreen()
+                    case 0: HomeScreen(path: $homePath)
+                    case 1: QuoteLibraryScreen(path: $libraryPath)
                     case 2: SettingsScreen()
-                    default: HomeScreen()
+                    default: HomeScreen(path: $homePath)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -44,7 +46,17 @@ struct ContentView: View {
 
     private func tabButton(icon: String, tag: Int) -> some View {
         Button {
-            selectedTab = tag
+            // If a tab is re-tapped while already selected, pop its stack back
+            // to the root (matches Android behavior).
+            if selectedTab == tag {
+                switch tag {
+                case 0: if !homePath.isEmpty { homePath = NavigationPath() }
+                case 1: if !libraryPath.isEmpty { libraryPath = NavigationPath() }
+                default: break
+                }
+            } else {
+                selectedTab = tag
+            }
         } label: {
             Image(icon)
                 .renderingMode(.original)

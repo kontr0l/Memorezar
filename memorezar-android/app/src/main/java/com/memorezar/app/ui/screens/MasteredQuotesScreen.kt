@@ -45,12 +45,14 @@ import com.memorezar.app.ui.components.MasteryBadge
 fun MasteredQuotesScreen(
     quoteStore: QuoteStore,
     onBack: () -> Unit,
-    onNavigateToRecitation: (String) -> Unit
+    onNavigateToRecitation: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val quotes by quoteStore.quotes.collectAsState()
     val masteredQuotes = quotes.filter { it.masteryLevel == MasteryLevel.MASTERED }
 
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text("Mastered Quotes") },

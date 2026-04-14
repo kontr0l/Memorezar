@@ -217,6 +217,7 @@
     <string name="name_header">NAME</string>
     <string name="cover_photo_header">COVER PHOTO</string>
     <string name="download_as_pdf">Download as PDF</string>
+    <string name="choose_pdf_language">Choose Language</string>
     <string name="quote_singular">quote</string>
     <string name="quote_plural">quotes</string>
     <string name="parts_format">%d parts</string>

@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
+import java.util.Locale
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -1010,6 +1011,18 @@ private fun CategorySettingsSheet(
 
                 // Download as PDF section
                 if (quotes.isNotEmpty()) {
+                    // Collect every language available across the pack:
+                    //   primaryLanguage of each quote (or "en" fallback) + all translation keys.
+                    val availableLanguages: List<String> = remember(quotes) {
+                        val set = linkedSetOf<String>()
+                        quotes.forEach { q ->
+                            set.add(q.primaryLanguage ?: "en")
+                            q.translations?.keys?.forEach { set.add(it) }
+                        }
+                        set.toList()
+                    }
+                    var showPdfLanguagePicker by remember { mutableStateOf(false) }
+
                     Spacer(Modifier.height(if (!isPack) 0.dp else 8.dp))
                     Card(
                         shape = RoundedCornerShape(12.dp),
@@ -1021,8 +1034,13 @@ private fun CategorySettingsSheet(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    scope.launch(Dispatchers.IO) {
-                                        generateAndSharePdf(context, category.name, quotes)
+                                    if (availableLanguages.size > 1) {
+                                        showPdfLanguagePicker = true
+                                    } else {
+                                        val lang = availableLanguages.firstOrNull()
+                                        scope.launch(Dispatchers.IO) {
+                                            generateAndSharePdf(context, category.name, quotes, lang)
+                                        }
                                     }
                                 }
                                 .padding(horizontal = 16.dp, vertical = 14.dp)
@@ -1042,6 +1060,41 @@ private fun CategorySettingsSheet(
                         }
                     }
                     Spacer(Modifier.height(20.dp))
+
+                    if (showPdfLanguagePicker) {
+                        AlertDialog(
+                            onDismissRequest = { showPdfLanguagePicker = false },
+                            title = { Text(stringResource(R.string.choose_pdf_language)) },
+                            text = {
+                                Column {
+                                    availableLanguages.forEach { lang ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    showPdfLanguagePicker = false
+                                                    scope.launch(Dispatchers.IO) {
+                                                        generateAndSharePdf(context, category.name, quotes, lang)
+                                                    }
+                                                }
+                                                .padding(vertical = 12.dp)
+                                        ) {
+                                            Text(
+                                                pdfLanguageDisplayName(lang),
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = { showPdfLanguagePicker = false }) {
+                                    Text(stringResource(R.string.cancel))
+                                }
+                            }
+                        )
+                    }
                 }
 
                 // Delete / Remove section
@@ -1706,7 +1759,29 @@ private fun SettingsSectionHeader(title: String) {
     )
 }
 
-private fun generateAndSharePdf(context: android.content.Context, packName: String, quotes: List<Quote>) {
+private fun pdfLanguageDisplayName(code: String): String {
+    val locale = Locale(code)
+    return locale.getDisplayLanguage(Locale.getDefault())
+        .replaceFirstChar { it.uppercase() }
+        .ifEmpty { code.uppercase() }
+}
+
+/** Returns (title, text) in the requested language, falling back to the quote's primary fields. */
+private fun localizedTitleText(quote: Quote, languageCode: String?): Pair<String, String> {
+    if (languageCode == null) return quote.title to quote.text
+    val primary = quote.primaryLanguage ?: "en"
+    if (languageCode == primary) return quote.title to quote.text
+    val translation = quote.translations?.get(languageCode)
+    return if (translation != null) translation.title to translation.text
+        else quote.title to quote.text
+}
+
+private fun generateAndSharePdf(
+    context: android.content.Context,
+    packName: String,
+    quotes: List<Quote>,
+    languageCode: String? = null
+) {
     val pageWidth = 595  // A4 width in points
     val pageHeight = 842 // A4 height in points
     val margin = 50f
@@ -1740,9 +1815,10 @@ private fun generateAndSharePdf(context: android.content.Context, packName: Stri
     var y = margin + 10f
 
     for ((index, quote) in quotes.withIndex()) {
+        val (locTitle, locText) = localizedTitleText(quote, languageCode)
         // Estimate space needed for this quote
-        val titleLines = wrapText(quote.title, bodyPaint, usableWidth)
-        val bodyLines = wrapText(quote.text, bodyPaint, usableWidth)
+        val titleLines = wrapText(locTitle, bodyPaint, usableWidth)
+        val bodyLines = wrapText(locText, bodyPaint, usableWidth)
         val neededHeight = 24f + titleLines.size * 18f + bodyLines.size * 18f + 24f
 
         // Start new page if not enough room
@@ -1758,7 +1834,7 @@ private fun generateAndSharePdf(context: android.content.Context, packName: Stri
         }
 
         // Quote number + title
-        canvas.drawText("${index + 1}. ${quote.title}", margin, y, quoteTitlePaint)
+        canvas.drawText("${index + 1}. $locTitle", margin, y, quoteTitlePaint)
         y += 20f
 
         // Quote body — word-wrapped
@@ -1775,7 +1851,8 @@ private fun generateAndSharePdf(context: android.content.Context, packName: Stri
     document.finishPage(page)
 
     // Save to Downloads via MediaStore
-    val fileName = "${packName.replace(Regex("[^a-zA-Z0-9 ]"), "").trim()}.pdf"
+    val cleanName = packName.replace(Regex("[^a-zA-Z0-9 ]"), "").trim()
+    val fileName = if (languageCode != null) "$cleanName ($languageCode).pdf" else "$cleanName.pdf"
     val contentValues = ContentValues().apply {
         put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
         put(MediaStore.MediaColumns.MIME_TYPE, "application/pdf")
