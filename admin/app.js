@@ -20,8 +20,21 @@ function headers() {
   };
 }
 
+// Wraps fetch for authenticated requests. On 401, refreshes the access token
+// once and retries — so long editor sessions don't fail when the token expires.
+async function authedFetch(url, opts = {}) {
+  let res = await fetch(url, opts);
+  if (res.status !== 401) return res;
+  const refreshed = await refreshSession();
+  if (!refreshed) return res;
+  if (opts.headers) {
+    opts.headers = { ...opts.headers, 'Authorization': `Bearer ${accessToken}` };
+  }
+  return fetch(url, opts);
+}
+
 async function fetchPacks() {
-  const res = await fetch(
+  const res = await authedFetch(
     `${SUPABASE_URL}/rest/v1/${TABLE}?select=*&order=sort_order.asc`,
     { headers: headers() }
   );
@@ -30,7 +43,7 @@ async function fetchPacks() {
 }
 
 async function upsertPack(pack) {
-  const res = await fetch(
+  const res = await authedFetch(
     `${SUPABASE_URL}/rest/v1/${TABLE}?on_conflict=id`,
     {
       method: 'POST',
@@ -46,7 +59,7 @@ async function upsertPack(pack) {
 }
 
 async function deletePack(id) {
-  const res = await fetch(
+  const res = await authedFetch(
     `${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.${encodeURIComponent(id)}`,
     { method: 'DELETE', headers: headers() }
   );
@@ -58,23 +71,28 @@ async function deletePack(id) {
 const COVERS_BUCKET = 'pack-covers';
 
 async function uploadCoverImage(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
+  const MAX_SIZE = 5 * 1024 * 1024;
+  if (file.size > MAX_SIZE) {
+    throw new Error(`Image is ${(file.size / 1024 / 1024).toFixed(1)}MB. Max 5MB — compress or resize it first.`);
+  }
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
   const filename = `${Date.now()}.${ext}`;
-  const res = await fetch(
+  const res = await authedFetch(
     `${SUPABASE_URL}/storage/v1/object/${COVERS_BUCKET}/${filename}`,
     {
       method: 'POST',
       headers: {
         'apikey': ANON_KEY,
         'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': file.type,
+        'Content-Type': file.type || 'application/octet-stream',
+        'x-upsert': 'true',
       },
       body: file,
     }
   );
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Upload failed: ${err}`);
+    const err = await res.text().catch(() => '');
+    throw new Error(`Upload failed (${res.status}): ${err || 'no detail'}`);
   }
   return `${SUPABASE_URL}/storage/v1/object/public/${COVERS_BUCKET}/${filename}`;
 }
@@ -342,13 +360,20 @@ packCoverFileInput.addEventListener('change', async () => {
     packCoverUrlInput.value = url;
     updateCoverPreview(url);
     markDirty();
-    toast('Cover image uploaded', 'success');
+    toast('Cover uploaded — click Save Pack to finalize', 'success');
   } catch (err) {
     toast(err.message, 'error');
   } finally {
     packCoverFileInput.disabled = false;
     packCoverFileInput.value = '';
   }
+});
+
+const coverRemoveBtn = document.getElementById('cover-remove-btn');
+coverRemoveBtn.addEventListener('click', () => {
+  packCoverUrlInput.value = '';
+  updateCoverPreview('');
+  markDirty();
 });
 
 packCoverUrlInput.addEventListener('input', () => {
@@ -875,7 +900,7 @@ langCodeInput.addEventListener('input', updateLangPreview);
 
 async function loadLanguages() {
   try {
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${LANGUAGES_TABLE}?select=*&order=code.asc`,
       { headers: headers() }
     );
@@ -939,7 +964,7 @@ langModalSave.addEventListener('click', async () => {
   try {
     langModalSave.disabled = true;
     langModalSave.textContent = 'Saving...';
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${LANGUAGES_TABLE}?on_conflict=code`,
       {
         method: 'POST',
@@ -963,7 +988,7 @@ langModalDelete.addEventListener('click', async () => {
   if (!editingLang) return;
   if (!confirm(`Delete language "${editingLang.display_name}"?`)) return;
   try {
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${LANGUAGES_TABLE}?code=eq.${encodeURIComponent(editingLang.code)}`,
       { method: 'DELETE', headers: headers() }
     );
@@ -1066,7 +1091,7 @@ async function fetchRecordings(offset = 0) {
     offset: offset.toString(),
     limit: RECORDINGS_PAGE_SIZE.toString(),
   });
-  const res = await fetch(
+  const res = await authedFetch(
     `${SUPABASE_URL}/rest/v1/${RECORDINGS_TABLE}?${params}`,
     { headers: headers() }
   );
@@ -1075,7 +1100,7 @@ async function fetchRecordings(offset = 0) {
 }
 
 async function fetchAllFlags() {
-  const res = await fetch(
+  const res = await authedFetch(
     `${SUPABASE_URL}/rest/v1/${FLAGS_TABLE}?select=*&order=created_at.desc`,
     { headers: headers() }
   );
@@ -1229,18 +1254,18 @@ deleteRecordingBtn.addEventListener('click', () => {
       try {
         // Delete from storage
         if (viewingRecording.file_path) {
-          await fetch(`${SUPABASE_URL}/storage/v1/object/recordings/${viewingRecording.file_path}`, {
+          await authedFetch(`${SUPABASE_URL}/storage/v1/object/recordings/${viewingRecording.file_path}`, {
             method: 'DELETE',
             headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${accessToken}` },
           });
         }
         // Delete flags for this recording
-        await fetch(
+        await authedFetch(
           `${SUPABASE_URL}/rest/v1/${FLAGS_TABLE}?recording_id=eq.${viewingRecording.id}`,
           { method: 'DELETE', headers: headers() }
         );
         // Delete recording row
-        await fetch(
+        await authedFetch(
           `${SUPABASE_URL}/rest/v1/${RECORDINGS_TABLE}?id=eq.${viewingRecording.id}`,
           { method: 'DELETE', headers: headers() }
         );
@@ -1272,7 +1297,7 @@ saveRecordingBtn.addEventListener('click', async () => {
   try {
     saveRecordingBtn.textContent = 'Saving…';
     saveRecordingBtn.disabled = true;
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${RECORDINGS_TABLE}?id=eq.${viewingRecording.id}`,
       { method: 'PATCH', headers: headers(), body: JSON.stringify(updates) }
     );
@@ -1405,7 +1430,7 @@ addEquivSave.addEventListener('click', async () => {
     addEquivSave.textContent = 'Adding…';
     addEquivSave.disabled = true;
 
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${EQUIVALENCES_TABLE}`,
       {
         method: 'POST',
@@ -1438,7 +1463,7 @@ async function loadEquivalences() {
   equivTotalBadge.textContent = '…';
 
   try {
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${EQUIVALENCES_TABLE}?select=*&order=created_at.desc`,
       { headers: headers() }
     );
@@ -1506,7 +1531,7 @@ function renderEquivalences() {
         `Delete "${eq?.expected_word}" → "${eq?.spoken_word}"?`,
         async () => {
           try {
-            const res = await fetch(
+            const res = await authedFetch(
               `${SUPABASE_URL}/rest/v1/${EQUIVALENCES_TABLE}?id=eq.${id}`,
               { method: 'DELETE', headers: headers() }
             );
@@ -1527,7 +1552,7 @@ function renderEquivalences() {
 
 async function updateFlagStatus(flagId, status, recordingId) {
   try {
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${FLAGS_TABLE}?id=eq.${flagId}`,
       {
         method: 'PATCH',
@@ -1580,7 +1605,7 @@ const REASON_BADGE_CLASS = {
 
 async function loadSupportTickets() {
   try {
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}?select=*&order=created_at.desc`,
       { headers: headers() }
     );
@@ -1681,7 +1706,7 @@ async function toggleTicketRead() {
   if (!viewingTicket) return;
   const newReadState = !viewingTicket.is_read;
   try {
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}?id=eq.${viewingTicket.id}`,
       {
         method: 'PATCH',
@@ -1706,7 +1731,7 @@ async function deleteTicket() {
   if (!viewingTicket) return;
   if (!confirm('Delete this ticket permanently?')) return;
   try {
-    const res = await fetch(
+    const res = await authedFetch(
       `${SUPABASE_URL}/rest/v1/${SUPPORT_TABLE}?id=eq.${viewingTicket.id}`,
       { method: 'DELETE', headers: headers() }
     );
