@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -92,6 +93,11 @@ fun SettingsScreen(
     var showResetAlert by remember { mutableStateOf(false) }
     var showDeleteDataAlert by remember { mutableStateOf(false) }
     var showTestFlash by remember { mutableStateOf(false) }
+    // Counter-keyed trigger so rapid spam always restarts the flash timer and
+    // the last tap's coroutine is the one that turns the overlay off — avoids
+    // the case where the timer finishes before a re-tap refreshes the boolean
+    // and the overlay gets stuck on.
+    var testFlashTick by remember { mutableIntStateOf(0) }
     // Non-saveable scroll state — tab switching disposes this composable so
     // coming back to Settings resets scroll to top (matches iOS).
     val scrollState = remember { ScrollState(0) }
@@ -108,9 +114,12 @@ fun SettingsScreen(
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val toolbarHeight = statusBarTop + 8.dp
 
-    // Auto-dismiss test flash
-    LaunchedEffect(showTestFlash) {
-        if (showTestFlash) {
+    // Auto-dismiss test flash — keyed on the tick counter so each tap restarts
+    // the timer. If cancelled (another tap came in), the still-running newer
+    // coroutine owns the final turn-off.
+    LaunchedEffect(testFlashTick) {
+        if (testFlashTick > 0) {
+            showTestFlash = true
             delay(150L)
             showTestFlash = false
         }
@@ -164,7 +173,7 @@ fun SettingsScreen(
                 IconClickRow(ImageVector.vectorResource(R.drawable.ic_bell), stringResource(R.string.test_mistake_alert)) {
                     alertManager.triggerMistakeAlert()
                     if (settings.visualAlertEnabled) {
-                        showTestFlash = true
+                        testFlashTick++
                     }
                 }
             }
@@ -309,7 +318,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.95")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.99")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }

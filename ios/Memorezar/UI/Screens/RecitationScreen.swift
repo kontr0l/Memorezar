@@ -1603,7 +1603,7 @@ struct RecitationScreen: View {
 
     // MARK: - Playlist Selection
 
-    private func selectRecording(_ source: PlaybackSource) {
+    private func selectRecording(_ source: PlaybackSource, autoPlay: Bool = true) {
         isRecordingMode = false
         tts.stop()
         isTTSActive = false
@@ -1629,7 +1629,7 @@ struct RecitationScreen: View {
             playbackSource = source
             playbackAudioData = data
             playbackPlaylist = buildPlaylist()
-            startPlaybackWithData(data)
+            startPlaybackWithData(data, autoPlay: autoPlay)
 
         case .community(let recording):
             guard downloadingId == nil else { return }
@@ -1642,7 +1642,7 @@ struct RecitationScreen: View {
                         playbackSource = source
                         playbackAudioData = data
                         playbackPlaylist = buildPlaylist()
-                        startPlaybackWithData(data)
+                        startPlaybackWithData(data, autoPlay: autoPlay)
                     }
                 } catch {
                     print("[RecitationScreen] Download error: \(error)")
@@ -1674,8 +1674,9 @@ struct RecitationScreen: View {
         let visibleCommunity = communityRecordings.filter { !localSourceIds.contains($0.id) }
 
         if let first = localRecs.first {
-            // Auto-select first personal recording
-            selectRecording(.local(first))
+            // Auto-select first personal recording, but keep it paused — user
+            // taps play when ready.
+            selectRecording(.local(first), autoPlay: false)
         } else {
             // No personal recordings — default to recording mode and show modal
             isRecordingMode = true
@@ -1709,7 +1710,7 @@ struct RecitationScreen: View {
         isUploading = false
     }
 
-    private func startPlaybackWithData(_ data: Data) {
+    private func startPlaybackWithData(_ data: Data, autoPlay: Bool = true) {
         playbackPlayer?.stop()
         playbackTimer?.invalidate()
 
@@ -1731,11 +1732,11 @@ struct RecitationScreen: View {
                 }
             }
 
-            player.play()
+            if autoPlay { player.play() }
             playbackPlayer = player
             playbackDuration = player.duration
-            isPlaying = true
-            startPlaybackTimer()
+            isPlaying = autoPlay
+            if autoPlay { startPlaybackTimer() }
         } catch {
             print("[RecitationScreen] Playback error: \(error)")
         }
@@ -1969,10 +1970,10 @@ struct RecitationScreen: View {
         recorder.discardRecording()
         isRecordingMode = false
 
-        // Auto-select the newly saved recording
+        // Select the newly saved recording but keep it paused — user taps play.
         let localRecs = localRecordingStore.recordings(forHash: quoteHash)
         if let newest = localRecs.last {
-            selectRecording(.local(newest))
+            selectRecording(.local(newest), autoPlay: false)
         }
     }
 

@@ -405,11 +405,12 @@ class RecitationViewModel @Inject constructor(
         ttsService.stop()
         loadRecordingsForCurrentQuote()
 
-        // Auto-select first local recording if available, otherwise enter recording mode
+        // Auto-select first local recording if available, otherwise enter recording mode.
+        // Load the recording but don't auto-start playback — user should tap play.
         val local = localRecordingStore.recordingsForHash(quoteTextHash)
         if (local.isNotEmpty()) {
             _audioState.update { it.copy(isPlaybackMode = true) }
-            playLocalRecording(local.first())
+            playLocalRecording(local.first(), autoPlay = false)
         } else {
             // No recordings — show picker sheet so user can choose TTS or record
             _audioState.update { it.copy(isPlaybackMode = true, showRecordingPicker = true) }
@@ -456,7 +457,7 @@ class RecitationViewModel @Inject constructor(
 
     // -- Playback controls --------------------------------------------------------
 
-    fun playLocalRecording(recording: LocalRecording) {
+    fun playLocalRecording(recording: LocalRecording, autoPlay: Boolean = true) {
         viewModelScope.launch {
             _audioState.update { it.copy(
                 isLoadingAudio = true,
@@ -467,7 +468,7 @@ class RecitationViewModel @Inject constructor(
             val data = localRecordingStore.loadAudioData(recording)
             if (data != null) {
                 val source = PlaybackSource.Local(recording)
-                startPlaybackWithData(data, source)
+                startPlaybackWithData(data, source, autoPlay = autoPlay)
             } else {
                 _audioState.update { it.copy(isLoadingAudio = false) }
             }
@@ -513,7 +514,7 @@ class RecitationViewModel @Inject constructor(
         }
     }
 
-    private suspend fun startPlaybackWithData(data: ByteArray, source: PlaybackSource) {
+    private suspend fun startPlaybackWithData(data: ByteArray, source: PlaybackSource, autoPlay: Boolean = true) {
         stopAudioPlayback()
 
         // Switch quote language to match the recording's language
@@ -550,17 +551,17 @@ class RecitationViewModel @Inject constructor(
                             playbackTimerJob?.cancel()
                         }
                     }
-                    start()
+                    if (autoPlay) start()
                 }
                 mediaPlayer = player
                 _audioState.update { it.copy(
-                    isPlaying = true,
+                    isPlaying = autoPlay,
                     isLoadingAudio = false,
                     duration = player.duration / 1000.0,
                     currentTime = 0.0,
                     currentSource = source
                 )}
-                startPlaybackTimer()
+                if (autoPlay) startPlaybackTimer()
             }
         } catch (e: Exception) {
             Log.e(TAG, "Playback error: ${e.message}")
@@ -740,8 +741,8 @@ class RecitationViewModel @Inject constructor(
         recorderService.discardRecording()
         _audioState.update { it.copy(isRecordingMode = false, isRecording = false, hasRecording = false) }
 
-        // Auto-play the saved recording
-        if (saved != null) playLocalRecording(saved)
+        // Select the saved recording but keep it paused — user taps play when ready.
+        if (saved != null) playLocalRecording(saved, autoPlay = false)
     }
 
     fun discardRecording() {

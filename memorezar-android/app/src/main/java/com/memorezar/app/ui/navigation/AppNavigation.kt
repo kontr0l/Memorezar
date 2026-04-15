@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,6 +38,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.memorezar.app.R
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -239,7 +241,47 @@ fun AppNavigation(
             }
         }
     ) { padding ->
-        NavHost(navController, startDestination = "home") {
+        // iOS-style navigation transitions: push slides the new screen in from
+        // the right; pop slides it back out to the right. Tab switches slide
+        // based on the relative tab order so Home→Library→Settings goes right
+        // and the reverse goes left (matches how the tabs are laid out).
+        val tabOrder = mapOf("home" to 0, "library" to 1, "settings" to 2)
+        val slideDuration = 350
+
+        fun AnimatedContentTransitionScope<NavBackStackEntry>.tabDirection(): AnimatedContentTransitionScope.SlideDirection? {
+            val fromIdx = tabOrder[initialState.destination.route]
+            val toIdx = tabOrder[targetState.destination.route]
+            if (fromIdx == null || toIdx == null) return null
+            return if (toIdx > fromIdx)
+                AnimatedContentTransitionScope.SlideDirection.Left
+            else
+                AnimatedContentTransitionScope.SlideDirection.Right
+        }
+
+        NavHost(
+            navController,
+            startDestination = "home",
+            enterTransition = {
+                val dir = tabDirection() ?: AnimatedContentTransitionScope.SlideDirection.Left
+                slideIntoContainer(dir, tween(slideDuration))
+            },
+            exitTransition = {
+                val dir = tabDirection() ?: AnimatedContentTransitionScope.SlideDirection.Left
+                slideOutOfContainer(dir, tween(slideDuration))
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    tween(slideDuration)
+                )
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    tween(slideDuration)
+                )
+            }
+        ) {
             composable("home") {
                 HomeScreen(
                     onNavigateToRecitation = { navController.navigate("recitation/$it") },

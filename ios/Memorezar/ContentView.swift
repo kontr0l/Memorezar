@@ -8,22 +8,33 @@ struct ContentView: View {
     @State private var libraryPath = NavigationPath()
 
     private static let iconHeight: CGFloat = 28
+    private static let tabCount = 3
 
     var body: some View {
         if !tutorialStore.hasCompletedOnboarding {
             OnboardingFlow()
         } else {
             VStack(spacing: 0) {
-                // Content area
-                Group {
-                    switch selectedTab {
-                    case 0: HomeScreen(path: $homePath)
-                    case 1: QuoteLibraryScreen(path: $libraryPath)
-                    case 2: SettingsScreen()
-                    default: HomeScreen(path: $homePath)
+                // All three tabs laid out side-by-side; selectedTab just slides
+                // the whole strip left/right. Gives a deterministic page-view
+                // style slide that matches Android's relative-tab-order feel:
+                // moving to a higher-index tab slides leftward (new content
+                // enters from the right), moving to a lower-index tab slides
+                // rightward (new content enters from the left).
+                GeometryReader { geo in
+                    HStack(spacing: 0) {
+                        HomeScreen(path: $homePath)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                        QuoteLibraryScreen(path: $libraryPath)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                        SettingsScreen()
+                            .frame(width: geo.size.width, height: geo.size.height)
                     }
+                    .offset(x: -CGFloat(selectedTab) * geo.size.width)
+                    .animation(.easeInOut(duration: 0.35), value: selectedTab)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
 
                 // Custom tab bar
                 Divider()
