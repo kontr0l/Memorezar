@@ -102,13 +102,13 @@ fun SettingsScreen(
     // coming back to Settings resets scroll to top (matches iOS).
     val scrollState = remember { ScrollState(0) }
 
-    val showNavTitle by remember {
-        derivedStateOf { scrollState.value > 80 }
-    }
-    val toolbarAlpha by animateFloatAsState(
-        targetValue = if (showNavTitle) 0.78f else 0f,
+    // Scrim alpha animates in once the user scrolls past the title — gives a
+    // subtle backdrop behind the status-bar icons without covering real content.
+    val showScrim by remember { derivedStateOf { scrollState.value > 80 } }
+    val scrimAlpha by animateFloatAsState(
+        targetValue = if (showScrim) 0.95f else 0f,
         animationSpec = tween(durationMillis = 250),
-        label = "toolbarAlpha"
+        label = "scrimAlpha"
     )
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -318,7 +318,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.99")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.6.5")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
@@ -326,29 +326,25 @@ fun SettingsScreen(
             Spacer(Modifier.height(80.dp))
         }
 
-        // ── Floating toolbar with gradient fade ──
+        // ── Status-bar scrim ──
+        // A thin gradient behind the status bar so notifications/time remain
+        // legible when the user scrolls down — sits only over the status bar
+        // area and fades out to transparent at its bottom edge.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(statusBarTop)
                 .align(Alignment.TopStart)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(toolbarHeight + 20.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colorStops = arrayOf(
-                                0.0f to surfaceColor.copy(alpha = toolbarAlpha.coerceAtLeast(0.01f)),
-                                0.75f to surfaceColor.copy(alpha = toolbarAlpha.coerceAtLeast(0.01f) * 0.92f),
-                                0.9f to surfaceColor.copy(alpha = toolbarAlpha * 0.4f),
-                                1.0f to Color.Transparent
-                            )
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.0f to surfaceColor.copy(alpha = scrimAlpha),
+                            0.8f to surfaceColor.copy(alpha = scrimAlpha * 0.75f),
+                            1.0f to Color.Transparent
                         )
                     )
-            )
-            // (Mini scroll title intentionally removed)
-        }
+                )
+        )
 
         // Alerts
         if (showResetAlert) {

@@ -453,7 +453,8 @@ fun AppNavigation(
     if (showAuthSheet) {
         ModalBottomSheet(
             onDismissRequest = { showAuthSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null
         ) {
             AuthSheet(
                 authService = authService,

@@ -482,7 +482,7 @@ fun CategoryDetailScreen(
 
     // Animated toolbar alpha for smooth fade like iOS
     val toolbarAlpha by animateFloatAsState(
-        targetValue = if (showNavTitle) 0.78f else 0f,
+        targetValue = if (showNavTitle) 0.95f else 0f,
         animationSpec = tween(durationMillis = 250),
         label = "toolbarAlpha"
     )
