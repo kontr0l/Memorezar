@@ -83,7 +83,8 @@ struct ContactSupportView: View {
                 Text("Thanks for reaching out. We'll get back to you soon.")
             }
             .onAppear {
-                if let userEmail = authService.currentUser?.email {
+                if let userEmail = authService.currentUser?.email,
+                   !userEmail.hasSuffix("@privaterelay.appleid.com") {
                     email = userEmail
                 }
             }

@@ -709,15 +709,13 @@ fun PackRequestCard(onClick: () -> Unit) {
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(horizontal = 12.dp)
             ) {
-                Text(
-                    text = "\uD83D\uDCE9",
-                    style = MaterialTheme.typography.headlineLarge
-                )
+                BrainCharacterView(character = BrainCharacter.WORK1, size = 96.dp)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.request_quote_pack),
+                    text = stringResource(R.string.pack_request_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = IndigoColor,

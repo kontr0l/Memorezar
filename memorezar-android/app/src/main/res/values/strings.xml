@@ -170,7 +170,7 @@
     <string name="add_your_own">Add your own</string>
     <string name="streak">Streak</string>
     <string name="see_all">See All</string>
-    <string name="request_quote_pack">Request a\nQuote Pack</string>
+    <string name="pack_request_title">Got an idea for a quote pack?</string>
     <string name="today">Today</string>
     <string name="memorezar_logo">Memorezar</string>
     <string name="quotes_count_format">%d quotes</string>

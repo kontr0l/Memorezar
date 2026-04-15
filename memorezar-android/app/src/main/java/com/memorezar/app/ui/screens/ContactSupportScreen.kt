@@ -68,7 +68,11 @@ fun ContactSupportScreen(
 
     var reason by remember { mutableStateOf(initialReason ?: SupportReason.FEATURE_REQUEST) }
     var reasonExpanded by remember { mutableStateOf(false) }
-    var email by remember { mutableStateOf(currentUser?.email ?: "") }
+    var email by remember {
+        val initial = currentUser?.email
+        val usable = initial?.takeIf { !it.endsWith("@privaterelay.appleid.com") } ?: ""
+        mutableStateOf(usable)
+    }
     var message by remember { mutableStateOf("") }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }

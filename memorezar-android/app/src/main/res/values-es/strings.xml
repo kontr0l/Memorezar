@@ -170,7 +170,7 @@
     <string name="add_your_own">Agrega la tuya</string>
     <string name="streak">Racha</string>
     <string name="see_all">Ver Todo</string>
-    <string name="request_quote_pack">Solicitar un\nPaquete de Citas</string>
+    <string name="pack_request_title">¿Tienes una idea para un paquete de citas?</string>
     <string name="today">Hoy</string>
     <string name="memorezar_logo">Memorezar</string>
     <string name="quotes_count_format">%d citas</string>

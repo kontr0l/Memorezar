@@ -319,8 +319,6 @@ struct HomeScreen: View {
         }
         .sheet(isPresented: $showPackRequest) {
             ContactSupportView(initialReason: .quotePackRequest)
-                .presentationDetents([.fraction(0.78), .large])
-                .presentationDragIndicator(.visible)
         }
     }
 
@@ -429,9 +427,8 @@ struct PackRequestCard: View {
             )
 
             VStack(spacing: 8) {
-                Text("\u{1F4E9}")
-                    .font(.system(size: 40))
-                Text("Request a Quote Pack")
+                BrainCharacterView(character: .work1, size: 96)
+                Text("Got an idea for a quote pack?")
                     .font(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundColor(.indigo)
