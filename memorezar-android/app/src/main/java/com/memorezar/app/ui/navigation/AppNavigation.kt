@@ -215,7 +215,10 @@ fun AppNavigation(
                                                     saveState = true
                                                 }
                                                 launchSingleTop = true
-                                                restoreState = true
+                                                // Home always starts fresh — don't restore a
+                                                // saved sub-route (e.g. pack preview) when the
+                                                // user taps Home from another tab.
+                                                restoreState = item.route != "home"
                                             }
                                         }
                                     },
@@ -321,14 +324,14 @@ fun AppNavigation(
                 StreakDetailScreen(
                     quoteStore = quoteStore,
                     onBack = { navController.popBackStack() },
-                    modifier = Modifier.padding(padding)
+                    bottomNavHeight = padding.calculateBottomPadding()
                 )
             }
             composable("accuracy_detail") {
                 AccuracyDetailScreen(
                     quoteStore = quoteStore,
                     onBack = { navController.popBackStack() },
-                    modifier = Modifier.padding(padding)
+                    bottomNavHeight = padding.calculateBottomPadding()
                 )
             }
             composable("mastered_quotes") {
@@ -336,7 +339,7 @@ fun AppNavigation(
                     quoteStore = quoteStore,
                     onBack = { navController.popBackStack() },
                     onNavigateToRecitation = { navController.navigate("recitation/$it") },
-                    modifier = Modifier.padding(padding)
+                    bottomNavHeight = padding.calculateBottomPadding()
                 )
             }
             composable("pack_detail") {

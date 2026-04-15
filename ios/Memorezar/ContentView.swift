@@ -55,6 +55,11 @@ struct ContentView: View {
                 default: break
                 }
             } else {
+                // Home always starts fresh when entered from another tab.
+                // (Library preserves its navigation state, matching Android.)
+                if tag == 0 && !homePath.isEmpty {
+                    homePath = NavigationPath()
+                }
                 selectedTab = tag
             }
         } label: {

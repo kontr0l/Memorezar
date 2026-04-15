@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.memorezar.app.data.models.MasteryLevel
@@ -46,13 +48,14 @@ fun MasteredQuotesScreen(
     quoteStore: QuoteStore,
     onBack: () -> Unit,
     onNavigateToRecitation: (String) -> Unit,
-    modifier: Modifier = Modifier
+    bottomNavHeight: Dp = 0.dp
 ) {
     val quotes by quoteStore.quotes.collectAsState()
     val masteredQuotes = quotes.filter { it.masteryLevel == MasteryLevel.MASTERED }
 
     Scaffold(
-        modifier = modifier,
+        modifier = Modifier.padding(bottom = bottomNavHeight),
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = { Text("Mastered Quotes") },

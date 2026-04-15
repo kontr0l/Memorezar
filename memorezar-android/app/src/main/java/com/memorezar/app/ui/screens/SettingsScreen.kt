@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -91,7 +92,9 @@ fun SettingsScreen(
     var showResetAlert by remember { mutableStateOf(false) }
     var showDeleteDataAlert by remember { mutableStateOf(false) }
     var showTestFlash by remember { mutableStateOf(false) }
-    val scrollState = rememberScrollState()
+    // Non-saveable scroll state — tab switching disposes this composable so
+    // coming back to Settings resets scroll to top (matches iOS).
+    val scrollState = remember { ScrollState(0) }
 
     val showNavTitle by remember {
         derivedStateOf { scrollState.value > 80 }
@@ -306,7 +309,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.66")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.68")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }

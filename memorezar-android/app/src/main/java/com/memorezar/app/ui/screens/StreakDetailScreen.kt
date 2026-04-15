@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.memorezar.app.R
 import com.memorezar.app.data.storage.QuoteStore
@@ -48,7 +50,7 @@ import java.util.Locale
 fun StreakDetailScreen(
     quoteStore: QuoteStore,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    bottomNavHeight: Dp = 0.dp
 ) {
     val sessions by quoteStore.sessions.collectAsState()
 
@@ -82,7 +84,8 @@ fun StreakDetailScreen(
     }
 
     Scaffold(
-        modifier = modifier,
+        modifier = Modifier.padding(bottom = bottomNavHeight),
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.streak)) },

@@ -455,90 +455,95 @@ struct PackDetailView: View {
     private var lang: String { LanguageHelper.preferredLanguageCode }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                // Cover image header
-                ZStack(alignment: .bottomLeading) {
-                    packCoverImage(height: 260)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    // Cover image header
+                    ZStack(alignment: .bottomLeading) {
+                        packCoverImage(height: 260)
 
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.7)],
-                        startPoint: .center,
-                        endPoint: .bottom
-                    )
+                        LinearGradient(
+                            colors: [.clear, .black.opacity(0.7)],
+                            startPoint: .center,
+                            endPoint: .bottom
+                        )
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Spacer()
-                        Text(pack.localizedName(for: lang))
-                            .font(.title2.bold())
-                            .foregroundColor(.white)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Spacer()
+                            Text(pack.localizedName(for: lang))
+                                .font(.title2.bold())
+                                .foregroundColor(.white)
 
-                        Text(String(localized: "\(pack.quotes.count) quotes"))
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.8))
+                            Text(String(localized: "\(pack.quotes.count) quotes"))
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        .padding(16)
+                    }
+                    .frame(height: 260)
+
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Description
+                        Text(pack.localizedDescription(for: lang))
+                            .font(.body)
+                            .foregroundColor(.secondary)
+
+                        // Quote preview — show localized text
+                        VStack(spacing: 0) {
+                            Text("\u{201C}")
+                                .font(.system(size: 100, weight: .bold, design: .serif))
+                                .foregroundColor(.indigo.opacity(0.25))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, -10)
+                                .padding(.bottom, -60)
+
+                            VStack(spacing: 14) {
+                                ForEach(Array(pack.quotes.prefix(3).enumerated()), id: \.offset) { _, quote in
+                                    Text(snippetDisplay(for: quote))
+                                        .font(.body)
+                                        .italic()
+                                        .foregroundColor(.secondary)
+                                        .multilineTextAlignment(.center)
+                                        .lineLimit(1)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.horizontal, 20)
+
+                            Text("\u{201D}")
+                                .font(.system(size: 100, weight: .bold, design: .serif))
+                                .foregroundColor(.indigo.opacity(0.25))
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                .padding(.top, -20)
+                        }
                     }
                     .padding(16)
                 }
-                .frame(height: 260)
-
-                VStack(alignment: .leading, spacing: 20) {
-                    // Description
-                    Text(pack.localizedDescription(for: lang))
-                        .font(.body)
-                        .foregroundColor(.secondary)
-
-                    // Quote preview — show localized text
-                    VStack(spacing: 0) {
-                        Text("\u{201C}")
-                            .font(.system(size: 100, weight: .bold, design: .serif))
-                            .foregroundColor(.indigo.opacity(0.25))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, -10)
-                            .padding(.bottom, -60)
-
-                        VStack(spacing: 14) {
-                            ForEach(Array(pack.quotes.prefix(3).enumerated()), id: \.offset) { _, quote in
-                                Text(snippetDisplay(for: quote))
-                                    .font(.body)
-                                    .italic()
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.horizontal, 20)
-
-                        Text("\u{201D}")
-                            .font(.system(size: 100, weight: .bold, design: .serif))
-                            .foregroundColor(.indigo.opacity(0.25))
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .padding(.top, -20)
-                    }
-
-                    // Add to Library button
-                    Button {
-                        if purchaseService.canAccessPack(pack) {
-                            quoteStore.addSuggestionPack(pack, preferredLanguage: lang)
-                        } else {
-                            showPaywall = true
-                        }
-                    } label: {
-                        HStack {
-                            Text("Add to Library")
-                            Image(systemName: "plus.square")
-                            if !pack.isFree && !purchaseService.hasFullAccess {
-                                ProBadge()
-                            }
-                        }
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.indigo)
-                }
-                .padding(16)
             }
+
+            // Add to Library button — pinned at the bottom so position is
+            // consistent across packs regardless of description/preview length.
+            Button {
+                if purchaseService.canAccessPack(pack) {
+                    quoteStore.addSuggestionPack(pack, preferredLanguage: lang)
+                } else {
+                    showPaywall = true
+                }
+            } label: {
+                HStack {
+                    Text("Add to Library")
+                    Image(systemName: "plus.square")
+                    if !pack.isFree && !purchaseService.hasFullAccess {
+                        ProBadge()
+                    }
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity, minHeight: 50)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.indigo)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
         .sheet(isPresented: $showPaywall) {
             PaywallSheet()

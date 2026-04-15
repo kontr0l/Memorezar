@@ -50,6 +50,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -175,10 +176,13 @@ fun QuoteLibraryScreen(
     }
 
     run {
+        // Non-saveable scroll state — tab switching disposes this composable so
+        // coming back to Library resets scroll to top (matches iOS).
+        val rootScrollState = remember { ScrollState(0) }
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rootScrollState)
                 .padding(horizontal = 16.dp)
         ) {
             Spacer(Modifier.height(WindowInsets.statusBars.asPaddingValues().calculateTopPadding()))

@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -110,10 +111,20 @@ fun HomeScreen(
     }
     val heroCharacter = remember { BrainCharacter.randomHero() }
 
+    // Track when the home screen was entered so we only mark an ActionTip
+    // as "completed" if the user tapped AFTER the tip had time to actually
+    // become visible (matches iOS: only completes if tip was visible at tap).
+    val screenEnterTime = remember { System.currentTimeMillis() }
+    fun isTipCurrentlyVisible(tip: TipDefinition): Boolean =
+        shouldShowTip(tip) && (System.currentTimeMillis() - screenEnterTime) >= 600L
+
+    // Non-saveable scroll state — tab switching disposes this composable so
+    // coming back to Home resets scroll to top (matches iOS).
+    val rootScrollState = remember { ScrollState(0) }
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rootScrollState)
             .padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -249,12 +260,13 @@ fun HomeScreen(
             )
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Info tile
+                // Info tile — flexible width (wider), top-left aligned content
                 Card(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.2f)
                         .height(100.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = CardBg),
@@ -264,33 +276,39 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(12.dp),
-                        verticalArrangement = Arrangement.Center
+                        horizontalAlignment = Alignment.Start,
+                        verticalArrangement = Arrangement.Top
                     ) {
                         Text(
                             stringResource(R.string.no_quotes_yet_home),
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             stringResource(R.string.add_quote_get_started),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3
                         )
                     }
                 }
-                // Add quote tile
+                // Add quote tile — narrower, top-left aligned, icon fills remaining space
                 ActionTip(
                     text = stringResource(TipDefinition.addOwnQuote.contentRes),
                     visible = shouldShowTip(TipDefinition.addOwnQuote),
-                    wiggle = true
+                    wiggle = true,
+                    modifier = Modifier.weight(1f)
                 ) {
                     Card(
                         modifier = Modifier
-                            .width(160.dp)
+                            .fillMaxWidth()
                             .height(100.dp)
                             .clickable {
-                                tutorialStore?.completeTip(TipDefinition.addOwnQuote.id)
+                                if (isTipCurrentlyVisible(TipDefinition.addOwnQuote)) {
+                                    tutorialStore?.completeTip(TipDefinition.addOwnQuote.id)
+                                }
                                 onNavigateToQuoteInput()
                             },
                         shape = RoundedCornerShape(12.dp),
@@ -301,21 +319,30 @@ fun HomeScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(12.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
+                            horizontalAlignment = Alignment.Start
                         ) {
                             Text(
                                 stringResource(R.string.add_your_own),
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
                             )
                             Spacer(Modifier.height(8.dp))
-                            Icon(
-                                painter = painterResource(R.drawable.icon_addquote),
-                                contentDescription = stringResource(R.string.add_quote),
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(36.dp)
-                            )
+                            // Icon fills remaining vertical space, matching iOS's
+                            // .frame(height: 36).frame(maxWidth: .infinity, maxHeight: .infinity)
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.icon_addquote),
+                                    contentDescription = stringResource(R.string.add_quote),
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.height(36.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -428,8 +455,7 @@ fun HomeScreen(
                 authService = authService,
                 supportTicketService = supportTicketService,
                 onDismiss = { showPackRequest = false },
-                initialReason = SupportReason.QUOTE_PACK_REQUEST,
-                compact = true
+                initialReason = SupportReason.QUOTE_PACK_REQUEST
             )
         }
     }
