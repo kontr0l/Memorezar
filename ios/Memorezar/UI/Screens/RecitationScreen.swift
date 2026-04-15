@@ -428,6 +428,9 @@ struct RecitationScreen: View {
                 AlertManager.shared.stopResultSound()
             }) {
                 resultsSheet
+                    // In tutorial mode the user must tap Continue/Done on the
+                    // sheet itself — swipe-down and tap-outside are disabled.
+                    .interactiveDismissDisabled(isTutorialMode)
             }
             .sheet(isPresented: $showSaveRecordingSheet, onDismiss: {
                 isEditingExistingRecording = false

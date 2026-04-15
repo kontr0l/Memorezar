@@ -347,6 +347,7 @@ struct CategoryDetailView: View {
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(height: 32)
+                            .offset(x: -10, y: 4)
                     }
                 }
             }
@@ -967,7 +968,7 @@ struct MasteredQuotesView: View {
             if masteredQuotes.isEmpty {
                 Section {
                     VStack(spacing: 16) {
-                        BrainCharacterView(character: .work1, size: 120)
+                        BrainCharacterView(character: .pray1, size: 120)
 
                         Text("No mastered quotes yet")
                             .font(.headline)

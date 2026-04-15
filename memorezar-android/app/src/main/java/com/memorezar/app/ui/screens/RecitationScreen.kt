@@ -587,6 +587,7 @@ fun RecitationScreen(
                                     },
                                     micFillProgress = micFillProgress.value,
                                     liquidWavePhase = wavePhase,
+                                    isTutorialMode = isTutorialMode,
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
@@ -607,6 +608,7 @@ fun RecitationScreen(
                                     },
                                     liquidFillProgress = micFillProgress.value,
                                     liquidWavePhase = wavePhaseTyping,
+                                    isTutorialMode = isTutorialMode,
                                     modifier = Modifier.padding(horizontal = 16.dp)
                                 )
                             }
@@ -668,6 +670,7 @@ fun RecitationScreen(
                                 uiState = uiState,
                                 onReset = { viewModel.resetSession(recalculateReveal = false) },
                                 onInfo = { viewModel.showQuoteInfo() },
+                                isTutorialMode = isTutorialMode,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
@@ -779,7 +782,11 @@ fun RecitationScreen(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { viewModel.dismissCompletion() },
+                    ) {
+                        // In tutorial mode the user must tap Continue/Done on the
+                        // sheet itself — tapping the backdrop does nothing.
+                        if (!isTutorialMode) viewModel.dismissCompletion()
+                    },
                 contentAlignment = Alignment.BottomCenter
             ) {
                 AnimatedVisibility(
@@ -1514,6 +1521,7 @@ private fun VoiceInputRow(
     onCrownTap: () -> Unit,
     micFillProgress: Float = 0f,
     liquidWavePhase: Float = 0f,
+    isTutorialMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -1523,16 +1531,19 @@ private fun VoiceInputRow(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (uiState.isMasterMode) {
-            // Show streak counter instead of first-letter button in master mode
-            MasterStreakCounter(
-                streak = uiState.previousMasteryStreak,
-                isActive = true
-            )
-        } else {
-            FirstLetterButton(isToggled = uiState.isFirstLetterToggle, onClick = onFirstLetterToggle)
+        // Hide first-letter toggle + crown in tutorial mode (user focus on mic only)
+        if (!isTutorialMode) {
+            if (uiState.isMasterMode) {
+                // Show streak counter instead of first-letter button in master mode
+                MasterStreakCounter(
+                    streak = uiState.previousMasteryStreak,
+                    isActive = true
+                )
+            } else {
+                FirstLetterButton(isToggled = uiState.isFirstLetterToggle, onClick = onFirstLetterToggle)
+            }
+            Spacer(Modifier.width(14.dp))
         }
-        Spacer(Modifier.width(14.dp))
         MicButton(
             isListening = uiState.isListening,
             audioLevel = uiState.audioLevel,
@@ -1541,13 +1552,15 @@ private fun VoiceInputRow(
             liquidWavePhase = liquidWavePhase,
             onClick = onMicTap
         )
-        Spacer(Modifier.width(14.dp))
-        CrownButton(
-            isMasterMode = uiState.isMasterMode,
-            liquidFillProgress = micFillProgress,
-            liquidWavePhase = liquidWavePhase,
-            onClick = onCrownTap
-        )
+        if (!isTutorialMode) {
+            Spacer(Modifier.width(14.dp))
+            CrownButton(
+                isMasterMode = uiState.isMasterMode,
+                liquidFillProgress = micFillProgress,
+                liquidWavePhase = liquidWavePhase,
+                onClick = onCrownTap
+            )
+        }
     }
 }
 
@@ -1565,6 +1578,7 @@ private fun TypingInputRow(
     onCrownTap: () -> Unit,
     liquidFillProgress: Float = 0f,
     liquidWavePhase: Float = 0f,
+    isTutorialMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     // Track local text state to avoid BasicTextField controlled-value mismatch.
@@ -1612,10 +1626,12 @@ private fun TypingInputRow(
             .height(80.dp),
         verticalAlignment = Alignment.Bottom
     ) {
-        Box(Modifier.offset(y = (-3).dp)) {
-            FirstLetterButton(isToggled = uiState.isFirstLetterToggle, onClick = onFirstLetterToggle)
+        if (!isTutorialMode) {
+            Box(Modifier.offset(y = (-3).dp)) {
+                FirstLetterButton(isToggled = uiState.isFirstLetterToggle, onClick = onFirstLetterToggle)
+            }
+            Spacer(Modifier.width(8.dp))
         }
-        Spacer(Modifier.width(8.dp))
 
         // Text input field
         Box(
@@ -1671,14 +1687,16 @@ private fun TypingInputRow(
             }
         }
 
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.offset(y = (-3).dp)) {
-            CrownButton(
-                isMasterMode = uiState.isMasterMode,
-                liquidFillProgress = liquidFillProgress,
-                liquidWavePhase = liquidWavePhase,
-                onClick = onCrownTap
-            )
+        if (!isTutorialMode) {
+            Spacer(Modifier.width(8.dp))
+            Box(Modifier.offset(y = (-3).dp)) {
+                CrownButton(
+                    isMasterMode = uiState.isMasterMode,
+                    liquidFillProgress = liquidFillProgress,
+                    liquidWavePhase = liquidWavePhase,
+                    onClick = onCrownTap
+                )
+            }
         }
     }
 }
@@ -1865,6 +1883,7 @@ private fun ControlPill(
     uiState: RecitationUiState,
     onReset: () -> Unit,
     onInfo: () -> Unit,
+    isTutorialMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val isReading = uiState.isReadingMode
@@ -1966,7 +1985,9 @@ private fun ControlPill(
                     }
                     Spacer(Modifier.weight(1f))
                     Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
-                        Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = resetAlpha), modifier = Modifier.size(20.dp))
+                        if (!isTutorialMode) {
+                            Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = resetAlpha), modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
                 // Bottom row: spacer for info | legend icons | RESET label
@@ -1989,7 +2010,9 @@ private fun ControlPill(
                     }
                     Spacer(Modifier.weight(1f))
                     Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
-                        Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = resetAlpha))
+                        if (!isTutorialMode) {
+                            Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = resetAlpha))
+                        }
                     }
                 }
             }
@@ -1997,24 +2020,28 @@ private fun ControlPill(
 
         // Info button — always rendered at the same fixed position (overlays both modes).
         // No-ripple clickable; the icon/label alpha darkens on press (see infoAlpha above).
-        Box(
-            modifier = Modifier
-                .padding(start = 12.dp)
-                .width(50.dp)
-                .height(pillHeight)
-                .align(Alignment.CenterStart)
-                .clickable(
-                    interactionSource = infoInteraction,
-                    indication = null
-                ) { onInfo() },
-            contentAlignment = Alignment.Center
-        ) {
-            infoButton()
+        // Hidden entirely in tutorial mode so the user focuses only on the guided prompts.
+        if (!isTutorialMode) {
+            Box(
+                modifier = Modifier
+                    .padding(start = 12.dp)
+                    .width(50.dp)
+                    .height(pillHeight)
+                    .align(Alignment.CenterStart)
+                    .clickable(
+                        interactionSource = infoInteraction,
+                        indication = null
+                    ) { onInfo() },
+                contentAlignment = Alignment.Center
+            ) {
+                infoButton()
+            }
         }
 
         // Reset button — whole icon+label region is tappable (matches iOS). Same
         // no-ripple pattern as Info; alpha darkens via resetAlpha.
-        if (!isReading) {
+        // Disabled in tutorial mode so the user can't reset the guided session.
+        if (!isReading && !isTutorialMode) {
             Box(
                 modifier = Modifier
                     .padding(end = 12.dp)

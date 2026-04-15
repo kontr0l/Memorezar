@@ -2,6 +2,7 @@ package com.memorezar.app.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -99,28 +100,31 @@ fun MasteredQuotesScreen(
             }
 
             if (masteredQuotes.isEmpty()) {
-                Column(
+                // Matches the My Quotes empty-state spacing: a fixed 300dp-tall
+                // Box right below the header with content centered inside.
+                Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                        .fillMaxWidth()
+                        .height(300.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    BrainCharacterView(character = BrainCharacter.WORK1, size = 120.dp)
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        "No mastered quotes yet",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Master a quote by getting 3 consecutive perfect recitations in Master Mode.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        BrainCharacterView(character = BrainCharacter.PRAY1, size = 120.dp)
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "No mastered quotes yet",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Master a quote by getting 3 consecutive perfect recitations in Master Mode.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                    }
                 }
             } else {
                 LazyColumn {

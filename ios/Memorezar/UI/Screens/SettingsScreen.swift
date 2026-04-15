@@ -18,6 +18,14 @@ struct SettingsScreen: View {
     var body: some View {
         NavigationStack {
             List {
+                // Inline large title — matches the Library screen's title style.
+                Text("Settings")
+                    .font(.largeTitle.bold())
+                    .foregroundColor(.primary)
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 16, leading: 1, bottom: 0, trailing: 0))
+                    .listRowSeparator(.hidden)
+
                 alertsSection
                 displaySection
                 statisticsSection
@@ -25,6 +33,14 @@ struct SettingsScreen: View {
                 dataSection
                 aboutSection
             }
+            // Pull the List's default insets down to zero so the gutter
+            // matches the Library/Home screens' 16pt edge inset (provided
+            // by .padding() on their VStack), not the List default.
+            .contentMargins(.top, 0, for: .scrollContent)
+            .listSectionSpacing(.compact)
+            // Pull section card margins from the default ~20pt down to ~10pt
+            // by extending the List 10pt past its bounds on each side.
+            .padding(.horizontal, -5)
             .sheet(isPresented: $showAuthSheet) {
                 AuthSheet()
                     .environmentObject(authService)
@@ -52,7 +68,8 @@ struct SettingsScreen: View {
                         .allowsHitTesting(false)
                     : nil
             )
-            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 AlertManager.shared.onVisualAlert = {
                     showFlash = true
@@ -289,7 +306,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v71.84")
+                Text("v72.0")
                     .foregroundColor(.secondary)
             }
 

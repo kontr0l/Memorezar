@@ -137,9 +137,7 @@ fun AppNavigation(
     )
 
     val showBottomBar = currentRoute != null && !currentRoute.startsWith("recitation/")
-            && currentRoute != "streak_detail" && currentRoute != "accuracy_detail"
             && currentRoute != "pack_search"
-            && currentRoute != "mastered_quotes"
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -206,21 +204,27 @@ fun AppNavigation(
                                         interactionSource = interactionSource,
                                         indication = null
                                     ) {
-                                        // If we're already inside this tab's hierarchy but not at
-                                        // its root (e.g. a category/pack detail), pop back to the
-                                        // tab root instead of re-navigating.
-                                        if (selected && currentRoute != item.route) {
-                                            navController.popBackStack(item.route, false)
-                                        } else {
-                                            navController.navigate(item.route) {
-                                                popUpTo(navController.graph.findStartDestination().id) {
-                                                    saveState = true
+                                        // Tapping any footer tab takes the user to the tab's
+                                        // root — never to a previously-open sub-page.
+                                        //   - Already on the tab root → no-op (press feedback
+                                        //     still fires via the interactionSource).
+                                        //   - Inside this tab's stack (sub-route) → pop to root.
+                                        //   - On another tab → navigate fresh (no restored state).
+                                        when {
+                                            currentRoute == item.route -> {
+                                                // No-op: already at this tab's root.
+                                            }
+                                            selected -> {
+                                                navController.popBackStack(item.route, false)
+                                            }
+                                            else -> {
+                                                navController.navigate(item.route) {
+                                                    popUpTo(navController.graph.findStartDestination().id) {
+                                                        saveState = false
+                                                    }
+                                                    launchSingleTop = true
+                                                    restoreState = false
                                                 }
-                                                launchSingleTop = true
-                                                // Home always starts fresh — don't restore a
-                                                // saved sub-route (e.g. pack preview) when the
-                                                // user taps Home from another tab.
-                                                restoreState = item.route != "home"
                                             }
                                         }
                                     },

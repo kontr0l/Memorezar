@@ -57,20 +57,14 @@ struct ContentView: View {
 
     private func tabButton(icon: String, tag: Int) -> some View {
         Button {
-            // If a tab is re-tapped while already selected, pop its stack back
-            // to the root (matches Android behavior).
-            if selectedTab == tag {
-                switch tag {
-                case 0: if !homePath.isEmpty { homePath = NavigationPath() }
-                case 1: if !libraryPath.isEmpty { libraryPath = NavigationPath() }
-                default: break
-                }
-            } else {
-                // Home always starts fresh when entered from another tab.
-                // (Library preserves its navigation state, matching Android.)
-                if tag == 0 && !homePath.isEmpty {
-                    homePath = NavigationPath()
-                }
+            // Tapping any footer tab ALWAYS takes the user to the tab's root —
+            // never to a previously-open sub-page. Matches Android behavior.
+            switch tag {
+            case 0: if !homePath.isEmpty { homePath = NavigationPath() }
+            case 1: if !libraryPath.isEmpty { libraryPath = NavigationPath() }
+            default: break
+            }
+            if selectedTab != tag {
                 selectedTab = tag
             }
         } label: {

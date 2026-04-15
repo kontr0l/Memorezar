@@ -133,12 +133,13 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp)
                 .padding(top = toolbarHeight)
         ) {
-            // Title (scrolls away)
+            // Title (scrolls away). top=8dp/bottom=2dp lines the baseline up
+            // with the Library screen title at the same y-offset.
             Text(
                 text = stringResource(R.string.settings),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
+                modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
             )
 
             // ── Alerts ──

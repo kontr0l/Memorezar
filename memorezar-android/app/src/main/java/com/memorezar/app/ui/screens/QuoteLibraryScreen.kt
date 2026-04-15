@@ -25,6 +25,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -203,14 +205,22 @@ fun QuoteLibraryScreen(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onNavigateToQuoteInput) {
-                    Icon(
-                        painter = painterResource(R.drawable.icon_addquote),
-                        contentDescription = stringResource(R.string.add_quote),
-                        tint = Color.Unspecified,
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
+                // Height matches headlineMedium line height (~36sp) so the icon
+                // sits on the same vertical band as the "Library" title. Explicit
+                // aspectRatio keeps the glyph from being squeezed or clipped.
+                Image(
+                    painter = painterResource(R.drawable.icon_addquote),
+                    contentDescription = stringResource(R.string.add_quote),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .height(36.dp)
+                        .aspectRatio(516f / 379f)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = onNavigateToQuoteInput
+                        )
+                )
             }
 
             // Category grid
@@ -527,7 +537,7 @@ fun CategoryDetailScreen(
                     ) {
                         if (searchText.isBlank()) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                BrainCharacterView(character = BrainCharacter.WORK1, size = 120.dp)
+                                BrainCharacterView(character = BrainCharacter.WORK3, size = 120.dp)
                                 Spacer(Modifier.height(12.dp))
                                 Text(
                                     text = stringResource(R.string.no_quotes_in_category),
@@ -678,14 +688,23 @@ fun CategoryDetailScreen(
                         Spacer(Modifier.weight(1f))
                     }
                     if (!isPack) {
-                        IconButton(onClick = { onAddQuote(categoryId) }) {
-                            Icon(
-                                painter = painterResource(R.drawable.icon_addquote),
-                                contentDescription = stringResource(R.string.add_quote),
-                                tint = Color.Unspecified,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
+                        // Matches the Library page top-right add-quote icon exactly:
+                        // 36dp tall, 516:379 aspect ratio, plain clickable Image.
+                        // offset: -12dp x / +6dp y for visual alignment with the
+                        // category title and back button on this page.
+                        Image(
+                            painter = painterResource(R.drawable.icon_addquote),
+                            contentDescription = stringResource(R.string.add_quote),
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .offset(x = (-12).dp, y = 6.dp)
+                                .height(36.dp)
+                                .aspectRatio(516f / 379f)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onAddQuote(categoryId) }
+                        )
                     }
                 }
             }
