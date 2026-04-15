@@ -26,13 +26,21 @@ struct SettingsScreen: View {
                     .listRowInsets(EdgeInsets(top: 16, leading: 1, bottom: 0, trailing: 0))
                     .listRowSeparator(.hidden)
 
-                alertsSection
-                displaySection
-                statisticsSection
-                accountSection
-                dataSection
-                aboutSection
+                Group {
+                    alertsSection
+                    displaySection
+                    statisticsSection
+                    accountSection
+                    dataSection
+                    aboutSection
+                }
+                // Invert default colors: cards become grey instead of white.
+                .listRowBackground(Color(.systemGroupedBackground))
             }
+            // Invert default colors: scroll background becomes white (the
+            // color normally used for the section cards) instead of grey.
+            .scrollContentBackground(.hidden)
+            .background(Color(.secondarySystemGroupedBackground))
             // Pull the List's default insets down to zero so the gutter
             // matches the Library/Home screens' 16pt edge inset (provided
             // by .padding() on their VStack), not the List default.
@@ -306,7 +314,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v72.1")
+                Text("v72.2")
                     .foregroundColor(.secondary)
             }
 

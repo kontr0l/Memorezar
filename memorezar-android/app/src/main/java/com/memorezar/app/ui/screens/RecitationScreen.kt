@@ -9,6 +9,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -1180,30 +1183,39 @@ private fun WordGrid(
     modifier: Modifier = Modifier
 ) {
     var flowRowOffsetY by remember { mutableFloatStateOf(0f) }
-    Box(modifier = modifier.onGloballyPositioned { coords ->
-        flowRowOffsetY = coords.positionInParent().y
-    }) {
-        FlowRow(
-            modifier = Modifier
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            uiState.words.forEachIndexed { index, word ->
-                val displayMode = viewModel.wordDisplayMode(index)
-                Box(
-                    modifier = Modifier.onGloballyPositioned { coords ->
-                        wordYPositions[index] = wordGridOffsetY + flowRowOffsetY + coords.positionInParent().y
+    // Persian/Arabic/Hebrew/Urdu — flow words right-to-left so the first word
+    // in reading order sits on the right edge.
+    val langCode = viewModel.getActiveLanguageCode().lowercase()
+    val isRTL = langCode in setOf("fa", "ar", "he", "ur", "yi", "ps", "sd", "dv")
+    CompositionLocalProvider(
+        LocalLayoutDirection provides if (isRTL) LayoutDirection.Rtl else LayoutDirection.Ltr
+    ) {
+        Box(modifier = modifier.onGloballyPositioned { coords ->
+            flowRowOffsetY = coords.positionInParent().y
+        }) {
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                uiState.words.forEachIndexed { index, word ->
+                    val displayMode = viewModel.wordDisplayMode(index)
+                    Box(
+                        modifier = Modifier.onGloballyPositioned { coords ->
+                            wordYPositions[index] = wordGridOffsetY + flowRowOffsetY + coords.positionInParent().y
+                        }
+                    ) {
+                        WordCell(
+                            text = word.text,
+                            wordState = word.state,
+                            displayMode = displayMode,
+                            isFlashing = uiState.flashingWordIndex == index,
+                            fontSize = wordFontSize,
+                            isRTL = isRTL,
+                            onTap = { viewModel.tapWord(index) }
+                        )
                     }
-                ) {
-                    WordCell(
-                        text = word.text,
-                        wordState = word.state,
-                        displayMode = displayMode,
-                        isFlashing = uiState.flashingWordIndex == index,
-                        fontSize = wordFontSize,
-                        onTap = { viewModel.tapWord(index) }
-                    )
                 }
             }
         }
@@ -1221,6 +1233,7 @@ private fun WordCell(
     displayMode: WordDisplayMode,
     isFlashing: Boolean,
     fontSize: androidx.compose.ui.unit.TextUnit = 18.sp,
+    isRTL: Boolean = false,
     onTap: () -> Unit
 ) {
     val textColor = when (wordState) {
@@ -1287,37 +1300,44 @@ private fun WordCell(
 
     val wordStyle = TextStyle(fontSize = fontSize)
 
-    Box(
-        modifier = Modifier
-            .clickable { onTap() }
-            .clip(RoundedCornerShape(8.dp))
-            .background(effectiveBg)
-            .then(
-                if (effectiveBorder != Color.Transparent)
-                    Modifier.border(
-                        if (isHidden && wordState != WordState.CURRENT) 1.dp else 2.dp,
-                        effectiveBorder,
-                        RoundedCornerShape(8.dp)
-                    )
-                else Modifier
-            )
-            .padding(horizontal = 6.dp, vertical = 3.dp)
+    // For RTL languages (Persian/Arabic/Hebrew/Urdu), force Rtl layout direction so
+    // the first-letter hint ("ه___") renders with the first letter on the right —
+    // matching the reading direction of the original word.
+    CompositionLocalProvider(
+        LocalLayoutDirection provides if (isRTL) LayoutDirection.Rtl else LayoutDirection.Ltr
     ) {
-        // Invisible full text reserves the exact width/height always
-        Text(
-            text = text,
-            style = wordStyle,
-            fontWeight = FontWeight.Bold,
-            color = Color.Transparent
-        )
-        // Visible content — hidden words show nothing (just the gray box)
-        if (!isHidden) {
+        Box(
+            modifier = Modifier
+                .clickable { onTap() }
+                .clip(RoundedCornerShape(8.dp))
+                .background(effectiveBg)
+                .then(
+                    if (effectiveBorder != Color.Transparent)
+                        Modifier.border(
+                            if (isHidden && wordState != WordState.CURRENT) 1.dp else 2.dp,
+                            effectiveBorder,
+                            RoundedCornerShape(8.dp)
+                        )
+                    else Modifier
+                )
+                .padding(horizontal = 6.dp, vertical = 3.dp)
+        ) {
+            // Invisible full text reserves the exact width/height always
             Text(
-                text = displayText!!,
+                text = text,
                 style = wordStyle,
-                fontWeight = if (!isFlashing && wordState == WordState.CURRENT) FontWeight.Bold else FontWeight.Normal,
-                color = effectiveTextColor
+                fontWeight = FontWeight.Bold,
+                color = Color.Transparent
             )
+            // Visible content — hidden words show nothing (just the gray box)
+            if (!isHidden) {
+                Text(
+                    text = displayText!!,
+                    style = wordStyle,
+                    fontWeight = if (!isFlashing && wordState == WordState.CURRENT) FontWeight.Bold else FontWeight.Normal,
+                    color = effectiveTextColor
+                )
+            }
         }
     }
 }

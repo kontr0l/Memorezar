@@ -16,6 +16,9 @@ struct RecitationScreen: View {
     let quote: Quote
     var isTutorialMode: Bool = false
 
+    /// Language codes that render right-to-left.
+    static let rtlLanguageCodes: Set<String> = ["fa", "ar", "he", "ur", "yi", "ps", "sd", "dv"]
+
     @StateObject private var viewModel: RecitationViewModel
     @State private var communityRecordings: [Recording] = []
     @State private var communityRecordingCount = 0
@@ -2079,8 +2082,13 @@ struct RecitationScreen: View {
             topTrailingRadius: flatTopCorners ? 0 : 16
         )
 
+        // Persian/Arabic/Hebrew/Urdu — mirror word placement so the first word
+        // sits on the right and lines wrap right-to-left.
+        let effectiveLang = viewModel.activeLanguage ?? viewModel.quote.primaryLanguage
+        let isRTL = Self.rtlLanguageCodes.contains((effectiveLang ?? "").lowercased())
+
         return VStack(spacing: 12) {
-            FlowLayout(spacing: 8) {
+            FlowLayout(spacing: 8, isRTL: isRTL) {
                 ForEach(Array(viewModel.words.enumerated()), id: \.offset) { index, wordState in
                     WordView(
                         word: wordState.word,
@@ -2091,6 +2099,7 @@ struct RecitationScreen: View {
                         displayMode: viewModel.wordDisplayMode(at: index),
                         hideProgress: false,
                         isFlashing: index == viewModel.flashingWordIndex,
+                        isRTL: isRTL,
                         onTap: viewModel.isWordTappable(at: index)
                             ? { viewModel.tapWord(at: index, countAsHint: !isPlaybackMode) }
                             : nil
@@ -2226,6 +2235,7 @@ struct RecitationScreen: View {
         .padding(.vertical, 4)
         .background(Color(.systemGray3))
         .cornerRadius(12)
+        .fixedSize()
     }
 
     /// Language pill for recording mode — interactive before recording, greyed out during
@@ -2259,6 +2269,7 @@ struct RecitationScreen: View {
                 .padding(.vertical, 4)
                 .background(Self.languageColor(currentLang))
                 .cornerRadius(12)
+                .fixedSize()
             }
         } else {
             HStack(spacing: 3) {
@@ -2272,6 +2283,7 @@ struct RecitationScreen: View {
             .padding(.vertical, 4)
             .background(Color(.systemGray3))
             .cornerRadius(12)
+            .fixedSize()
         }
     }
 
@@ -2311,6 +2323,7 @@ struct RecitationScreen: View {
             .padding(.vertical, 4)
             .background(Self.languageColor(currentLang))
             .cornerRadius(12)
+            .fixedSize()
         }
     }
 
@@ -2344,6 +2357,7 @@ struct RecitationScreen: View {
             .padding(.vertical, 4)
             .background(Self.languageColor(viewModel.activeLanguage ?? primary))
             .cornerRadius(12)
+            .fixedSize()
             .spotlightAnchor("languageButton")
         }
     }
@@ -3799,6 +3813,9 @@ struct WordView: View {
     var displayMode: WordDisplayMode = .full
     var hideProgress: Bool = false
     var isFlashing: Bool = false
+    /// When true, flips overlay alignment and HStack order so the first-letter
+    /// hint lands where the first letter of an RTL word actually reads (right side).
+    var isRTL: Bool = false
     var onTap: (() -> Void)? = nil
 
     /// Whether the word text should be visible in the current state
@@ -3851,6 +3868,7 @@ struct WordView: View {
             .onTapGesture {
                 onTap?()
             }
+            .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
     }
 
     private func firstLetterOverlay(revealCount: Int = 1) -> some View {
@@ -3913,6 +3931,10 @@ struct WordView: View {
 
 struct FlowLayout: Layout {
     var spacing: CGFloat = 8
+    /// When true, word positions are mirrored horizontally so the first word
+    /// in reading order appears on the right edge — correct for Persian/Arabic/
+    /// Hebrew/Urdu. Line wrapping still happens top-to-bottom as usual.
+    var isRTL: Bool = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let proposedWidth = proposal.replacingUnspecifiedDimensions().width
@@ -3932,8 +3954,12 @@ struct FlowLayout: Layout {
         )
 
         for (index, subview) in subviews.enumerated() {
-            subview.place(at: CGPoint(x: bounds.minX + result.positions[index].x,
-                                       y: bounds.minY + result.positions[index].y),
+            let pos = result.positions[index]
+            let size = subview.sizeThatFits(.unspecified)
+            let x = isRTL
+                ? bounds.maxX - pos.x - size.width
+                : bounds.minX + pos.x
+            subview.place(at: CGPoint(x: x, y: bounds.minY + pos.y),
                           proposal: .unspecified)
         }
     }

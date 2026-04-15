@@ -10,9 +10,18 @@ struct HomeScreen: View {
     @State private var showStreakDetail = false
     @State private var showAccuracyDetail = false
     @State private var remotePacks: [SuggestionPack] = []
-    @State private var showPackSearch = false
     @State private var showPackRequest = false
     @Binding var path: NavigationPath
+
+    /// Navigation routes pushed onto `path`. Using a path-based destination for
+    /// PackSearch (instead of a `.navigationDestination(isPresented:)` driven by
+    /// a `@State Bool`) ensures that clearing `homePath` from the tab bar actually
+    /// pops the Pack Search screen — previously the `isPresented` bool stayed true
+    /// independently of the path, so the user would return to Pack Search instead
+    /// of the Home root after a tab switch.
+    private enum HomeRoute: Hashable {
+        case packSearch
+    }
 
     init(path: Binding<NavigationPath> = .constant(NavigationPath())) {
         self._path = path
@@ -59,8 +68,11 @@ struct HomeScreen: View {
             .navigationDestination(isPresented: $showAccuracyDetail) {
                 AccuracyDetailView()
             }
-            .navigationDestination(isPresented: $showPackSearch) {
-                PackSearchView(packs: remotePacks)
+            .navigationDestination(for: HomeRoute.self) { route in
+                switch route {
+                case .packSearch:
+                    PackSearchView(packs: remotePacks)
+                }
             }
             .navigationDestination(for: SuggestionPack.self) { pack in
                 PackDetailView(pack: pack)
@@ -291,7 +303,7 @@ struct HomeScreen: View {
 
                 if !availablePacks.isEmpty {
                     Button {
-                        showPackSearch = true
+                        path.append(HomeRoute.packSearch)
                     } label: {
                         Text("See All")
                             .font(.subheadline)

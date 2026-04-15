@@ -441,7 +441,7 @@ struct CategoryDetailView: View {
     private var emptyStateView: some View {
         VStack(spacing: 16) {
             if searchText.isEmpty {
-                BrainCharacterView(character: .work1, size: 120)
+                BrainCharacterView(character: .work3, size: 120)
 
                 Text("No quotes in this category")
                     .font(.headline)
