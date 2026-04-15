@@ -1,11 +1,14 @@
 package com.memorezar.app.ui.screens
 
 import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.annotation.DrawableRes
 import kotlin.math.roundToInt
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -13,6 +16,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -35,6 +39,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.asPaddingValues
@@ -69,6 +74,7 @@ import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
@@ -199,6 +205,7 @@ private val iOSBlue = Color(0xFF007AFF)
 // RecitationScreen — Main entry
 // ---------------------------------------------------------------------------
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecitationScreen(
     quoteId: String,
@@ -243,10 +250,20 @@ fun RecitationScreen(
         }
     }
 
+    val context = LocalContext.current
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) viewModel.startRecitation()
+    }
+
+    // Separate launcher for the audio-mode "Record your own" flow, so granting
+    // mic permission there triggers recording instead of voice recitation.
+    val recordingPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.startRecording()
     }
 
     // ---------- Liquid fill animation state ----------
@@ -411,7 +428,7 @@ fun RecitationScreen(
                     ) {
                         // Title row — scrolls with content (same as iOS)
                         if (!isTutorialMode) {
-                            Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(3.dp))
                             ScrollableTitleRow(
                                 title = viewModel.getActiveTitle().ifEmpty { quoteStore.getQuote(quoteId)?.title ?: "Practice" },
                                 currentMode = uiState.currentMode,
@@ -419,6 +436,10 @@ fun RecitationScreen(
                                 isRecording = isRecording,
                                 audioSourceName = if (uiState.currentMode == MemorizationMode.AUDIO) audioState.currentSource?.displayName else null,
                                 audioSourceLanguage = if (!viewModel.hasTranslations()) null
+                                    // Hide the language badge when playing the user's own
+                                    // recording — language is already implicit and it was
+                                    // just clutter next to the recording name.
+                                    else if (audioState.currentSource is PlaybackSource.Local) null
                                     else if (uiState.currentMode == MemorizationMode.AUDIO) viewModel.getAudioLanguage()
                                     else viewModel.getQuoteLanguage(),
                                 availableLanguages = if (viewModel.hasTranslations()) viewModel.getAvailableLanguages() else emptyList(),
@@ -537,9 +558,11 @@ fun RecitationScreen(
                             Spacer(Modifier.height(4.dp))
                         }
 
-                        // Input area — varies by mode (hidden in reading mode)
-                        if (uiState.isReadingMode) {
-                            // No input controls in reading mode
+                        // Input area — varies by mode. Reading mode hides voice/typing/MC
+                        // inputs (no recitation in reading mode), but keeps audio playback
+                        // controls so the user can still play/pause/skip recordings.
+                        if (uiState.isReadingMode && uiState.currentMode != MemorizationMode.AUDIO) {
+                            // No input controls in reading mode (non-audio modes)
                         } else when (uiState.currentMode) {
                             MemorizationMode.VOICE -> {
                                 val wavePhase = liquidWavePhase.value * (Math.PI.toFloat() * 2f)
@@ -608,7 +631,17 @@ fun RecitationScreen(
                                     onStartTTS = { viewModel.startTTS() },
                                     onStopTTS = { viewModel.stopTTS() },
                                     onToggleTTS = { viewModel.toggleTTS() },
-                                    onStartRecording = { viewModel.startRecording() },
+                                    onStartRecording = {
+                                        if (ContextCompat.checkSelfPermission(
+                                                context,
+                                                Manifest.permission.RECORD_AUDIO
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                        ) {
+                                            viewModel.startRecording()
+                                        } else {
+                                            recordingPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    },
                                     onStopRecording = { viewModel.stopRecordingAudio() },
                                     onPrev = { viewModel.navigatePlayback(forward = false) },
                                     onNext = { viewModel.navigatePlayback(forward = true) }
@@ -691,54 +724,28 @@ fun RecitationScreen(
             )
         }
 
-        // Quote info sheet — slides up from bottom like iOS .sheet(.large)
+        // Quote info sheet — slides up from bottom like iOS .sheet. Using
+        // ModalBottomSheet so the native swipe-down-to-dismiss gesture works
+        // (previously was a custom Box overlay that only closed via a button).
         if (uiState.showQuoteInfo) {
             val infoQuote = viewModel.getQuoteForInfo()
             if (infoQuote != null) {
-                var showInfoPanel by remember { mutableStateOf(false) }
-                LaunchedEffect(Unit) { showInfoPanel = true }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { viewModel.dismissQuoteInfo() },
-                    contentAlignment = Alignment.BottomCenter
+                ModalBottomSheet(
+                    onDismissRequest = { viewModel.dismissQuoteInfo() },
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    dragHandle = null,
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
                 ) {
-                    val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-                    AnimatedVisibility(
-                        visible = showInfoPanel,
-                        enter = slideInVertically(
-                            initialOffsetY = { it },
-                            animationSpec = tween(350, easing = EaseOut)
-                        ) + fadeIn(animationSpec = tween(200))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(0.92f)
-                                .offset(y = navBarHeight)
-                                .shadow(8.dp, RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                                .background(MaterialTheme.colorScheme.surface)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {}
-                        ) {
-                            QuoteInfoPopup(
-                                quote = infoQuote,
-                                quoteStore = quoteStore,
-                                onDismiss = { viewModel.dismissQuoteInfo() },
-                                onScissors = {
-                                    viewModel.dismissQuoteInfo()
-                                    viewModel.openSplitOverlay()
-                                }
-                            )
-                        }
+                    Box(modifier = Modifier.fillMaxWidth().fillMaxHeight(0.92f)) {
+                        QuoteInfoPopup(
+                            quote = infoQuote,
+                            quoteStore = quoteStore,
+                            onDismiss = { viewModel.dismissQuoteInfo() },
+                            onScissors = {
+                                viewModel.dismissQuoteInfo()
+                                viewModel.openSplitOverlay()
+                            }
+                        )
                     }
                 }
             }
@@ -1003,11 +1010,14 @@ private fun ScrollableTitleRow(
             }
         }
 
-        // Title — always centered in this box
+        // Title — always centered in this box. The timestamps overlay at the top of
+        // the box; this top padding keeps the title at its original vertical position
+        // even though the box itself was pulled up to bring the timestamps closer to
+        // the progress bar above.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(top = 15.dp, start = 16.dp, end = 16.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1101,11 +1111,15 @@ private fun ModePicker(
         // Mode buttons
         Row(modifier = Modifier.fillMaxSize()) {
             modes.forEach { (mode, icon) ->
+                val interactionSource = remember { MutableInteractionSource() }
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxSize()
-                        .clickable { onModeChange(mode) },
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null
+                        ) { onModeChange(mode) },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -1558,6 +1572,11 @@ private fun TypingInputRow(
     var localText by remember { mutableStateOf("") }
     var textFieldKey by remember { mutableStateOf(0) }
 
+    // Normalize for auto-submit comparison — lowercase, letters/digits only.
+    // Matches WordComparator's normalization so the auto-submit fires on the
+    // exact same match a space-submit would produce.
+    fun normalizeForMatch(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+
     val handleInput: (String) -> Unit = { newValue ->
         if (uiState.isFirstLetterToggle && newValue.isNotEmpty()) {
             // FL mode: submit the character directly, then force a fresh TextField
@@ -1572,6 +1591,18 @@ private fun TypingInputRow(
         } else {
             localText = newValue
             onInputChange(newValue)
+            // Auto-advance when the typed text matches the expected word exactly
+            // (normalized). Lets the user just type "foundation" and have it submit
+            // without needing to press space — matches iOS behavior.
+            val expected = uiState.words.getOrNull(uiState.currentPosition)?.text
+            if (expected != null) {
+                val typed = normalizeForMatch(newValue)
+                if (typed.isNotEmpty() && typed == normalizeForMatch(expected)) {
+                    onSubmitDirect(newValue)
+                    localText = ""
+                    textFieldKey++
+                }
+            }
         }
     }
 
@@ -1628,7 +1659,11 @@ private fun TypingInputRow(
                         autoCorrectEnabled = false,
                         imeAction = ImeAction.Done
                     ),
-                    keyboardActions = KeyboardActions(onDone = { onSubmit() }),
+                    keyboardActions = KeyboardActions(onDone = {
+                        onSubmit()
+                        localText = ""
+                        textFieldKey++
+                    }),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(fieldFocus)
@@ -1835,15 +1870,48 @@ private fun ControlPill(
     val isReading = uiState.isReadingMode
     val pillHeight = 50.dp
 
+    // No-ripple press tracking — on tap the icon+label go a shade darker (matches
+    // iOS). Default Material ripple would paint a grey square that looks wrong on
+    // the dark pill.
+    //
+    // We hold the darkened state for ~180ms after release and animate the fade
+    // back so very quick taps still register visually — matches iOS's pressed
+    // animation feel.
+    val infoInteraction = remember { MutableInteractionSource() }
+    val infoPressed by infoInteraction.collectIsPressedAsState()
+    var infoPressedDisplay by remember { mutableStateOf(false) }
+    LaunchedEffect(infoPressed) {
+        if (infoPressed) infoPressedDisplay = true
+        else { delay(180); infoPressedDisplay = false }
+    }
+    val infoAlpha by animateFloatAsState(
+        targetValue = if (infoPressedDisplay) 0.35f else 0.7f,
+        animationSpec = tween(durationMillis = 180),
+        label = "infoAlpha"
+    )
+
+    val resetInteraction = remember { MutableInteractionSource() }
+    val resetPressed by resetInteraction.collectIsPressedAsState()
+    var resetPressedDisplay by remember { mutableStateOf(false) }
+    LaunchedEffect(resetPressed) {
+        if (resetPressed) resetPressedDisplay = true
+        else { delay(180); resetPressedDisplay = false }
+    }
+    val resetAlpha by animateFloatAsState(
+        targetValue = if (resetPressedDisplay) 0.35f else 0.7f,
+        animationSpec = tween(durationMillis = 180),
+        label = "resetAlpha"
+    )
+
     // Info button content (shared between modes)
     val infoButton = @Composable {
         Column(
-            modifier = Modifier.width(50.dp).height(pillHeight).clickable { onInfo() }.offset(y = 4.dp),
+            modifier = Modifier.width(50.dp).height(pillHeight).offset(y = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(painter = painterResource(id = R.drawable.ic_info), "Info", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp).offset(y = 2.dp))
-            Text("INFO", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f),
+            Icon(painter = painterResource(id = R.drawable.ic_info), "Info", tint = Color.White.copy(alpha = infoAlpha), modifier = Modifier.size(20.dp).offset(y = 2.dp))
+            Text("INFO", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = infoAlpha),
                 modifier = Modifier.offset(y = (-3).dp))
         }
     }
@@ -1898,7 +1966,7 @@ private fun ControlPill(
                     }
                     Spacer(Modifier.weight(1f))
                     Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
-                        Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(20.dp))
+                        Icon(painter = painterResource(id = R.drawable.ic_refresh), "Reset", tint = Color.White.copy(alpha = resetAlpha), modifier = Modifier.size(20.dp))
                     }
                 }
                 // Bottom row: spacer for info | legend icons | RESET label
@@ -1920,24 +1988,44 @@ private fun ControlPill(
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    Box(Modifier.width(50.dp).clickable { onReset() }, contentAlignment = Alignment.Center) {
-                        Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.7f))
+                    Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
+                        Text("RESET", fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = resetAlpha))
                     }
                 }
             }
         }
 
-        // Info button — always rendered at the same fixed position (overlays both modes)
+        // Info button — always rendered at the same fixed position (overlays both modes).
+        // No-ripple clickable; the icon/label alpha darkens on press (see infoAlpha above).
         Box(
             modifier = Modifier
                 .padding(start = 12.dp)
                 .width(50.dp)
                 .height(pillHeight)
                 .align(Alignment.CenterStart)
-                .clickable { onInfo() },
+                .clickable(
+                    interactionSource = infoInteraction,
+                    indication = null
+                ) { onInfo() },
             contentAlignment = Alignment.Center
         ) {
             infoButton()
+        }
+
+        // Reset button — whole icon+label region is tappable (matches iOS). Same
+        // no-ripple pattern as Info; alpha darkens via resetAlpha.
+        if (!isReading) {
+            Box(
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .width(50.dp)
+                    .height(pillHeight)
+                    .align(Alignment.CenterEnd)
+                    .clickable(
+                        interactionSource = resetInteraction,
+                        indication = null
+                    ) { onReset() }
+            )
         }
     }
 }
@@ -3510,72 +3598,36 @@ private fun AudioControlPill(
             )
         }
 
-        // Two-row lockup structure matching voice-mode ControlPill RESET positioning:
-        //   top row (icons) offset y=+2dp; bottom row (labels) offset y=-3dp
-        Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
+        // Each button spans the full pill height and is clickable as a single unit
+        // (icon + label together) — matches iOS hit areas. No ripple; alpha darkens
+        // on press via PillActionButton below.
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Spacer(Modifier.weight(1f))
-            // Top row: icons
-            Row(
-                modifier = Modifier.fillMaxWidth().offset(y = 2.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                when {
-                    audioState.isRecordingMode -> {
-                        PillIconSlot(Icons.Default.Close, PillButtonInactive)
-                        Spacer(Modifier.weight(1f))
-                        if (!isRecording) {
-                            PillIconSlot(Icons.AutoMirrored.Filled.List, PillButtonInactive)
-                        } else {
-                            Spacer(Modifier.width(50.dp))
-                        }
-                    }
-                    audioState.currentSource != null -> {
-                        PillIconSlot(Icons.Default.Refresh, if (audioState.playbackRepeat) AudioGreen else PillButtonInactive)
-                        Spacer(Modifier.weight(1f))
-                        PillIconSlot(Icons.Default.Edit, PillButtonInactive)
-                        Spacer(Modifier.weight(1f))
-                        PillIconSlot(Icons.Default.Delete, AudioRed.copy(alpha = 0.8f))
-                        Spacer(Modifier.weight(1f))
-                        PillIconSlot(Icons.AutoMirrored.Filled.List, PillButtonInactive)
-                    }
-                    else -> {
-                        PillIconSlot(Icons.Default.Refresh, if (audioState.playbackRepeat) AudioGreen else PillButtonInactive)
-                        Spacer(Modifier.weight(1f))
-                        PillIconSlot(Icons.AutoMirrored.Filled.List, PillButtonInactive)
+            when {
+                audioState.isRecordingMode -> {
+                    PillActionButton(Icons.Default.Close, "CANCEL", PillButtonInactive, onCancelRecording)
+                    Spacer(Modifier.weight(1f))
+                    if (!isRecording) {
+                        PillActionButton(Icons.AutoMirrored.Filled.List, "BROWSE", PillButtonInactive, onBrowse)
+                    } else {
+                        Spacer(Modifier.width(50.dp))
                     }
                 }
-            }
-            // Bottom row: labels (clickable)
-            Row(
-                modifier = Modifier.fillMaxWidth().offset(y = (-3).dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                when {
-                    audioState.isRecordingMode -> {
-                        PillLabelSlot("CANCEL", PillButtonInactive, onCancelRecording)
-                        Spacer(Modifier.weight(1f))
-                        if (!isRecording) {
-                            PillLabelSlot("BROWSE", PillButtonInactive, onBrowse)
-                        } else {
-                            Spacer(Modifier.width(50.dp))
-                        }
-                    }
-                    audioState.currentSource != null -> {
-                        PillLabelSlot("REPEAT", if (audioState.playbackRepeat) AudioGreen else PillButtonInactive, onToggleRepeat)
-                        Spacer(Modifier.weight(1f))
-                        PillLabelSlot("EDIT", PillButtonInactive, onEdit)
-                        Spacer(Modifier.weight(1f))
-                        PillLabelSlot("DELETE", AudioRed.copy(alpha = 0.8f), onDelete)
-                        Spacer(Modifier.weight(1f))
-                        PillLabelSlot("BROWSE", PillButtonInactive, onBrowse)
-                    }
-                    else -> {
-                        PillLabelSlot("REPEAT", if (audioState.playbackRepeat) AudioGreen else PillButtonInactive, onToggleRepeat)
-                        Spacer(Modifier.weight(1f))
-                        PillLabelSlot("BROWSE", PillButtonInactive, onBrowse)
-                    }
+                audioState.currentSource != null -> {
+                    PillActionButton(Icons.Default.Refresh, "REPEAT", if (audioState.playbackRepeat) AudioGreen else PillButtonInactive, onToggleRepeat)
+                    Spacer(Modifier.weight(1f))
+                    PillActionButton(Icons.Default.Edit, "EDIT", PillButtonInactive, onEdit)
+                    Spacer(Modifier.weight(1f))
+                    PillActionButton(Icons.Default.Delete, "DELETE", AudioRed.copy(alpha = 0.8f), onDelete)
+                    Spacer(Modifier.weight(1f))
+                    PillActionButton(Icons.AutoMirrored.Filled.List, "BROWSE", PillButtonInactive, onBrowse)
+                }
+                else -> {
+                    PillActionButton(Icons.Default.Refresh, "REPEAT", if (audioState.playbackRepeat) AudioGreen else PillButtonInactive, onToggleRepeat)
+                    Spacer(Modifier.weight(1f))
+                    PillActionButton(Icons.AutoMirrored.Filled.List, "BROWSE", PillButtonInactive, onBrowse)
                 }
             }
         }
@@ -3583,16 +3635,31 @@ private fun AudioControlPill(
 }
 
 @Composable
-private fun PillIconSlot(icon: ImageVector, tint: Color) {
-    Box(Modifier.width(50.dp), contentAlignment = Alignment.Center) {
-        Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
+private fun PillActionButton(icon: ImageVector, label: String, tint: Color, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    var pressedDisplay by remember { mutableStateOf(false) }
+    LaunchedEffect(pressed) {
+        if (pressed) pressedDisplay = true
+        else { delay(180); pressedDisplay = false }
     }
-}
-
-@Composable
-private fun PillLabelSlot(label: String, tint: Color, onClick: () -> Unit) {
-    Box(Modifier.width(50.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        Text(label, fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = tint)
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (pressedDisplay) 0.45f else 1f,
+        animationSpec = tween(durationMillis = 180),
+        label = "pillBtnAlpha"
+    )
+    val displayTint = tint.copy(alpha = tint.alpha * pressAlpha)
+    Column(
+        modifier = Modifier
+            .width(50.dp)
+            .fillMaxHeight()
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(icon, null, tint = displayTint, modifier = Modifier.size(20.dp).offset(y = 2.dp))
+        Text(label, fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = displayTint,
+            modifier = Modifier.offset(y = 1.dp))
     }
 }
 
@@ -3600,7 +3667,7 @@ private fun PillLabelSlot(label: String, tint: Color, onClick: () -> Unit) {
 // Save Recording Dialog
 // ---------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun SaveRecordingSheet(
     recordingDuration: Double,
@@ -3645,13 +3712,25 @@ private fun SaveRecordingSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDiscard,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        dragHandle = null
     ) {
+        // Cap the sheet height so the keyboard doesn't push it up past the status bar.
+        // Matches the Quote Pack Request sheet's compact mode: ~0.85 when keyboard is
+        // up, a shorter rest height otherwise.
+        val imeVisible = WindowInsets.isImeVisible
+        val heightFraction by animateFloatAsState(
+            targetValue = if (imeVisible) 0.85f else 0.62f,
+            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+            label = "saveSheetHeight"
+        )
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight(heightFraction)
+                .imePadding()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
+                .padding(top = 16.dp, bottom = 12.dp)
         ) {
             // Title
             Text(
@@ -3684,7 +3763,7 @@ private fun SaveRecordingSheet(
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
 
             // Sharing section — shown for both new and editing
             Text(
@@ -3756,7 +3835,7 @@ private fun SaveRecordingSheet(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
             }
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(12.dp))
 
             if (!isEditing) {
                 // Preview playback
@@ -3829,7 +3908,7 @@ private fun SaveRecordingSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(12.dp))
                 }
             }
 
@@ -3899,7 +3978,8 @@ private fun RecordingPickerSheet(
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        dragHandle = null
     ) {
         Column(
             modifier = Modifier

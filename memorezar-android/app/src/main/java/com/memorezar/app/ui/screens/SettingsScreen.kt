@@ -309,7 +309,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.73")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.5.95")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
@@ -400,7 +400,9 @@ private fun SettingsCard(content: @Composable () -> Unit) {
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        // Horizontal padding is applied inside each row (after .clickable) so the
+        // press ripple extends edge-to-edge across the card instead of stopping short.
+        Column {
             content()
         }
     }
@@ -440,7 +442,9 @@ private fun IconToggleRow(icon: ImageVector, label: String, checked: Boolean, on
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp),
+            .height(48.dp)
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -460,7 +464,8 @@ private fun IconInfoRow(icon: ImageVector, label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp),
+            .height(48.dp)
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -481,7 +486,8 @@ private fun IconClickRow(icon: ImageVector, label: String, color: Color = Materi
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -508,7 +514,8 @@ private fun IconPickerRow(
         modifier = Modifier
             .fillMaxWidth()
             .height(48.dp)
-            .clickable { expanded = !expanded },
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -522,7 +529,9 @@ private fun IconPickerRow(
         Text(text = value, color = MaterialTheme.colorScheme.primary)
     }
     if (expanded) {
-        Column(modifier = Modifier.padding(start = 34.dp)) {
+        // 50dp start = 16dp card padding + 22dp icon + 12dp spacer, keeps option text
+        // aligned with the label text above.
+        Column(modifier = Modifier.padding(start = 50.dp, end = 16.dp)) {
             options.forEach { option ->
                 Text(
                     text = option,

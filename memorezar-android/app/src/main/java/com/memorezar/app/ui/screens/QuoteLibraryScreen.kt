@@ -82,8 +82,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -334,7 +337,8 @@ fun QuoteLibraryScreen(
     if (showNewCategorySheet) {
         ModalBottomSheet(
             onDismissRequest = { showNewCategorySheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null
         ) {
             NewCategorySheet(
                 viewModel = viewModel,
@@ -536,6 +540,12 @@ fun CategoryDetailScreen(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                if (!isPack) {
+                                    Spacer(Modifier.height(16.dp))
+                                    Button(onClick = { onAddQuote(categoryId) }) {
+                                        Text(stringResource(R.string.add_quote))
+                                    }
+                                }
                             }
                         } else {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -673,7 +683,7 @@ fun CategoryDetailScreen(
                                 painter = painterResource(R.drawable.icon_addquote),
                                 contentDescription = stringResource(R.string.add_quote),
                                 tint = Color.Unspecified,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(32.dp)
                             )
                         }
                     }
@@ -1381,49 +1391,77 @@ private fun NewCategorySheet(
             onBack = { showUnsplashSearch = false }
         )
     } else {
+        val pillShape = RoundedCornerShape(50)
+        val pillColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+        val fieldShape = RoundedCornerShape(12.dp)
+        val fieldColors = TextFieldDefaults.colors(
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            unfocusedIndicatorColor = Color.Transparent,
+            focusedIndicatorColor = Color.Transparent
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp)
+                .fillMaxHeight(0.93f)
+                .padding(horizontal = 20.dp)
         ) {
-            Text(
-                stringResource(R.string.new_category),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
+            Spacer(Modifier.height(12.dp))
 
-            Spacer(Modifier.height(16.dp))
-
-            // Cover photo section
-            CoverPhotoSection(
-                coverImageUrl = coverImageUrl,
-                onAddPhoto = { showPhotoSourcePicker = true },
-                onRemovePhoto = { coverImageUrl = null }
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.category_name_label)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(20.dp))
+            // Header bar — Cancel / Title / Save (matches Quote Pack Request)
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                Spacer(Modifier.width(8.dp))
+                TextButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.background(pillColor, pillShape)
+                ) {
+                    Text(stringResource(R.string.cancel), style = MaterialTheme.typography.bodyLarge)
+                }
+                Text(
+                    stringResource(R.string.new_category),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
                 TextButton(
                     onClick = { onSave(name.trim(), coverImageUrl) },
-                    enabled = name.isNotBlank()
-                ) { Text(stringResource(R.string.save)) }
+                    enabled = name.isNotBlank(),
+                    modifier = Modifier.background(pillColor, pillShape)
+                ) {
+                    Text(stringResource(R.string.save), style = MaterialTheme.typography.bodyLarge)
+                }
             }
-            Spacer(Modifier.height(16.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Cover photo section
+                CoverPhotoSection(
+                    coverImageUrl = coverImageUrl,
+                    onAddPhoto = { showPhotoSourcePicker = true },
+                    onRemovePhoto = { coverImageUrl = null }
+                )
+
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text(stringResource(R.string.category_name_label)) },
+                    singleLine = true,
+                    shape = fieldShape,
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(Modifier.height(8.dp))
+            }
         }
     }
 

@@ -392,7 +392,8 @@ fun AppNavigation(
                 quoteInputCategoryId = null
                 quoteToEdit = null
             },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            dragHandle = null
         ) {
             QuoteInputSheet(
                 quoteStore = quoteStore,

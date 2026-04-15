@@ -1234,7 +1234,14 @@ struct RecitationScreen: View {
                     Text(playbackSource?.name ?? viewModel.activeTitle)
                         .font(.title2.bold())
                         .lineLimit(1)
-                    playbackLanguagePill
+                    // Hide the language badge when playing the user's own recording —
+                    // language is implicit and the badge was just clutter next to the
+                    // recording name. Still shown for community recordings & quote title.
+                    if case .local = playbackSource {
+                        EmptyView()
+                    } else {
+                        playbackLanguagePill
+                    }
                 }
             }
         }
