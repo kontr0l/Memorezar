@@ -14,7 +14,6 @@ import com.memorezar.app.data.models.LocalRecording
 import com.memorezar.app.data.models.MemorizationMode
 import com.memorezar.app.data.models.Quote
 import com.memorezar.app.data.models.Recording
-import com.memorezar.app.core.comparison.MatchType
 import com.memorezar.app.data.services.AudioRecorderService
 import com.memorezar.app.data.services.EquivalenceService
 import com.memorezar.app.data.services.RecordingService
@@ -1659,10 +1658,11 @@ class RecitationViewModel @Inject constructor(
         if (result.isMatch) {
             // Track community equivalence usage for session-end reporting.
             // Dedup per session — the same pair matching many times counts once.
-            if (result.matchType == MatchType.COMMUNITY_EQUIVALENCE) {
-                communityEquivalenceIDs[result.normalizedExpected]?.get(result.normalizedSpoken)?.let { id ->
-                    sessionCommunityMatchIDs.add(id)
-                }
+            // Any match where the pair is in the community table counts, even if the
+            // user also has it locally (userEquivalence shadows communityEquivalence
+            // in the match hierarchy, but both should credit community usage).
+            communityEquivalenceIDs[result.normalizedExpected]?.get(result.normalizedSpoken)?.let { id ->
+                sessionCommunityMatchIDs.add(id)
             }
 
             pendingMismatchJob?.cancel()

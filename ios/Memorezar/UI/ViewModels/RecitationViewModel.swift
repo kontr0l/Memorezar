@@ -2045,7 +2045,10 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
         // Track community equivalence usage for session-end reporting.
         // Dedup per session — the same pair matching 50 times in one quote counts once.
-        if result.isMatch, result.matchType == .communityEquivalence,
+        // Any match where the pair is in the community table counts, even if the user
+        // also has it locally (userEquivalence shadows communityEquivalence in the
+        // match hierarchy, but both should credit community usage).
+        if result.isMatch,
            let id = communityEquivalenceIDs[result.normalizedExpected]?[result.normalizedSpoken] {
             sessionCommunityMatchIDs.insert(id)
         }
