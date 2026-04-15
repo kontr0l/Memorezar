@@ -5,7 +5,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
@@ -18,8 +17,19 @@ import javax.inject.Singleton
 
 private const val TAG = "EquivalenceService"
 
+/**
+ * Community equivalence fetched from Supabase. Carries the row ID so the
+ * ViewModel can batch-report usage at session end.
+ */
+data class CommunityEquivalence(
+    val id: String,
+    val expectedWord: String,
+    val spokenWord: String
+)
+
 @Serializable
 private data class EquivalenceRow(
+    val id: String? = null,
     val expected_word: String,
     val spoken_word: String,
     val report_count: Int = 1
@@ -33,8 +43,9 @@ class EquivalenceService @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Report a user-accepted word equivalence (fire-and-forget upsert).
-     * On 409 conflict, increments the report_count.
+     * Insert a new equivalence pair (fire-and-forget). A 409 just means the
+     * row already exists — usage tracking via [reportUsage] will bump its
+     * count separately, so we ignore it.
      */
     suspend fun reportEquivalence(expected: String, spoken: String) {
         val normalizedExpected = normalize(expected)
@@ -42,14 +53,10 @@ class EquivalenceService @Inject constructor(
         if (normalizedExpected == normalizedSpoken) return
 
         try {
-            val response = httpClient.post(SupabaseConfig.EQUIVALENCES_URL) {
+            httpClient.post(SupabaseConfig.EQUIVALENCES_URL) {
                 for ((k, v) in authService.headers()) header(k, v)
                 contentType(ContentType.Application.Json)
                 setBody("""{"expected_word":"$normalizedExpected","spoken_word":"$normalizedSpoken","report_count":1}""")
-            }
-            if (response.status.value == 409) {
-                // Conflict — increment report count
-                incrementReportCount(normalizedExpected, normalizedSpoken)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Failed to report equivalence: ${e.message}")
@@ -57,54 +64,48 @@ class EquivalenceService @Inject constructor(
     }
 
     /**
-     * Fetch community equivalences for the given words.
-     * Returns map of expected_word -> set of spoken_word equivalences.
+     * Atomically bump report_count by 1 for every equivalence that matched
+     * during a recitation session. Called once at session end with the
+     * deduplicated set of matched IDs. Fire-and-forget.
      */
-    suspend fun fetchEquivalences(forWords: List<String>): Map<String, Set<String>> {
-        if (forWords.isEmpty()) return emptyMap()
-        return try {
-            val wordList = forWords.joinToString(",") { normalize(it) }
-            val url = "${SupabaseConfig.EQUIVALENCES_URL}?expected_word=in.($wordList)&select=expected_word,spoken_word"
-            val response = httpClient.get(url) {
+    suspend fun reportUsage(ids: List<String>) {
+        if (ids.isEmpty()) return
+        try {
+            val url = "${SupabaseConfig.PROJECT_URL}/rest/v1/rpc/increment_equivalence_reports"
+            val idsJson = ids.joinToString(",") { "\"$it\"" }
+            httpClient.post(url) {
                 for ((k, v) in authService.headers()) header(k, v)
+                contentType(ContentType.Application.Json)
+                setBody("""{"ids":[$idsJson]}""")
             }
-            if (!response.status.isSuccess()) return emptyMap()
-
-            val body: String = response.body()
-            val rows = json.decodeFromString<List<EquivalenceRow>>(body)
-            val result = mutableMapOf<String, MutableSet<String>>()
-            for (row in rows) {
-                result.getOrPut(row.expected_word) { mutableSetOf() }.add(row.spoken_word)
-            }
-            result
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to fetch equivalences: ${e.message}")
-            emptyMap()
+            Log.w(TAG, "Failed to report usage: ${e.message}")
         }
     }
 
-    private suspend fun incrementReportCount(expected: String, spoken: String) {
-        try {
-            // Fetch current count
-            val fetchUrl = "${SupabaseConfig.EQUIVALENCES_URL}?expected_word=eq.$expected&spoken_word=eq.$spoken&select=report_count"
-            val fetchResponse = httpClient.get(fetchUrl) {
+    /**
+     * Fetch community equivalences for the given words. Returns a list of
+     * rows including IDs so callers can batch-report usage later.
+     */
+    suspend fun fetchEquivalences(forWords: List<String>): List<CommunityEquivalence> {
+        if (forWords.isEmpty()) return emptyList()
+        return try {
+            val wordList = forWords.joinToString(",") { normalize(it) }
+            val url = "${SupabaseConfig.EQUIVALENCES_URL}?expected_word=in.($wordList)&select=id,expected_word,spoken_word"
+            val response = httpClient.get(url) {
                 for ((k, v) in authService.headers()) header(k, v)
             }
-            if (!fetchResponse.status.isSuccess()) return
+            if (!response.status.isSuccess()) return emptyList()
 
-            val body: String = fetchResponse.body()
+            val body: String = response.body()
             val rows = json.decodeFromString<List<EquivalenceRow>>(body)
-            val currentCount = rows.firstOrNull()?.report_count ?: 1
-
-            // Patch with incremented count
-            val patchUrl = "${SupabaseConfig.EQUIVALENCES_URL}?expected_word=eq.$expected&spoken_word=eq.$spoken"
-            httpClient.patch(patchUrl) {
-                for ((k, v) in authService.headers()) header(k, v)
-                contentType(ContentType.Application.Json)
-                setBody("""{"report_count":${currentCount + 1}}""")
+            rows.mapNotNull { row ->
+                val id = row.id ?: return@mapNotNull null
+                CommunityEquivalence(id, row.expected_word, row.spoken_word)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to increment report count: ${e.message}")
+            Log.w(TAG, "Failed to fetch equivalences: ${e.message}")
+            emptyList()
         }
     }
 

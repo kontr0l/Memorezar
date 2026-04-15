@@ -241,6 +241,12 @@ final class RecitationViewModel: NSObject, ObservableObject {
     private var pendingMismatchTimer: Timer?
     private var consecutiveMismatchesAtPosition = 0  // Track repeated mismatches at same position
     private var lastMismatchPosition = -1
+
+    // Community equivalence usage tracking — populated at session start from
+    // fetchEquivalences, read in commitComparisonResult on community matches,
+    // drained to reportUsage at session end (deduplicated per session).
+    private var communityEquivalenceIDs: [String: [String: UUID]] = [:]
+    private var sessionCommunityMatchIDs: Set<UUID> = []
     private static let minSettleInterval: TimeInterval = 0.40  // 400ms - gives STT time to revise short words
     private static let maxSettleInterval: TimeInterval = 1.50  // 1.5s absolute cap
 
@@ -1123,11 +1129,21 @@ final class RecitationViewModel: NSObject, ObservableObject {
         // Apply user-defined word equivalences
         comparator.setUserEquivalences(userEquivalencesStore?.equivalences ?? [:])
 
-        // Fetch community equivalences in background (fire-and-forget, non-blocking)
+        // Fetch community equivalences in background (fire-and-forget, non-blocking).
+        // Build a parallel ID lookup so we can batch-report usage at session end.
         let quoteWords = comparator.getTargetWords()
-        Task {
+        Task { [weak self] in
             let community = await EquivalenceService.shared.fetchEquivalences(forWords: quoteWords)
-            comparator.setCommunityEquivalences(community)
+            var matchDict: [String: Set<String>] = [:]
+            var idLookup: [String: [String: UUID]] = [:]
+            for eq in community {
+                matchDict[eq.expectedWord, default: []].insert(eq.spokenWord)
+                idLookup[eq.expectedWord, default: [:]][eq.spokenWord] = eq.id
+            }
+            await MainActor.run {
+                self?.comparator.setCommunityEquivalences(matchDict)
+                self?.communityEquivalenceIDs = idLookup
+            }
         }
 
         do {
@@ -1588,6 +1604,15 @@ final class RecitationViewModel: NSObject, ObservableObject {
         } else {
             AlertManager.shared.triggerResultSound(accuracy: accuracy)
         }
+        // Report community equivalence usage (fire-and-forget, deduplicated set).
+        let usedIDs = Array(sessionCommunityMatchIDs)
+        sessionCommunityMatchIDs = []
+        if !usedIDs.isEmpty {
+            Task.detached {
+                await EquivalenceService.shared.reportUsage(ids: usedIDs)
+            }
+        }
+
         DispatchQueue.main.async { [weak self] in
             self?.showResults = true
         }
@@ -2017,6 +2042,13 @@ final class RecitationViewModel: NSObject, ObservableObject {
         guard tappedMistakeIndex == nil else { return }
 
         let previousPosition = currentPosition
+
+        // Track community equivalence usage for session-end reporting.
+        // Dedup per session — the same pair matching 50 times in one quote counts once.
+        if result.isMatch, result.matchType == .communityEquivalence,
+           let id = communityEquivalenceIDs[result.normalizedExpected]?[result.normalizedSpoken] {
+            sessionCommunityMatchIDs.insert(id)
+        }
 
         // DEBUG: Log comparison result
         print("[RESULT] isMatch=\(result.isMatch) spoken=\"\(result.spokenWord)\" expected=\"\(result.expectedWord)\" pos=\(result.position)")

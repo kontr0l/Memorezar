@@ -1,8 +1,18 @@
 import Foundation
 
-/// REST client for Supabase community equivalences API.
-/// Uploads user-accepted word equivalences so all users benefit,
-/// and fetches crowd-sourced equivalences for use during recitation.
+/// Community equivalence fetched from Supabase — carries the row ID so the
+/// ViewModel can batch-report usage at session end.
+struct CommunityEquivalence {
+    let id: UUID
+    let expectedWord: String
+    let spokenWord: String
+}
+
+/// REST client for Supabase community equivalences.
+/// - `reportEquivalence`: inserts a new user-accepted pair (first time only).
+/// - `fetchEquivalences`: pulls the community list for the current quote's words.
+/// - `reportUsage`: called at session end to atomically increment report_count
+///   on every community equivalence that actually helped during the session.
 class EquivalenceService {
     static let shared = EquivalenceService()
     private init() {}
@@ -11,9 +21,9 @@ class EquivalenceService {
 
     // MARK: - Upload
 
-    /// Report an equivalence pair (fire-and-forget upsert).
-    /// On conflict (same expected+spoken), increments report_count.
-    /// Errors are printed but never surface to the user.
+    /// Insert a new equivalence pair (fire-and-forget).
+    /// A 409 just means the row already exists — usage tracking via `reportUsage`
+    /// will bump its count separately, so we ignore it.
     func reportEquivalence(expected: String, spoken: String) async {
         guard SupabaseConfig.isConfigured else { return }
 
@@ -27,9 +37,6 @@ class EquivalenceService {
         for (key, value) in SupabaseConfig.headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
-        // Upsert: on conflict merge duplicates, increment report_count via RPC isn't needed —
-        // Supabase merge-duplicates will update, but we need to increment. Use a two-step approach:
-        // First try insert; if conflict (409), do a PATCH to increment.
         request.setValue("return=minimal", forHTTPHeaderField: "Prefer")
 
         let body: [String: Any] = [
@@ -41,91 +48,61 @@ class EquivalenceService {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
             let (_, response) = try await session.data(for: request)
-
-            if let httpResponse = response as? HTTPURLResponse {
-                if httpResponse.statusCode == 409 {
-                    // Conflict — row exists, increment report_count via PATCH
-                    await incrementReportCount(expected: normalizedExpected, spoken: normalizedSpoken)
-                } else if !(200...299).contains(httpResponse.statusCode) {
-                    print("[EquivalenceService] reportEquivalence unexpected status: \(httpResponse.statusCode)")
-                }
+            if let http = response as? HTTPURLResponse,
+               http.statusCode != 409, !(200...299).contains(http.statusCode) {
+                print("[EquivalenceService] reportEquivalence status: \(http.statusCode)")
             }
         } catch {
             print("[EquivalenceService] reportEquivalence error: \(error)")
         }
     }
 
-    /// Increment report_count for an existing equivalence via Supabase RPC
-    private func incrementReportCount(expected: String, spoken: String) async {
-        // Use Supabase's PostgREST PATCH with a filter to increment
-        // PostgREST doesn't support SQL expressions in PATCH body directly,
-        // so we fetch current count then update.
-        var components = URLComponents(url: SupabaseConfig.equivalencesURL, resolvingAgainstBaseURL: false)!
-        components.queryItems = [
-            URLQueryItem(name: "expected_word", value: "eq.\(expected)"),
-            URLQueryItem(name: "spoken_word", value: "eq.\(spoken)"),
-            URLQueryItem(name: "select", value: "report_count")
-        ]
+    /// Atomically bump report_count by 1 for every equivalence that matched
+    /// during a recitation session. Called once at session end with the
+    /// deduplicated set of matched IDs. Fire-and-forget.
+    func reportUsage(ids: [UUID]) async {
+        guard SupabaseConfig.isConfigured, !ids.isEmpty else { return }
 
-        guard let fetchURL = components.url else { return }
+        guard let rpcURL = URL(string: "\(SupabaseConfig.projectURL)/rest/v1/rpc/increment_equivalence_reports") else { return }
 
-        var fetchRequest = URLRequest(url: fetchURL)
+        var request = URLRequest(url: rpcURL)
+        request.httpMethod = "POST"
         for (key, value) in SupabaseConfig.headers {
-            fetchRequest.setValue(value, forHTTPHeaderField: key)
+            request.setValue(value, forHTTPHeaderField: key)
         }
 
+        let body: [String: Any] = ["ids": ids.map { $0.uuidString }]
+
         do {
-            let (data, _) = try await session.data(for: fetchRequest)
-            guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
-                  let currentCount = rows.first?["report_count"] as? Int else { return }
-
-            // PATCH with incremented count
-            var patchComponents = URLComponents(url: SupabaseConfig.equivalencesURL, resolvingAgainstBaseURL: false)!
-            patchComponents.queryItems = [
-                URLQueryItem(name: "expected_word", value: "eq.\(expected)"),
-                URLQueryItem(name: "spoken_word", value: "eq.\(spoken)")
-            ]
-            guard let patchURL = patchComponents.url else { return }
-
-            var patchRequest = URLRequest(url: patchURL)
-            patchRequest.httpMethod = "PATCH"
-            for (key, value) in SupabaseConfig.headers {
-                patchRequest.setValue(value, forHTTPHeaderField: key)
-            }
-
-            let patchBody: [String: Any] = ["report_count": currentCount + 1]
-            patchRequest.httpBody = try JSONSerialization.data(withJSONObject: patchBody)
-
-            let (_, patchResponse) = try await session.data(for: patchRequest)
-            if let httpResponse = patchResponse as? HTTPURLResponse,
-               !(200...299).contains(httpResponse.statusCode) {
-                print("[EquivalenceService] incrementReportCount PATCH status: \(httpResponse.statusCode)")
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (_, response) = try await session.data(for: request)
+            if let http = response as? HTTPURLResponse,
+               !(200...299).contains(http.statusCode) {
+                print("[EquivalenceService] reportUsage status: \(http.statusCode)")
             }
         } catch {
-            print("[EquivalenceService] incrementReportCount error: \(error)")
+            print("[EquivalenceService] reportUsage error: \(error)")
         }
     }
 
     // MARK: - Fetch
 
     /// Fetch community equivalences for a list of expected words.
-    /// Returns `[expectedWord: Set<spokenAlternatives>]` — same format as UserEquivalencesStore.
-    /// Returns empty dict on any error.
-    func fetchEquivalences(forWords words: [String]) async -> [String: Set<String>] {
-        guard SupabaseConfig.isConfigured, !words.isEmpty else { return [:] }
+    /// Returns an array of rows (including IDs) so callers can batch-report usage later.
+    func fetchEquivalences(forWords words: [String]) async -> [CommunityEquivalence] {
+        guard SupabaseConfig.isConfigured, !words.isEmpty else { return [] }
 
         let normalizedWords = Set(words.map { normalize($0) }).filter { !$0.isEmpty }
-        guard !normalizedWords.isEmpty else { return [:] }
+        guard !normalizedWords.isEmpty else { return [] }
 
-        // Build query: GET /equivalences?expected_word=in.(word1,word2,...)
         let wordList = normalizedWords.joined(separator: ",")
         var components = URLComponents(url: SupabaseConfig.equivalencesURL, resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "expected_word", value: "in.(\(wordList))"),
-            URLQueryItem(name: "select", value: "expected_word,spoken_word")
+            URLQueryItem(name: "select", value: "id,expected_word,spoken_word")
         ]
 
-        guard let url = components.url else { return [:] }
+        guard let url = components.url else { return [] }
 
         var request = URLRequest(url: url)
         for (key, value) in SupabaseConfig.headers {
@@ -134,20 +111,19 @@ class EquivalenceService {
 
         do {
             let (data, _) = try await session.data(for: request)
-            guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: String]] else {
-                return [:]
+            guard let rows = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                return []
             }
-
-            var result: [String: Set<String>] = [:]
-            for row in rows {
-                guard let expected = row["expected_word"],
-                      let spoken = row["spoken_word"] else { continue }
-                result[expected, default: []].insert(spoken)
+            return rows.compactMap { row in
+                guard let idString = row["id"] as? String,
+                      let id = UUID(uuidString: idString),
+                      let expected = row["expected_word"] as? String,
+                      let spoken = row["spoken_word"] as? String else { return nil }
+                return CommunityEquivalence(id: id, expectedWord: expected, spokenWord: spoken)
             }
-            return result
         } catch {
             print("[EquivalenceService] fetchEquivalences error: \(error)")
-            return [:]
+            return []
         }
     }
 

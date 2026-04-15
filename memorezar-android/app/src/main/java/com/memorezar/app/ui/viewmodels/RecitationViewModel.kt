@@ -14,10 +14,13 @@ import com.memorezar.app.data.models.LocalRecording
 import com.memorezar.app.data.models.MemorizationMode
 import com.memorezar.app.data.models.Quote
 import com.memorezar.app.data.models.Recording
+import com.memorezar.app.core.comparison.MatchType
 import com.memorezar.app.data.services.AudioRecorderService
+import com.memorezar.app.data.services.EquivalenceService
 import com.memorezar.app.data.services.RecordingService
 import com.memorezar.app.data.services.TextToSpeechService
 import com.memorezar.app.data.storage.LocalRecordingStore
+import com.memorezar.app.data.storage.UserEquivalencesStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -189,7 +192,9 @@ class RecitationViewModel @Inject constructor(
     val ttsService: TextToSpeechService,
     val recorderService: AudioRecorderService,
     private val recordingService: RecordingService,
-    val localRecordingStore: LocalRecordingStore
+    val localRecordingStore: LocalRecordingStore,
+    private val equivalenceService: EquivalenceService,
+    private val userEquivalencesStore: UserEquivalencesStore
 ) : ViewModel(), SpeechRecognitionDelegate {
 
     private val _uiState = MutableStateFlow(RecitationUiState())
@@ -218,6 +223,12 @@ class RecitationViewModel @Inject constructor(
     private var lastMismatchPosition = -1
     private val MIN_SETTLE_MS = 400L
     private val MAX_SETTLE_MS = 1500L
+
+    // Community equivalence usage tracking — populated per quote from
+    // fetchEquivalences, read in onWord on community matches, drained to
+    // reportUsage at session end (deduplicated per session).
+    private var communityEquivalenceIDs: Map<String, Map<String, String>> = emptyMap()
+    private val sessionCommunityMatchIDs: MutableSet<String> = mutableSetOf()
 
     // Silence detection for pause icon
     private var silenceJob: Job? = null
@@ -264,6 +275,24 @@ class RecitationViewModel @Inject constructor(
         val comparatorText = getActiveText().ifEmpty { quote.text }
         val comparatorLang = activeLanguage ?: quote.primaryLanguage
         comparator.setTargetText(comparatorText, comparatorLang)
+
+        // Load user equivalences (local, private) and fetch community ones
+        // (crowd-sourced from Supabase). User equivalences take priority during
+        // comparison; community are a fallback. Reset per-session match set.
+        sessionCommunityMatchIDs.clear()
+        communityEquivalenceIDs = emptyMap()
+        comparator.setUserEquivalences(userEquivalencesStore.equivalences.value)
+        viewModelScope.launch {
+            val community = equivalenceService.fetchEquivalences(comparator.getTargetWords())
+            val matchDict = mutableMapOf<String, MutableSet<String>>()
+            val idLookup = mutableMapOf<String, MutableMap<String, String>>()
+            for (eq in community) {
+                matchDict.getOrPut(eq.expectedWord) { mutableSetOf() }.add(eq.spokenWord)
+                idLookup.getOrPut(eq.expectedWord) { mutableMapOf() }[eq.spokenWord] = eq.id
+            }
+            comparator.setCommunityEquivalences(matchDict)
+            communityEquivalenceIDs = idLookup
+        }
 
         val targetWords = comparator.getTargetWords()
         val wordDisplays = targetWords.mapIndexed { index, word ->
@@ -1165,6 +1194,9 @@ class RecitationViewModel @Inject constructor(
         val state = _uiState.value
         val index = state.tappedMistakeIndex ?: return
 
+        // Capture the words before removing the mistake so we can persist the equivalence.
+        val overridden = mistakes.firstOrNull { it.position == index }
+
         // Remove all mistakes at this position
         mistakes.removeAll { it.position == index }
 
@@ -1178,6 +1210,18 @@ class RecitationViewModel @Inject constructor(
                 tappedMistakeIndex = null,
                 tappedMistakeSpoken = null
             )
+        }
+
+        // Persist the user-accepted equivalence locally and report to the community
+        // table (fire-and-forget). Matches iOS overrideMistake behavior.
+        if (overridden != null) {
+            val expected = overridden.expectedWord
+            val spoken = overridden.spokenWord
+            userEquivalencesStore.addEquivalence(expected, spoken)
+            comparator.setUserEquivalences(userEquivalencesStore.equivalences.value)
+            viewModelScope.launch {
+                equivalenceService.reportEquivalence(expected, spoken)
+            }
         }
     }
 
@@ -1613,6 +1657,14 @@ class RecitationViewModel @Inject constructor(
         val result = comparator.compareWord(word, confidence) ?: return
 
         if (result.isMatch) {
+            // Track community equivalence usage for session-end reporting.
+            // Dedup per session — the same pair matching many times counts once.
+            if (result.matchType == MatchType.COMMUNITY_EQUIVALENCE) {
+                communityEquivalenceIDs[result.normalizedExpected]?.get(result.normalizedSpoken)?.let { id ->
+                    sessionCommunityMatchIDs.add(id)
+                }
+            }
+
             pendingMismatchJob?.cancel()
             pendingMismatch = null
             consecutiveMismatchesAtPosition = 0
@@ -1776,6 +1828,15 @@ class RecitationViewModel @Inject constructor(
 
     private fun completeSession() {
         stopRecitation()
+
+        // Report community equivalence usage (fire-and-forget, deduplicated set).
+        val usedIDs = sessionCommunityMatchIDs.toList()
+        sessionCommunityMatchIDs.clear()
+        if (usedIDs.isNotEmpty()) {
+            viewModelScope.launch {
+                equivalenceService.reportUsage(usedIDs)
+            }
+        }
 
         val state = _uiState.value
         val tested = state.words.count { it.state == WordState.CORRECT || it.state == WordState.INCORRECT }
