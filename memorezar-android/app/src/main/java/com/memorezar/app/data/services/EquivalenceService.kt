@@ -50,6 +50,7 @@ class EquivalenceService @Inject constructor(
     suspend fun reportEquivalence(expected: String, spoken: String) {
         val normalizedExpected = normalize(expected)
         val normalizedSpoken = normalize(spoken)
+        if (normalizedExpected.isEmpty() || normalizedSpoken.isEmpty()) return
         if (normalizedExpected == normalizedSpoken) return
 
         try {
@@ -89,8 +90,12 @@ class EquivalenceService @Inject constructor(
      */
     suspend fun fetchEquivalences(forWords: List<String>): List<CommunityEquivalence> {
         if (forWords.isEmpty()) return emptyList()
+        // Filter empty normalized tokens (e.g. pure-punctuation words) and dedupe,
+        // otherwise `in.(a,,b)` would yield a malformed Supabase filter.
+        val normalizedWords = forWords.map { normalize(it) }.filter { it.isNotEmpty() }.distinct()
+        if (normalizedWords.isEmpty()) return emptyList()
         return try {
-            val wordList = forWords.joinToString(",") { normalize(it) }
+            val wordList = normalizedWords.joinToString(",")
             val url = "${SupabaseConfig.EQUIVALENCES_URL}?expected_word=in.($wordList)&select=id,expected_word,spoken_word"
             val response = httpClient.get(url) {
                 for ((k, v) in authService.headers()) header(k, v)

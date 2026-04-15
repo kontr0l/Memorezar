@@ -174,6 +174,17 @@ class SpeechRecognitionService @Inject constructor(
 
     // ── Private: Recognizer lifecycle ────────────────────────────────────────
 
+    private fun buildRecognitionIntent(): Intent =
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+        }
+
     private fun createAndStartRecognizer() {
         // Destroy any existing recognizer
         try {
@@ -186,18 +197,32 @@ class SpeechRecognitionService @Inject constructor(
             setRecognitionListener(recognitionListener)
         }
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-            )
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.toLanguageTag())
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
-
         Log.d(TAG, "createAndStartRecognizer: locale=${locale.toLanguageTag()}")
-        speechRecognizer?.startListening(intent)
+        speechRecognizer?.startListening(buildRecognitionIntent())
+    }
+
+    /**
+     * Reuse the existing SpeechRecognizer instance for the next listening
+     * session instead of destroy+create. This avoids the system STT service
+     * unbind race (seen as ERROR_LANGUAGE_NOT_SUPPORTED right after every
+     * final result on OnePlus/Samsung/etc), which previously cost ~300–400ms
+     * of dead mic time between words. Android's SpeechRecognizer supports
+     * calling startListening() again after onResults()/onError() without
+     * destroying the instance.
+     *
+     * Returns true on success; false if the recognizer is null or throws,
+     * in which case the caller should fall back to createAndStartRecognizer().
+     */
+    private fun restartListeningReusing(): Boolean {
+        val recognizer = speechRecognizer ?: return false
+        return try {
+            recognizer.startListening(buildRecognitionIntent())
+            Log.d(TAG, "restartListeningReusing: locale=${locale.toLanguageTag()}")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "restartListeningReusing failed, will recreate: ${e.message}")
+            false
+        }
     }
 
     private fun scheduleSessionRestart() {
@@ -452,16 +477,22 @@ class SpeechRecognitionService @Inject constructor(
             // Auto-restart if we're still supposed to be listening.
             // Set highWaterMark to prevent duplicate emissions from replayed transcript.
             if (isListening && !isRestarting) {
-                Log.i(TAG, "Auto-restarting after final result")
+                Log.i(TAG, "Auto-restarting after final result (reuse)")
                 consecutiveErrorCount = 0  // Successful session resets error count
                 highWaterMark = emittedWordCount
                 isRestarting = true  // Prevent overlapping restarts
                 autoRestartJob?.cancel()
                 autoRestartJob = scope.launch {
-                    delay(RESTART_DELAY_MS)
+                    // Reuse the existing recognizer — no destroy+create, no
+                    // unbind race, so no RESTART_DELAY_MS wait here. Mic is
+                    // listening again within a few ms instead of ~360ms.
                     if (isListening) {
                         previousTranscript = ""
-                        createAndStartRecognizer()
+                        if (!restartListeningReusing()) {
+                            // Fallback if the recognizer is unrecoverable
+                            delay(RESTART_DELAY_MS)
+                            if (isListening) createAndStartRecognizer()
+                        }
                         scheduleSessionRestart()
                         isRestarting = false
                     }
@@ -510,8 +541,11 @@ class SpeechRecognitionService @Inject constructor(
                     return
                 }
 
-                // Error 11: fixed short delay (it's a race condition, backoff makes it worse)
-                // Other errors: small backoff to avoid tight loops
+                // On errors the recognizer is in a broken state — reuse tends to
+                // re-fire the same error synchronously (tight loop). Always wait
+                // a bit before retrying, and use destroy+create for a fresh binding.
+                // Error 11: fixed short delay (it's a race condition, backoff makes it worse).
+                // Other errors: small backoff to avoid tight loops.
                 val delayMs = if (isServiceRace) {
                     RESTART_DELAY_MS  // Fixed 150ms — just enough for service unbind
                 } else {
