@@ -211,6 +211,10 @@ class RecitationViewModel @Inject constructor(
     var isTutorialMode = false
     private var tutorialRevealActive = false
     private var activeLanguage: String? = null  // null = original language
+    // True once the user has explicitly tapped a language pill. Suppresses the
+    // auto language-switch in startPlaybackWithData so entering audio mode
+    // doesn't kick the user back to the recording's language. Reset per quote.
+    private var userExplicitlyChoseLanguage: Boolean = false
     private val mistakes = mutableListOf<ComparisonResult>()
     private var previousWordWasMistake = false
     private var sessionStartTime: Date? = null
@@ -264,6 +268,9 @@ class RecitationViewModel @Inject constructor(
         // Restore the last-practiced language so the comparator, TTS, and UI all
         // line up with the translation the user ended their last session in.
         activeLanguage = quote.lastPracticedLanguage
+        // Fresh quote = fresh language-pick state; auto-switching for audio
+        // mode is allowed again until the user explicitly taps a pill.
+        userExplicitlyChoseLanguage = false
 
         // Mastered quotes always open at the hardest reveal level.
         if (quote.masteryStreak >= 3 && quote.revealLevel < 3) {
@@ -524,8 +531,11 @@ class RecitationViewModel @Inject constructor(
         }
         val primaryLang = quote?.primaryLanguage ?: "en"
         val targetLang = if (recordingLang == primaryLang) null else recordingLang
-        if (targetLang != activeLanguage) {
-            withContext(Dispatchers.Main) { switchLanguage(targetLang) }
+        // Only auto-match the recording's language if the user hasn't
+        // explicitly chosen a language for this quote — otherwise we'd undo
+        // their pick the moment they enter audio mode.
+        if (!userExplicitlyChoseLanguage && targetLang != activeLanguage) {
+            withContext(Dispatchers.Main) { switchLanguage(targetLang, byUser = false) }
         }
 
         try {
@@ -903,9 +913,14 @@ class RecitationViewModel @Inject constructor(
         return quote?.translations?.get(lang)?.title ?: quote?.title ?: ""
     }
 
-    fun switchLanguage(language: String?) {
+    fun switchLanguage(language: String?, byUser: Boolean = true) {
         if (language == activeLanguage) return
         val q = quote ?: return
+
+        // Mark that the user picked a language so subsequent auto switches
+        // (e.g. entering audio mode and matching the recording's language)
+        // don't override their explicit choice.
+        if (byUser) userExplicitlyChoseLanguage = true
 
         // Stop listening if active
         if (_uiState.value.isListening) pauseRecitation()

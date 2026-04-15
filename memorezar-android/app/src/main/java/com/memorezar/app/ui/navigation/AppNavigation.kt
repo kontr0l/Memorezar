@@ -137,7 +137,6 @@ fun AppNavigation(
     )
 
     val showBottomBar = currentRoute != null && !currentRoute.startsWith("recitation/")
-            && currentRoute != "pack_search"
 
     Scaffold(
         contentWindowInsets = WindowInsets(0),
@@ -331,6 +330,31 @@ fun AppNavigation(
                 CategoryDetailScreen(
                     categoryId = categoryId,
                     onBack = { navController.popBackStack() },
+                    onCategoryDeleted = {
+                        // Always return to the Library tab root after deletion
+                        // (matches iOS), no matter what path lifted the user
+                        // into the category — Home → Browse Packs → pack
+                        // detail, etc.
+                        //
+                        // popBackStack lets Compose Navigation use the popEnter/
+                        // popExit slide transitions (a proper "back" animation)
+                        // instead of the fresh-launch crossfade that
+                        // navigate("library") + popUpTo would produce. Falls
+                        // back to navigate when library isn't already on the
+                        // stack (e.g. coming from a pack detail on Home).
+                        val popped = navController.popBackStack(
+                            route = "library",
+                            inclusive = false
+                        )
+                        if (!popped) {
+                            navController.navigate("library") {
+                                popUpTo(navController.graph.findStartDestination().id) {
+                                    saveState = false
+                                }
+                                launchSingleTop = true
+                            }
+                        }
+                    },
                     onQuoteClick = { quote -> navController.navigate("recitation/${quote.id}") },
                     onAddQuote = { catId ->
                         quoteInputCategoryId = catId

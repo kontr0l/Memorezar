@@ -43,6 +43,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -100,6 +101,10 @@ fun HomeScreen(
     var showPackRequest by remember { mutableStateOf(false) }
     val continuePracticing by viewModel.continuePracticingQuotes.collectAsState()
     val availablePacks by viewModel.availablePacks.collectAsState()
+
+    // Pull per-language colors from Supabase once at app launch — falls back to
+    // hardcoded defaults if offline. Matches iOS's LanguageService.fetchLanguages.
+    LaunchedEffect(Unit) { com.memorezar.app.data.services.LanguageService.fetchLanguages() }
     val quotes by viewModel.quoteStore.quotes.collectAsState()
     val completedTips by (tutorialStore?.completedTips ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>())).collectAsState()
     fun shouldShowTip(tip: TipDefinition): Boolean {
@@ -392,9 +397,11 @@ fun HomeScreen(
         }
         } // Stats Column
 
-        // Browse Quote Packs
-        if (availablePacks.isNotEmpty()) {
-          Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // Browse Quote Packs — always rendered so the section header and the
+        // Request a Quote Pack card stay accessible even after the user has
+        // added every available pack. "See All" only shows when there are
+        // still packs available to browse.
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ActionTip(
                 text = stringResource(TipDefinition.browsePacks.contentRes),
                 visible = shouldShowTip(TipDefinition.browsePacks),
@@ -405,15 +412,17 @@ fun HomeScreen(
                     icon = "search",
                     color = IndigoColor,
                     trailing = {
-                        Text(
-                            text = stringResource(R.string.see_all),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = IndigoColor,
-                            modifier = Modifier.clickable {
-                                tutorialStore?.completeTip(TipDefinition.browsePacks.id)
-                                onNavigateToPackSearch(availablePacks)
-                            }
-                        )
+                        if (availablePacks.isNotEmpty()) {
+                            Text(
+                                text = stringResource(R.string.see_all),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = IndigoColor,
+                                modifier = Modifier.clickable {
+                                    tutorialStore?.completeTip(TipDefinition.browsePacks.id)
+                                    onNavigateToPackSearch(availablePacks)
+                                }
+                            )
+                        }
                     }
                 )
             }
@@ -438,7 +447,6 @@ fun HomeScreen(
                     PackRequestCard(onClick = { showPackRequest = true })
                 }
             }
-          }
         }
 
         Spacer(Modifier.height(16.dp))

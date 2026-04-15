@@ -452,6 +452,7 @@ private fun CategoryCard(
 fun CategoryDetailScreen(
     categoryId: String,
     onBack: () -> Unit,
+    onCategoryDeleted: () -> Unit = onBack,
     onQuoteClick: (Quote) -> Unit,
     onAddQuote: (String) -> Unit,
     onEditQuote: (Quote) -> Unit,
@@ -459,8 +460,15 @@ fun CategoryDetailScreen(
 ) {
     val allCategories by viewModel.categories.collectAsState()
     val allQuotes by viewModel.quotes.collectAsState()
+    // Set when the user explicitly deletes this category from inside the screen.
+    // Suppresses the fallback onBack() below — onCategoryDeleted() has already
+    // navigated to the Library tab root, and we don't want a recomposition-
+    // triggered popBackStack to undo it.
+    var userDeleted by remember { mutableStateOf(false) }
     val category = allCategories.firstOrNull { it.id == categoryId } ?: run {
-        LaunchedEffect(Unit) { onBack() }
+        if (!userDeleted) {
+            LaunchedEffect(Unit) { onBack() }
+        }
         return
     }
     val quotes = allQuotes.filter { it.categoryId == categoryId }.sortedBy { it.sortOrder }
@@ -747,9 +755,17 @@ fun CategoryDetailScreen(
                     showCategorySettings = false
                 },
                 onDelete = {
+                    // Mark BEFORE deleting so the fallback onBack() at the top
+                    // of this composable doesn't fire when category becomes
+                    // null on the next recomposition.
+                    userDeleted = true
                     viewModel.deleteCategory(category)
                     showCategorySettings = false
-                    onBack()
+                    // Land on the Library tab root regardless of how the user
+                    // got here — matches iOS, where pack removal always pops
+                    // back to the Library grid rather than to whichever home
+                    // screen lifted them into the pack detail.
+                    onCategoryDeleted()
                 },
                 onDismiss = { showCategorySettings = false }
             )

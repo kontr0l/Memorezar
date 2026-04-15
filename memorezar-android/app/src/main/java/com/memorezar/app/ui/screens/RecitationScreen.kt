@@ -4330,20 +4330,19 @@ private fun CommunityRecordingRow(
 // Language Badge (matching iOS languagePill)
 // ---------------------------------------------------------------------------
 
-private fun languageColor(code: String): Color = when (code.lowercase()) {
-    "en" -> Color(0xFF2196F3)
-    "es" -> Color(0xFFFFC107)
-    "fr" -> Color(0xFFF44336)
-    "it" -> Color(0xFF34C759)
-    "de" -> Color(0xFFFF9800)
-    "pt" -> Color(0xFF34C759)
-    "ar" -> Color(0xFF34C759)
-    else -> Color(0xFF7A71F0)
+// Pulls the per-language colors from LanguageService (which fetches them from
+// Supabase at app launch). @Composable so the badge recomposes when the fetch
+// arrives — same approach as iOS's LanguageService.color(for:).
+@Composable
+private fun languageColor(code: String): Color {
+    val langs by com.memorezar.app.data.services.LanguageService.languages.collectAsState()
+    return langs[code.lowercase()]?.color ?: Color(0xFF7A71F0)
 }
 
-private fun languageTextColor(code: String): Color = when (code.lowercase()) {
-    "es", "it", "de", "pt" -> Color.Black
-    else -> Color.White
+@Composable
+private fun languageTextColor(code: String): Color {
+    val langs by com.memorezar.app.data.services.LanguageService.languages.collectAsState()
+    return langs[code.lowercase()]?.textColor ?: Color.White
 }
 
 @Composable

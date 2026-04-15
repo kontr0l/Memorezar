@@ -38,10 +38,11 @@ struct HomeScreen: View {
                     // Stats Section
                     statsSection
 
-                    // Browse Quote Packs (always last)
-                    if !availablePacks.isEmpty {
-                        suggestionSection
-                    }
+                    // Browse Quote Packs (always last) — always rendered so the
+                    // section header and the Request a Quote Pack card stay
+                    // accessible even after the user has added every available
+                    // pack. "See All" hides itself when there's nothing left.
+                    suggestionSection
                 }
                 .padding()
             }
@@ -288,12 +289,14 @@ struct HomeScreen: View {
 
                 Spacer()
 
-                Button {
-                    showPackSearch = true
-                } label: {
-                    Text("See All")
-                        .font(.subheadline)
-                        .foregroundColor(.indigo)
+                if !availablePacks.isEmpty {
+                    Button {
+                        showPackSearch = true
+                    } label: {
+                        Text("See All")
+                            .font(.subheadline)
+                            .foregroundColor(.indigo)
+                    }
                 }
             }
 
