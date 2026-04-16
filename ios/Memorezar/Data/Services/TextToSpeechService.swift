@@ -112,15 +112,37 @@ final class TextToSpeechService: NSObject, ObservableObject {
     private func playAudio(_ data: Data) {
         do {
             #if os(iOS)
-            try AVAudioSession.sharedInstance().setCategory(.playback)
-            try AVAudioSession.sharedInstance().setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            // Voice recitation leaves the session in
+            //   .playAndRecord + mode .measurement + .defaultToSpeaker
+            // — .measurement aggressively attenuates output (great for ASR,
+            // terrible for playback), and reconfiguring on top of a still-
+            // releasing session sometimes sticks the route to the earpiece.
+            // Explicitly deactivate first, then set .playback + .spokenAudio
+            // (optimized for TTS; guaranteed to route to the loud speaker
+            // and clear any prior mode).
+            try? session.setActive(false, options: .notifyOthersOnDeactivation)
+            try session.setCategory(.playback, mode: .spokenAudio, options: [])
+            try session.setActive(true, options: [])
             #endif
 
             let audioPlayer = try AVAudioPlayer(data: data)
             audioPlayer.delegate = self
+            audioPlayer.volume = 1.0               // defend against any stale level
+            audioPlayer.prepareToPlay()
             audioPlayer.play()
             player = audioPlayer
             isSpeaking = true
+
+            #if os(iOS)
+            // Diagnostic: confirm the loud speaker won the route. If you see
+            // "Receiver" (earpiece) here while listening quietly, the session
+            // handoff still regressed and the category change got dropped.
+            let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+                .map { "\($0.portType.rawValue) (\($0.portName))" }
+                .joined(separator: ", ")
+            print("[TTS] Output route: \(outputs)")
+            #endif
         } catch {
             print("[TTS] Playback error: \(error)")
             self.error = "Playback failed"
