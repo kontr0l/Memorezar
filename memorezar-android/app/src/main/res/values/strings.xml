@@ -50,6 +50,8 @@
     <string name="account">Account</string>
     <string name="sign_in">Sign In</string>
     <string name="sign_out">Sign Out</string>
+    <string name="sign_out_title">Sign out?</string>
+    <string name="sign_out_message">You\'ll need to sign in again to back up your data or share recordings with the community.</string>
     <string name="sign_in_footer">Sign in to back up your data and share recordings.</string>
     <string name="apple_account">Apple Account</string>
     <string name="signed_in_with_apple">Signed in with Apple</string>

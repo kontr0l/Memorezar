@@ -19,6 +19,7 @@ struct SettingsScreen: View {
     @State private var showPaywall = false
     @State private var showContactSupport = false
     @State private var showRestoreToast = false
+    @State private var showingSignOutAlert = false
 
     var body: some View {
         NavigationStack {
@@ -160,6 +161,14 @@ struct SettingsScreen: View {
                 }
             } message: {
                 Text("This will delete all your quotes, practice history, statistics, and local recordings. Any recordings you've shared to the community will also be removed. This action cannot be undone.")
+            }
+            .alert("Sign out?", isPresented: $showingSignOutAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Sign Out", role: .destructive) {
+                    authService.signOut()
+                }
+            } message: {
+                Text("You'll need to sign in again to back up your data or share recordings with the community.")
             }
             .alert("Delete My Account?", isPresented: $showingDeleteAccountAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -360,7 +369,7 @@ struct SettingsScreen: View {
                 }
 
                 Button(role: .destructive) {
-                    authService.signOut()
+                    showingSignOutAlert = true
                 } label: {
                     Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                 }
@@ -413,7 +422,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v74.4")
+                Text("v74.5")
                     .foregroundColor(.secondary)
             }
 

@@ -328,8 +328,30 @@ fun SettingsScreen(
                     }
 
                     CardDivider()
+                    var showSignOutConfirm by remember { mutableStateOf(false) }
                     IconClickRow(Icons.AutoMirrored.Outlined.ExitToApp, stringResource(R.string.sign_out), color = MaterialTheme.colorScheme.error) {
-                        authService.signOut()
+                        showSignOutConfirm = true
+                    }
+
+                    if (showSignOutConfirm) {
+                        AlertDialog(
+                            onDismissRequest = { showSignOutConfirm = false },
+                            title = { Text(stringResource(R.string.sign_out_title)) },
+                            text = { Text(stringResource(R.string.sign_out_message)) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    showSignOutConfirm = false
+                                    authService.signOut()
+                                }) {
+                                    Text(stringResource(R.string.sign_out), color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showSignOutConfirm = false }) {
+                                    Text(stringResource(R.string.cancel))
+                                }
+                            }
+                        )
                     }
 
                     CardDivider()
@@ -427,7 +449,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.0")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.1")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
