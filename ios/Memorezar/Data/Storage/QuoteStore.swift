@@ -530,18 +530,20 @@ final class QuoteStore: ObservableObject {
             }
         }
 
-        // Create a Quote for each item in the pack, preserving Supabase order
+        // Build all quotes first, then append in one batch so @Published
+        // fires only once instead of once per quote. Large packs (e.g. Movie
+        // Quotes) were crashing because dozens of rapid objectWillChange
+        // notifications overwhelmed SwiftUI's view reconciliation.
         let lang = preferredLanguage
+        var newQuotes: [Quote] = []
         for (index, item) in pack.quotes.enumerated() {
             let title: String
             let text: String
             var translations = item.translations ?? [:]
 
-            // If a translation exists for the preferred language, use it as primary
             if lang != "en", let translated = translations[lang] {
                 title = translated.title
                 text = translated.text
-                // Store the English original as a translation
                 translations["en"] = TranslatedQuote(title: item.title, text: item.text)
                 translations.removeValue(forKey: lang)
             } else {
@@ -550,16 +552,16 @@ final class QuoteStore: ObservableObject {
             }
 
             let primaryLang = (lang != "en" && item.translations?[lang] != nil) ? lang : nil
-            let quote = Quote(
+            newQuotes.append(Quote(
                 title: title,
                 text: text,
                 categoryId: category.id,
                 translations: translations.isEmpty ? nil : translations,
                 primaryLanguage: primaryLang,
                 sortOrder: index
-            )
-            quotes.append(quote)
+            ))
         }
+        quotes.append(contentsOf: newQuotes)
         saveQuotes()
 
         // Record pack as added with its version

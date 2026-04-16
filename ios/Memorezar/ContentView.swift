@@ -11,54 +11,76 @@ struct ContentView: View {
     private static let tabCount = 3
 
     var body: some View {
-        if !tutorialStore.hasCompletedOnboarding {
-            OnboardingFlow()
-        } else {
-            VStack(spacing: 0) {
-                // All three tabs laid out side-by-side; selectedTab just slides
-                // the whole strip left/right. Gives a deterministic page-view
-                // style slide that matches Android's relative-tab-order feel:
-                // moving to a higher-index tab slides leftward (new content
-                // enters from the right), moving to a lower-index tab slides
-                // rightward (new content enters from the left).
-                GeometryReader { geo in
-                    HStack(spacing: 0) {
-                        HomeScreen(path: $homePath)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                        QuoteLibraryScreen(path: $libraryPath)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                        SettingsScreen()
-                            .frame(width: geo.size.width, height: geo.size.height)
+        Group {
+            if !tutorialStore.hasCompletedOnboarding {
+                OnboardingFlow()
+            } else {
+                VStack(spacing: 0) {
+                    GeometryReader { geo in
+                        HStack(spacing: 0) {
+                            HomeScreen(path: $homePath)
+                                .frame(width: geo.size.width, height: geo.size.height)
+                            QuoteLibraryScreen(path: $libraryPath)
+                                .frame(width: geo.size.width, height: geo.size.height)
+                            SettingsScreen()
+                                .frame(width: geo.size.width, height: geo.size.height)
+                        }
+                        .offset(x: -CGFloat(selectedTab) * geo.size.width)
+                        .animation(.easeInOut(duration: 0.35), value: selectedTab)
                     }
-                    .offset(x: -CGFloat(selectedTab) * geo.size.width)
-                    .animation(.easeInOut(duration: 0.35), value: selectedTab)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
 
-                // Custom tab bar
-                Divider()
-                HStack {
-                    tabButton(icon: "IconHome", tag: 0)
-                    tabButton(icon: "IconLibrary", tag: 1)
-                    tabButton(icon: "IconSettings", tag: 2)
+                    Divider()
+                    HStack {
+                        tabButton(icon: "IconHome", tag: 0)
+                        tabButton(icon: "IconLibrary", tag: 1)
+                        tabButton(icon: "IconSettings", tag: 2)
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    .background(Color(.systemBackground))
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-                .background(Color(.systemBackground))
+                .onChange(of: quoteStore.pendingCategoryNavigation) { category in
+                    if let category {
+                        quoteStore.pendingCategoryNavigation = nil
+                        // Defer navigation until the next run-loop so SwiftUI
+                        // finishes processing the batch quote-add updates first.
+                        // Without this, modifying libraryPath mid-update could
+                        // crash on large packs (e.g. Movie Quotes).
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            var tx = Transaction()
+                            tx.disablesAnimations = true
+                            withTransaction(tx) {
+                                libraryPath = NavigationPath()
+                                libraryPath.append(category)
+                            }
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                selectedTab = 1
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                var cleanup = Transaction()
+                                cleanup.disablesAnimations = true
+                                withTransaction(cleanup) {
+                                    homePath = NavigationPath()
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            .onChange(of: quoteStore.pendingCategoryNavigation) { category in
-                if category != nil {
-                    selectedTab = 1
-                }
+        }
+        .onChange(of: tutorialStore.hasCompletedOnboarding) { completed in
+            if completed {
+                var tx = Transaction()
+                tx.disablesAnimations = true
+                withTransaction(tx) { selectedTab = 0 }
             }
         }
     }
 
     private func tabButton(icon: String, tag: Int) -> some View {
         Button {
-            // Tapping any footer tab ALWAYS takes the user to the tab's root —
-            // never to a previously-open sub-page. Matches Android behavior.
             switch tag {
             case 0: if !homePath.isEmpty { homePath = NavigationPath() }
             case 1: if !libraryPath.isEmpty { libraryPath = NavigationPath() }

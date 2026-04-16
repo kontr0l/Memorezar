@@ -36,11 +36,15 @@ struct OnboardingFlow: View {
     var body: some View {
         NavigationStack {
             Group {
-                switch step {
-                case .modeChoice:
-                    modeChoiceScreen
-                case .firstLetterChoice:
-                    firstLetterChoiceScreen
+                if showPractice {
+                    Color(.systemBackground)
+                } else {
+                    switch step {
+                    case .modeChoice:
+                        modeChoiceScreen
+                    case .firstLetterChoice:
+                        firstLetterChoiceScreen
+                    }
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: step)
