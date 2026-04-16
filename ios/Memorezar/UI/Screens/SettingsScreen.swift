@@ -18,6 +18,7 @@ struct SettingsScreen: View {
     @State private var showAuthSheet = false
     @State private var showPaywall = false
     @State private var showContactSupport = false
+    @State private var showRestoreToast = false
 
     var body: some View {
         NavigationStack {
@@ -86,6 +87,23 @@ struct SettingsScreen: View {
                 }
             }
             .animation(.easeInOut(duration: 0.1), value: showFlash)
+            // Restore-complete toast — bottom capsule shown briefly after a
+            // successful cloud restore, mirroring the Android "PDF saved to
+            // Downloads" toast pattern.
+            .overlay(alignment: .bottom) {
+                if showRestoreToast {
+                    Text("Welcome back, restore complete")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 10)
+                        .background(Capsule().fill(Color.black.opacity(0.85)))
+                        .padding(.bottom, 32)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: showRestoreToast)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
@@ -311,6 +329,13 @@ struct SettingsScreen: View {
                                 do {
                                     let payload = try await cloudBackupService.fetchBackupPayload()
                                     await cloudBackupService.applyRestore(payload)
+                                    await MainActor.run {
+                                        withAnimation { showRestoreToast = true }
+                                    }
+                                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                                    await MainActor.run {
+                                        withAnimation { showRestoreToast = false }
+                                    }
                                 } catch {
                                     print("[Settings] Restore failed: \(error.localizedDescription)")
                                 }

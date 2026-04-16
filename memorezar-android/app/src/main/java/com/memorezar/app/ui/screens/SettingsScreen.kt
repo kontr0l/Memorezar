@@ -1,5 +1,6 @@
 package com.memorezar.app.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -52,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -109,6 +111,7 @@ fun SettingsScreen(
     // Non-saveable scroll state — tab switching disposes this composable so
     // coming back to Settings resets scroll to top (matches iOS).
     val scrollState = remember { ScrollState(0) }
+    val context = LocalContext.current
 
     // Scrim alpha animates in once the user scrolls past the title — gives a
     // subtle backdrop behind the status-bar icons without covering real content.
@@ -303,7 +306,18 @@ fun SettingsScreen(
                                 confirmButton = {
                                     TextButton(onClick = {
                                         showRestoreConfirm = false
-                                        coroutineScope.launch { cloudBackupService.fetchAndRestore() }
+                                        coroutineScope.launch {
+                                            cloudBackupService.fetchAndRestore()
+                                            // Short confirmation — mirrors the
+                                            // PDF-saved toast pattern used
+                                            // elsewhere in the app and the
+                                            // iOS "Welcome back" bottom toast.
+                                            Toast.makeText(
+                                                context,
+                                                context.getString(R.string.restore_complete_toast),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                     }) { Text(stringResource(R.string.replace_with_cloud_data), color = MaterialTheme.colorScheme.error) }
                                 },
                                 dismissButton = {

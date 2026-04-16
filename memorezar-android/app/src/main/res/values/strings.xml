@@ -58,6 +58,7 @@
     <string name="restore_from_cloud_title">Restore from cloud backup?</string>
     <string name="restore_from_cloud_message">This will replace all local data with your cloud backup.</string>
     <string name="replace_with_cloud_data">Replace with Cloud Data</string>
+    <string name="restore_complete_toast">Welcome back, restore complete</string>
     <string name="backing_up">Backing up…</string>
     <string name="last_backed_up">Last backed up %1$s</string>
     <string name="data">Data</string>
