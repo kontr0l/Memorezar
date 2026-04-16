@@ -93,7 +93,7 @@ struct SettingsScreen: View {
             // Downloads" toast pattern.
             .overlay(alignment: .bottom) {
                 if showRestoreToast {
-                    Text("Welcome back, restore complete")
+                    Text("All restored!")
                         .font(.subheadline.weight(.medium))
                         .foregroundColor(.white)
                         .padding(.horizontal, 18)
@@ -422,7 +422,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v74.5")
+                Text("v74.6")
                     .foregroundColor(.secondary)
             }
 
