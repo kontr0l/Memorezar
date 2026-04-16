@@ -459,6 +459,9 @@
         }
       }
     },
+    "Account Deletion" : {
+
+    },
     "Accuracy" : {
       "localizations" : {
         "es" : {
@@ -1247,6 +1250,9 @@
         }
       }
     },
+    "Delete Account" : {
+
+    },
     "Delete All Data" : {
       "localizations" : {
         "es" : {
@@ -1266,6 +1272,12 @@
           }
         }
       }
+    },
+    "Delete My Account" : {
+
+    },
+    "Delete My Account?" : {
+
     },
     "Delete Recording" : {
       "localizations" : {
@@ -1563,6 +1575,9 @@
           }
         }
       }
+    },
+    "G" : {
+
     },
     "Get **3 consecutive** perfect recitations with no hints or reveals." : {
       "localizations" : {
@@ -2931,6 +2946,9 @@
         }
       }
     },
+    "Request Received" : {
+
+    },
     "Required" : {
       "localizations" : {
         "es" : {
@@ -3607,6 +3625,9 @@
         }
       }
     },
+    "This will permanently delete your account, cloud backups, and any community recordings you've shared. The request is processed within 30 days. You'll be signed out immediately." : {
+
+    },
     "This will remove the pack and its %lld %@. You can re-add it anytime from Browse." : {
       "localizations" : {
         "en" : {
@@ -3925,7 +3946,7 @@
         }
       }
     },
-    "v72.2" : {
+    "v72.4" : {
 
     },
     "Version" : {
@@ -4067,6 +4088,9 @@
           }
         }
       }
+    },
+    "Your account deletion request has been received. Your account and data will be permanently deleted within 30 days." : {
+
     },
     "Your Email" : {
       "localizations" : {

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -6,6 +8,23 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
+
+// Release signing credentials come from local.properties (gitignored) so keystore
+// passwords never land in the repo. Required keys:
+//   MEMOREZAR_KEYSTORE_FILE     = absolute path to the .jks
+//   MEMOREZAR_KEYSTORE_PASSWORD = store password
+//   MEMOREZAR_KEY_ALIAS         = key alias inside the store
+//   MEMOREZAR_KEY_PASSWORD      = key password
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val hasReleaseSigning = listOf(
+    "MEMOREZAR_KEYSTORE_FILE",
+    "MEMOREZAR_KEYSTORE_PASSWORD",
+    "MEMOREZAR_KEY_ALIAS",
+    "MEMOREZAR_KEY_PASSWORD",
+).all { keystoreProps.getProperty(it)?.isNotBlank() == true }
 
 android {
     namespace = "com.memorezar.app"
@@ -21,6 +40,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(keystoreProps.getProperty("MEMOREZAR_KEYSTORE_FILE"))
+                storePassword = keystoreProps.getProperty("MEMOREZAR_KEYSTORE_PASSWORD")
+                keyAlias = keystoreProps.getProperty("MEMOREZAR_KEY_ALIAS")
+                keyPassword = keystoreProps.getProperty("MEMOREZAR_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -28,6 +58,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 

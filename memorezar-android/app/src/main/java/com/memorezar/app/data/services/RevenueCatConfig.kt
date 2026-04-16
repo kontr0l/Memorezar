@@ -1,8 +1,9 @@
 package com.memorezar.app.data.services
 
 object RevenueCatConfig {
-    // NOTE: This is the Apple test key — replace with Android-specific key for production
-    const val API_KEY = "appl_test_ZrsYaFDJXLpRGdeDDToAsvOpZRh"
+    // Android-specific RevenueCat SDK key (Play Store app inside the Memorezar project).
+    // Client SDK keys are safe to bundle — they're designed for distribution in the APK.
+    const val API_KEY = "goog_rAtuVCxIOvNVeMIBDKznAqqwwTp"
     const val PRO_ENTITLEMENT_ID = "pro"
     const val PRO_MONTHLY = "memorezar_pro_monthly"
     const val PRO_YEARLY = "memorezar_pro_yearly"

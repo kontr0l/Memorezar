@@ -18,7 +18,17 @@ enum class SupportReason(val apiValue: String) {
     QUOTE_PACK_REQUEST("quote_pack_request"),
     BUG_REPORT("bug_report"),
     AWESOME("awesome"),
-    OTHER("other")
+    OTHER("other"),
+
+    /** Account deletion request — filed programmatically from Settings. Not
+     *  shown in the user-facing reason picker. */
+    ACCOUNT_DELETION("account_deletion");
+
+    companion object {
+        /** Reasons the user can pick from the contact-support form. */
+        val userSelectable: List<SupportReason> get() =
+            values().filter { it != ACCOUNT_DELETION }
+    }
 }
 
 @Singleton

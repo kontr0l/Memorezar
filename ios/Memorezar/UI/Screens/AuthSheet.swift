@@ -4,6 +4,10 @@ import CryptoKit
 
 /// Authentication sheet with Apple, Google, and email sign-in
 struct AuthSheet: View {
+    /// Email/password signup is hidden for v1 launch — Supabase's default SMTP is
+    /// rate-limited and unreliable. Flip to `true` once custom SMTP is configured.
+    static let emailAuthEnabled = false
+
     @EnvironmentObject var authService: AuthService
     @Environment(\.dismiss) private var dismiss
 
@@ -50,10 +54,11 @@ struct AuthSheet: View {
                     Button {
                         signInWithGoogle()
                     } label: {
-                        HStack {
-                            Image(systemName: "globe")
+                        HStack(spacing: 10) {
+                            GoogleGLogo(size: 20)
                             Text("Sign in with Google")
                                 .fontWeight(.medium)
+                                .foregroundColor(.primary)
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: 50)
@@ -66,77 +71,87 @@ struct AuthSheet: View {
                     }
                     .buttonStyle(.plain)
 
-                    // Divider
-                    HStack {
-                        Rectangle().frame(height: 1).foregroundColor(Color(.separator))
-                        Text("or").font(.footnote).foregroundColor(.secondary)
-                        Rectangle().frame(height: 1).foregroundColor(Color(.separator))
-                    }
+                    // Email form hidden for v1 launch — custom SMTP not yet configured.
+                    // Re-enable by flipping `emailAuthEnabled` to true.
+                    if Self.emailAuthEnabled {
+                        // Divider
+                        HStack {
+                            Rectangle().frame(height: 1).foregroundColor(Color(.separator))
+                            Text("or").font(.footnote).foregroundColor(.secondary)
+                            Rectangle().frame(height: 1).foregroundColor(Color(.separator))
+                        }
 
-                    // Email form
-                    VStack(spacing: 12) {
-                        if isSignUp {
-                            TextField("Name", text: $displayName)
-                                .textContentType(.name)
-                                .textInputAutocapitalization(.words)
+                        // Email form
+                        VStack(spacing: 12) {
+                            if isSignUp {
+                                TextField("Name", text: $displayName)
+                                    .textContentType(.name)
+                                    .textInputAutocapitalization(.words)
+                                    .padding()
+                                    .background(Color(.secondarySystemBackground))
+                                    .cornerRadius(10)
+                            }
+
+                            TextField("Email", text: $email)
+                                .textContentType(.emailAddress)
+                                .keyboardType(.emailAddress)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .padding()
+                                .background(Color(.secondarySystemBackground))
+                                .cornerRadius(10)
+
+                            SecureField("Password", text: $password)
+                                .textContentType(isSignUp ? .newPassword : .password)
                                 .padding()
                                 .background(Color(.secondarySystemBackground))
                                 .cornerRadius(10)
                         }
 
-                        TextField("Email", text: $email)
-                            .textContentType(.emailAddress)
-                            .keyboardType(.emailAddress)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(10)
+                        // Error message
+                        if let errorMessage {
+                            Text(errorMessage)
+                                .font(.footnote)
+                                .foregroundColor(.red)
+                                .multilineTextAlignment(.center)
+                        }
 
-                        SecureField("Password", text: $password)
-                            .textContentType(isSignUp ? .newPassword : .password)
-                            .padding()
-                            .background(Color(.secondarySystemBackground))
-                            .cornerRadius(10)
-                    }
+                        // Submit button
+                        Button {
+                            isSignUp ? signUp() : signInWithEmail()
+                        } label: {
+                            Group {
+                                if isLoading {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Text(isSignUp ? String(localized: "Create Account") : String(localized: "Sign In"))
+                                        .fontWeight(.semibold)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.indigo)
+                            .foregroundColor(.white)
+                            .cornerRadius(12)
+                        }
+                        .disabled(isLoading || email.isEmpty || password.isEmpty || (isSignUp && displayName.isEmpty))
 
-                    // Error message
-                    if let errorMessage {
+                        // Toggle sign-in / sign-up
+                        Button {
+                            withAnimation { isSignUp.toggle() }
+                            errorMessage = nil
+                        } label: {
+                            Text(isSignUp ? String(localized: "Already have an account? Sign In") : String(localized: "Don't have an account? Sign Up"))
+                                .font(.footnote)
+                                .foregroundColor(.indigo)
+                        }
+                    } else if let errorMessage {
+                        // Preserve error display when email flow is off (e.g. OAuth failures)
                         Text(errorMessage)
                             .font(.footnote)
                             .foregroundColor(.red)
                             .multilineTextAlignment(.center)
-                    }
-
-                    // Submit button
-                    Button {
-                        isSignUp ? signUp() : signInWithEmail()
-                    } label: {
-                        Group {
-                            if isLoading {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Text(isSignUp ? String(localized: "Create Account") : String(localized: "Sign In"))
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(Color.indigo)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                    }
-                    .disabled(isLoading || email.isEmpty || password.isEmpty || (isSignUp && displayName.isEmpty))
-
-                    // Toggle sign-in / sign-up
-                    Button {
-                        withAnimation { isSignUp.toggle() }
-                        errorMessage = nil
-                    } label: {
-                        Text(isSignUp ? String(localized: "Already have an account? Sign In") : String(localized: "Don't have an account? Sign Up"))
-                            .font(.footnote)
-                            .foregroundColor(.indigo)
                     }
                 }
                 .padding(.horizontal, 24)
@@ -254,5 +269,20 @@ struct AuthSheet: View {
         let data = Data(input.utf8)
         let hash = SHA256.hash(data: data)
         return hash.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
+
+// MARK: - Google G Logo
+
+/// Simple branded "G" in Google's primary blue. Swap for the official
+/// multi-color PNG (Assets.xcassets/GoogleG.imageset) when you're ready.
+struct GoogleGLogo: View {
+    var size: CGFloat = 20
+
+    var body: some View {
+        Text("G")
+            .font(.system(size: size * 1.1, weight: .bold, design: .default))
+            .foregroundColor(Color(red: 66/255, green: 133/255, blue: 244/255))
+            .frame(width: size, height: size)
     }
 }

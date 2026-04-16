@@ -55,6 +55,12 @@ import com.memorezar.app.R
 import com.memorezar.app.data.services.AuthService
 import kotlinx.coroutines.launch
 
+/**
+ * Email/password signup is hidden for v1 launch — Supabase's default SMTP is
+ * rate-limited and unreliable. Flip to `true` once custom SMTP is configured.
+ */
+private const val EMAIL_AUTH_ENABLED = false
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthSheet(
@@ -165,120 +171,133 @@ fun AuthSheet(
                 Text(stringResource(R.string.sign_in_google), fontWeight = FontWeight.Medium)
             }
 
-            // "or" divider
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                HorizontalDivider(modifier = Modifier.weight(1f))
-                Text(
-                    stringResource(R.string.or),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                HorizontalDivider(modifier = Modifier.weight(1f))
-            }
+            // Email auth is gated for v1 launch; see EMAIL_AUTH_ENABLED above.
+            if (EMAIL_AUTH_ENABLED) {
+                // "or" divider
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    HorizontalDivider(modifier = Modifier.weight(1f))
+                    Text(
+                        stringResource(R.string.or),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    HorizontalDivider(modifier = Modifier.weight(1f))
+                }
 
-            // Email / Password form
-            if (isSignUp) {
+                // Email / Password form
+                if (isSignUp) {
+                    TextField(
+                        value = displayName,
+                        onValueChange = { displayName = it },
+                        placeholder = { Text(stringResource(R.string.name)) },
+                        shape = fieldShape,
+                        colors = fieldColors,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+                    )
+                }
                 TextField(
-                    value = displayName,
-                    onValueChange = { displayName = it },
-                    placeholder = { Text(stringResource(R.string.name)) },
+                    value = email,
+                    onValueChange = { email = it },
+                    placeholder = { Text(stringResource(R.string.email)) },
                     shape = fieldShape,
                     colors = fieldColors,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
-                )
-            }
-            TextField(
-                value = email,
-                onValueChange = { email = it },
-                placeholder = { Text(stringResource(R.string.email)) },
-                shape = fieldShape,
-                colors = fieldColors,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next
-                )
-            )
-            TextField(
-                value = password,
-                onValueChange = { password = it },
-                placeholder = { Text(stringResource(R.string.password)) },
-                shape = fieldShape,
-                colors = fieldColors,
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done
-                )
-            )
-
-            errorMessage?.let {
-                Text(
-                    it,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            // Primary Sign In button — indigo pill
-            Button(
-                onClick = {
-                    errorMessage = null
-                    scope.launch {
-                        try {
-                            if (isSignUp) {
-                                authService.signUpWithEmail(email, password, displayName)
-                            } else {
-                                authService.signInWithEmail(email, password)
-                            }
-                        } catch (e: Exception) {
-                            errorMessage = e.message
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = indigo,
-                    contentColor = Color.White
-                ),
-                enabled = email.contains("@") && password.length >= 6 && !isLoading &&
-                    (!isSignUp || displayName.isNotBlank())
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = Color.White
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Email,
+                        imeAction = ImeAction.Next
                     )
-                } else {
+                )
+                TextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    placeholder = { Text(stringResource(R.string.password)) },
+                    shape = fieldShape,
+                    colors = fieldColors,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done
+                    )
+                )
+
+                errorMessage?.let {
                     Text(
-                        if (isSignUp) stringResource(R.string.create_account) else stringResource(R.string.sign_in),
-                        fontWeight = FontWeight.SemiBold
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
                     )
                 }
-            }
 
-            // Toggle sign-in / sign-up
-            TextButton(onClick = { isSignUp = !isSignUp; errorMessage = null }) {
-                Text(
-                    if (isSignUp) stringResource(R.string.already_have_account)
-                    else stringResource(R.string.no_account),
-                    color = indigo,
-                    style = MaterialTheme.typography.bodySmall
-                )
+                // Primary Sign In button — indigo pill
+                Button(
+                    onClick = {
+                        errorMessage = null
+                        scope.launch {
+                            try {
+                                if (isSignUp) {
+                                    authService.signUpWithEmail(email, password, displayName)
+                                } else {
+                                    authService.signInWithEmail(email, password)
+                                }
+                            } catch (e: Exception) {
+                                errorMessage = e.message
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = indigo,
+                        contentColor = Color.White
+                    ),
+                    enabled = email.contains("@") && password.length >= 6 && !isLoading &&
+                        (!isSignUp || displayName.isNotBlank())
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Text(
+                            if (isSignUp) stringResource(R.string.create_account) else stringResource(R.string.sign_in),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                // Toggle sign-in / sign-up
+                TextButton(onClick = { isSignUp = !isSignUp; errorMessage = null }) {
+                    Text(
+                        if (isSignUp) stringResource(R.string.already_have_account)
+                        else stringResource(R.string.no_account),
+                        color = indigo,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            } else {
+                // Preserve error surfacing when email flow is off (e.g. OAuth failures)
+                errorMessage?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))

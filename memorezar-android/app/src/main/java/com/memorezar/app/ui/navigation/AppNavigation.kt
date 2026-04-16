@@ -374,6 +374,7 @@ fun AppNavigation(
                     authService = authService,
                     alertManager = alertManager,
                     cloudBackupService = cloudBackupService,
+                    supportTicketService = supportTicketService,
                     onShowAuthSheet = { showAuthSheet = true },
                     onShowContactSupport = { showContactSupport = true },
                     modifier = Modifier.padding(padding)

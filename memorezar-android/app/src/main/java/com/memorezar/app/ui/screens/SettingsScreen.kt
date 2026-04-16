@@ -70,6 +70,8 @@ import com.memorezar.app.data.models.FontSize
 import com.memorezar.app.data.models.MemorizationMode
 import com.memorezar.app.data.services.AuthService
 import com.memorezar.app.data.services.CloudBackupService
+import com.memorezar.app.data.services.SupportReason
+import com.memorezar.app.data.services.SupportTicketService
 import com.memorezar.app.data.storage.QuoteStore
 import com.memorezar.app.data.storage.SettingsStore
 import com.memorezar.app.data.storage.TutorialStore
@@ -84,6 +86,7 @@ fun SettingsScreen(
     authService: AuthService,
     alertManager: AlertManager,
     cloudBackupService: CloudBackupService,
+    supportTicketService: SupportTicketService,
     onShowAuthSheet: () -> Unit,
     onShowContactSupport: () -> Unit,
     modifier: Modifier = Modifier
@@ -292,6 +295,67 @@ fun SettingsScreen(
                     IconClickRow(Icons.AutoMirrored.Outlined.ExitToApp, stringResource(R.string.sign_out), color = MaterialTheme.colorScheme.error) {
                         authService.signOut()
                     }
+
+                    CardDivider()
+                    var showDeleteAccountConfirm by remember { mutableStateOf(false) }
+                    var showDeleteReceivedDialog by remember { mutableStateOf(false) }
+                    var deleteAccountInFlight by remember { mutableStateOf(false) }
+
+                    IconClickRow(Icons.Default.Delete, stringResource(R.string.delete_my_account), color = MaterialTheme.colorScheme.error) {
+                        if (!deleteAccountInFlight) showDeleteAccountConfirm = true
+                    }
+
+                    if (showDeleteAccountConfirm) {
+                        AlertDialog(
+                            onDismissRequest = { showDeleteAccountConfirm = false },
+                            title = { Text(stringResource(R.string.delete_account_title)) },
+                            text = { Text(stringResource(R.string.delete_account_message)) },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    showDeleteAccountConfirm = false
+                                    deleteAccountInFlight = true
+                                    val email = currentUser?.email ?: ""
+                                    val userId = currentUser?.id ?: "unknown"
+                                    val body = "Account deletion requested from in-app Settings. User ID: $userId."
+                                    coroutineScope.launch {
+                                        try {
+                                            supportTicketService.submitTicket(
+                                                reason = SupportReason.ACCOUNT_DELETION,
+                                                message = body,
+                                                email = email
+                                            )
+                                        } catch (_: Exception) {
+                                            // Still sign out even if the ticket fails;
+                                            // the user can re-submit via support later.
+                                        }
+                                        authService.signOut()
+                                        deleteAccountInFlight = false
+                                        showDeleteReceivedDialog = true
+                                    }
+                                }) {
+                                    Text(stringResource(R.string.delete_account_confirm), color = MaterialTheme.colorScheme.error)
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showDeleteAccountConfirm = false }) {
+                                    Text(stringResource(R.string.cancel))
+                                }
+                            }
+                        )
+                    }
+
+                    if (showDeleteReceivedDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showDeleteReceivedDialog = false },
+                            title = { Text(stringResource(R.string.delete_account_received_title)) },
+                            text = { Text(stringResource(R.string.delete_account_received_message)) },
+                            confirmButton = {
+                                TextButton(onClick = { showDeleteReceivedDialog = false }) {
+                                    Text(stringResource(R.string.ok))
+                                }
+                            }
+                        )
+                    }
                 } else {
                     IconClickRow(Icons.Default.Person, stringResource(R.string.sign_in)) { onShowAuthSheet() }
                 }
@@ -319,7 +383,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.7.3")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.7.5")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }

@@ -208,7 +208,7 @@ fun ContactSupportScreen(
                 expanded = reasonExpanded,
                 onDismissRequest = { reasonExpanded = false }
             ) {
-                SupportReason.entries.forEach { r ->
+                SupportReason.userSelectable.forEach { r ->
                     DropdownMenuItem(
                         text = { Text(r.displayName()) },
                         onClick = {
@@ -298,4 +298,5 @@ private fun SupportReason.displayName(): String = when (this) {
     SupportReason.BUG_REPORT -> stringResource(R.string.bug_report)
     SupportReason.AWESOME -> stringResource(R.string.just_saying_hi)
     SupportReason.OTHER -> stringResource(R.string.other)
+    SupportReason.ACCOUNT_DELETION -> "Account Deletion"
 }

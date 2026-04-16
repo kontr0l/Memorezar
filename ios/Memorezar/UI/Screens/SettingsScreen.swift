@@ -10,6 +10,9 @@ struct SettingsScreen: View {
     @State private var showingResetAlert = false
     @State private var showRestoreConfirm = false
     @State private var showingDeleteDataAlert = false
+    @State private var showingDeleteAccountAlert = false
+    @State private var deleteAccountInFlight = false
+    @State private var deleteAccountConfirmationMessage: String?
     @State private var showFlash = false
     @State private var showAuthSheet = false
     @State private var showPaywall = false
@@ -103,6 +106,22 @@ struct SettingsScreen: View {
                 }
             } message: {
                 Text("This will delete all your quotes, practice history, and statistics. This action cannot be undone.")
+            }
+            .alert("Delete My Account?", isPresented: $showingDeleteAccountAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete Account", role: .destructive) {
+                    submitAccountDeletionRequest()
+                }
+            } message: {
+                Text("This will permanently delete your account, cloud backups, and any community recordings you've shared. The request is processed within 30 days. You'll be signed out immediately.")
+            }
+            .alert("Request Received", isPresented: Binding(
+                get: { deleteAccountConfirmationMessage != nil },
+                set: { if !$0 { deleteAccountConfirmationMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(deleteAccountConfirmationMessage ?? "")
             }
         }
     }
@@ -272,6 +291,13 @@ struct SettingsScreen: View {
                 } label: {
                     Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                 }
+
+                Button(role: .destructive) {
+                    showingDeleteAccountAlert = true
+                } label: {
+                    Label("Delete My Account", systemImage: "trash")
+                }
+                .disabled(deleteAccountInFlight)
             } else {
                 Button {
                     showAuthSheet = true
@@ -314,7 +340,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v72.2")
+                Text("v72.4")
                     .foregroundColor(.secondary)
             }
 
@@ -360,6 +386,38 @@ struct SettingsScreen: View {
             return String(localized: "\(hours)h \(minutes)m")
         } else {
             return String(localized: "\(minutes)m")
+        }
+    }
+
+    /// Files an account-deletion support ticket and signs the user out. The
+    /// in-app mechanism satisfies the Play Store / App Store deletion
+    /// requirement; the backend fulfills the deletion within 30 days.
+    private func submitAccountDeletionRequest() {
+        guard !deleteAccountInFlight else { return }
+        deleteAccountInFlight = true
+
+        let userEmail = authService.currentUser?.email ?? ""
+        let userId = authService.currentUser?.id ?? "unknown"
+        let message = "Account deletion requested from in-app Settings. User ID: \(userId)."
+
+        Task {
+            do {
+                try await SupportTicketService.shared.submitTicket(
+                    reason: .accountDeletion,
+                    message: message,
+                    email: userEmail
+                )
+            } catch {
+                // Even if the ticket fails, sign the user out and surface a
+                // graceful message — they can retry or contact support directly.
+                print("[Settings] Deletion ticket failed: \(error.localizedDescription)")
+            }
+
+            await MainActor.run {
+                authService.signOut()
+                deleteAccountInFlight = false
+                deleteAccountConfirmationMessage = String(localized: "Your account deletion request has been received. Your account and data will be permanently deleted within 30 days.")
+            }
         }
     }
 }

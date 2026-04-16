@@ -10,3 +10,7 @@
 # Ktor
 -keep class io.ktor.** { *; }
 -dontwarn io.ktor.**
+
+# Tink / androidx.security.crypto references Error Prone annotations that
+# aren't shipped at runtime. Suppressing the warnings is the standard fix.
+-dontwarn com.google.errorprone.annotations.**

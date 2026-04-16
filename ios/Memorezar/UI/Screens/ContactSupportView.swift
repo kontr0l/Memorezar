@@ -23,7 +23,7 @@ struct ContactSupportView: View {
             Form {
                 Section {
                     Picker("Reason", selection: $reason) {
-                        ForEach(SupportReason.allCases) { r in
+                        ForEach(SupportReason.userSelectable) { r in
                             Text(r.displayName).tag(r)
                         }
                     }

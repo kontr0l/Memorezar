@@ -7,8 +7,16 @@ enum SupportReason: String, CaseIterable, Identifiable {
     case bugReport = "bug_report"
     case awesome = "awesome"
     case other = "other"
+    /// Account deletion request — filed programmatically from Settings. Not
+    /// shown in the user-visible SupportReason picker (excluded via `userSelectable`).
+    case accountDeletion = "account_deletion"
 
     var id: String { rawValue }
+
+    /// Reasons the user can pick from the contact-support form.
+    static var userSelectable: [SupportReason] {
+        allCases.filter { $0 != .accountDeletion }
+    }
 
     var displayName: String {
         switch self {
@@ -17,6 +25,7 @@ enum SupportReason: String, CaseIterable, Identifiable {
         case .bugReport: return String(localized: "Bug Report")
         case .awesome: return String(localized: "Hey You're Awesome")
         case .other: return String(localized: "Other")
+        case .accountDeletion: return String(localized: "Account Deletion")
         }
     }
 }
