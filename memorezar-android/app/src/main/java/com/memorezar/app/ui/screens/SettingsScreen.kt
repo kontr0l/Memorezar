@@ -59,6 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -70,8 +71,10 @@ import com.memorezar.app.data.models.FontSize
 import com.memorezar.app.data.models.MemorizationMode
 import com.memorezar.app.data.services.AuthService
 import com.memorezar.app.data.services.CloudBackupService
+import com.memorezar.app.data.services.RecordingService
 import com.memorezar.app.data.services.SupportReason
 import com.memorezar.app.data.services.SupportTicketService
+import com.memorezar.app.data.storage.LocalRecordingStore
 import com.memorezar.app.data.storage.QuoteStore
 import com.memorezar.app.data.storage.SettingsStore
 import com.memorezar.app.data.storage.TutorialStore
@@ -87,6 +90,8 @@ fun SettingsScreen(
     alertManager: AlertManager,
     cloudBackupService: CloudBackupService,
     supportTicketService: SupportTicketService,
+    localRecordingStore: LocalRecordingStore,
+    recordingService: RecordingService,
     onShowAuthSheet: () -> Unit,
     onShowContactSupport: () -> Unit,
     modifier: Modifier = Modifier
@@ -336,9 +341,14 @@ fun SettingsScreen(
                                         val serverError = authService.deleteAccountOnServer()
 
                                         // Local wipe = same as Delete All Data + Reset Settings.
+                                        // Server-side community recordings are
+                                        // cascade-deleted by delete-user-account
+                                        // Edge Function; we only wipe locally here.
                                         quoteStore.clearAllData()
                                         tutorialStore.resetAll()
                                         settingsStore.resetToDefaults()
+                                        localRecordingStore.wipeAllAudioFiles()
+                                        localRecordingStore.replaceAll(emptyList())
                                         authService.signOut()
 
                                         deleteReceivedMessage = if (serverError == null) successMsg else partialMsg
@@ -396,7 +406,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.8.4")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.8.9")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
@@ -443,14 +453,36 @@ fun SettingsScreen(
         }
 
         if (showDeleteDataAlert) {
+            val deleteScope = rememberCoroutineScope()
             AlertDialog(
                 onDismissRequest = { showDeleteDataAlert = false },
                 title = { Text(stringResource(R.string.delete_all_data)) },
                 text = { Text(stringResource(R.string.delete_all_data_message)) },
                 confirmButton = {
                     TextButton(onClick = {
+                        // Fan out an unshare for every local that's linked to a
+                        // community row. Runs in the background — we don't block
+                        // the UI waiting for each request.
+                        val toUnshare = localRecordingStore.recordings.value
+                            .filter { !it.isFavorite && it.communityRecordingId != null }
+                        deleteScope.launch(Dispatchers.IO) {
+                            for (local in toUnshare) {
+                                val cid = local.communityRecordingId ?: continue
+                                // We don't have the Recording object handy for
+                                // every one — construct a stub with just the id
+                                // and file_path the server will look up from
+                                // the row.
+                                try {
+                                    recordingService.deleteRecordingById(cid)
+                                } catch (e: Exception) {
+                                    android.util.Log.w("Settings", "Delete All Data unshare failed for $cid: ${e.message}")
+                                }
+                            }
+                        }
                         quoteStore.clearAllData()
                         tutorialStore.resetAll()
+                        localRecordingStore.wipeAllAudioFiles()
+                        localRecordingStore.replaceAll(emptyList())
                         showDeleteDataAlert = false
                     }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 },

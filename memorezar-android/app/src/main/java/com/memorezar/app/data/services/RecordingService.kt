@@ -10,6 +10,7 @@ import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
@@ -61,15 +62,21 @@ class RecordingService @Inject constructor(
     }
 
     /**
-     * Upload a community recording to Supabase Storage, then insert a row in the recordings table.
+     * Upload a community recording to Supabase Storage, then insert a row in
+     * the recordings table. Returns the created/upserted Recording so the
+     * caller can set LocalRecording.communityRecordingId to its id.
      */
     suspend fun uploadRecording(
         audioData: ByteArray,
         quoteTextHash: String,
         quoteTitle: String,
         durationSeconds: Double,
-        language: String = "en"
-    ) {
+        language: String = "en",
+        /** The label shown in the community tab next to this recording. When
+         *  the local has a user-assigned name, pass that so Community reflects
+         *  the user's naming. Falls back to the account's display name. */
+        uploaderName: String? = null
+    ): Recording? {
         val user = authService.currentUser.value ?: throw Exception("Must be signed in to upload")
 
         // 1. Upload audio file to Storage
@@ -95,13 +102,19 @@ class RecordingService @Inject constructor(
             throw Exception("Failed to upload recording (${uploadResponse.status.value})")
         }
 
-        // 2. Insert recording metadata row
-        val uploaderName = user.displayName ?: user.email ?: "Anonymous"
+        // 2. Insert recording metadata row. Callers guarantee no conflict
+        //    (either a fresh local OR the previous public row has been deleted
+        //    via the Replace flow), so a plain INSERT is safe — no upsert
+        //    dance with on_conflict/partial-index headaches.
+        //    return=representation so we can parse back the id for the
+        //    LocalRecording.communityRecordingId link.
+        val effectiveName = uploaderName?.takeIf { it.isNotBlank() }
+            ?: user.displayName ?: user.email ?: "Anonymous"
         val metaBody = buildString {
             append("{")
             append(""""quote_text_hash":"$quoteTextHash",""")
             append(""""quote_title":"${quoteTitle.replace("\"", "\\\"")}",""")
-            append(""""uploader_name":"${uploaderName.replace("\"", "\\\"")}",""")
+            append(""""uploader_name":"${effectiveName.replace("\"", "\\\"")}",""")
             append(""""file_path":"$storagePath",""")
             append(""""duration_seconds":$durationSeconds,""")
             append(""""language":"$language",""")
@@ -111,12 +124,23 @@ class RecordingService @Inject constructor(
 
         val metaResponse: HttpResponse = httpClient.post(SupabaseConfig.RECORDINGS_URL) {
             for ((k, v) in authService.headers()) header(k, v)
-            header("Prefer", "return=minimal")
-            contentType(ContentType.Application.Json)
+            header("Prefer", "return=representation")
             setBody(metaBody)
         }
         if (!metaResponse.status.isSuccess()) {
+            val body = try { metaResponse.bodyAsText() } catch (_: Exception) { "<no body>" }
+            Log.w(TAG, "uploadRecording meta INSERT failed ${metaResponse.status.value}: $body")
             throw Exception("Failed to save recording metadata (${metaResponse.status.value})")
+        }
+
+        // Deserialize. Returns array of rows — take first.
+        return try {
+            val body = metaResponse.bodyAsText()
+            val rows = Json { ignoreUnknownKeys = true }.decodeFromString<List<Recording>>(body)
+            rows.firstOrNull()
+        } catch (e: Exception) {
+            Log.w(TAG, "uploadRecording: could not parse response body: ${e.message}")
+            null
         }
     }
 
@@ -168,6 +192,40 @@ class RecordingService @Inject constructor(
         val rowDelete: HttpResponse = httpClient.delete(
             "${SupabaseConfig.RECORDINGS_URL}?id=eq.${recording.id}"
         ) {
+            for ((k, v) in authService.headers()) header(k, v)
+        }
+        if (!rowDelete.status.isSuccess()) {
+            throw Exception("Failed to delete recording row (${rowDelete.status.value})")
+        }
+    }
+
+    /** Delete a community recording by id only. Used by Delete All Data where
+     *  we don't have the full Recording object in hand. Looks up the file_path
+     *  first so the audio file is cleaned up from Storage as well. */
+    suspend fun deleteRecordingById(id: String) {
+        // Fetch the row to get file_path.
+        val filePath: String? = try {
+            val response = httpClient.get("${SupabaseConfig.RECORDINGS_URL}?id=eq.$id&select=file_path&limit=1") {
+                for ((k, v) in authService.headers()) header(k, v)
+            }
+            if (response.status.isSuccess()) {
+                val body = response.bodyAsText()
+                val rows = Json { ignoreUnknownKeys = true }.decodeFromString<List<Map<String, String>>>(body)
+                rows.firstOrNull()?.get("file_path")
+            } else null
+        } catch (_: Exception) { null }
+
+        // Best-effort storage file delete.
+        if (filePath != null) {
+            try {
+                httpClient.delete("${SupabaseConfig.STORAGE_URL}/$filePath") {
+                    for ((k, v) in authService.headers()) header(k, v)
+                }
+            } catch (_: Exception) { }
+        }
+
+        // Delete the DB row.
+        val rowDelete: HttpResponse = httpClient.delete("${SupabaseConfig.RECORDINGS_URL}?id=eq.$id") {
             for ((k, v) in authService.headers()) header(k, v)
         }
         if (!rowDelete.status.isSuccess()) {

@@ -96,6 +96,32 @@ class LocalRecordingStore @Inject constructor(
         persist(updated)
     }
 
+    /** Set or clear a local's community recording id (the link to its Supabase row).
+     *  Pass `null` to mark the local as unshared. Mirrors iOS implementation. */
+    fun setCommunityRecordingId(recordingId: String, communityId: String?) {
+        val updated = _recordings.value.map { rec ->
+            if (rec.id == recordingId) rec.copy(communityRecordingId = communityId) else rec
+        }
+        _recordings.value = updated
+        persist(updated)
+    }
+
+    /** Clear the communityRecordingId of any local pointing at `communityId`.
+     *  Useful after deleting a community recording so no stale pointers remain. */
+    fun clearCommunityLinksTo(communityId: String) {
+        var changed = false
+        val updated = _recordings.value.map { rec ->
+            if (rec.communityRecordingId == communityId) {
+                changed = true
+                rec.copy(communityRecordingId = null)
+            } else rec
+        }
+        if (changed) {
+            _recordings.value = updated
+            persist(updated)
+        }
+    }
+
     fun deleteRecording(recording: LocalRecording) {
         val file = File(recordingsDir, recording.localFileName)
         try {
@@ -105,6 +131,34 @@ class LocalRecordingStore @Inject constructor(
         val updated = _recordings.value.filter { it.id != recording.id }
         _recordings.value = updated
         persist(updated)
+    }
+
+    /** Replace the entire metadata array (used by cloud restore). Audio files
+     *  on disk are untouched — the caller writes those separately. */
+    fun replaceAll(newRecordings: List<LocalRecording>) {
+        _recordings.value = newRecordings
+        persist(newRecordings)
+    }
+
+    /** Write audio bytes to the recordings directory at the given filename.
+     *  Used during cloud-restore download. Returns true on success. */
+    fun writeAudioFile(data: ByteArray, localFileName: String): Boolean {
+        val file = File(recordingsDir, localFileName)
+        return try {
+            file.writeBytes(data)
+            true
+        } catch (e: Exception) {
+            android.util.Log.w("LocalRecordingStore", "writeAudioFile failed for $localFileName: ${e.message}")
+            false
+        }
+    }
+
+    /** Delete every audio file on disk. Used before a cloud restore and by
+     *  Delete All Data to avoid leaving orphaned .m4a files. */
+    fun wipeAllAudioFiles() {
+        try {
+            recordingsDir.listFiles()?.forEach { it.delete() }
+        } catch (_: Exception) { }
     }
 
     fun recordingsForHash(hash: String): List<LocalRecording> {

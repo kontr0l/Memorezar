@@ -37,5 +37,10 @@ data class LocalRecording(
     val uploaderName: String? = null,
     val name: String? = null,
     val quoteId: String? = null,
-    val language: String = "en"
+    val language: String = "en",
+    /** Authoritative 1:1 link to the Supabase `recordings` row when this local
+     *  has been published to the community. null = private/local-only. Set on
+     *  successful upload, cleared on unshare/replace/delete. Replaces the old
+     *  fuzzy "does the user have any community row in this language" check. */
+    val communityRecordingId: String? = null
 )

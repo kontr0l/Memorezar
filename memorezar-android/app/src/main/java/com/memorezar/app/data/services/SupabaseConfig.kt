@@ -14,6 +14,11 @@ object SupabaseConfig {
     // Storage
     const val STORAGE_URL = "$PROJECT_URL/storage/v1/object/recordings"
 
+    /** Private bucket for per-user audio backups. Owner-only RLS — files at
+     *  <user_id>/<local_recording_id>.m4a. Used by CloudBackupService on
+     *  Back Up Now / Restore. NOT for community recordings. */
+    const val RECORDING_BACKUPS_URL = "$PROJECT_URL/storage/v1/object/recording-backups"
+
     fun publicFileURL(path: String): String =
         "$PROJECT_URL/storage/v1/object/public/recordings/$path"
 

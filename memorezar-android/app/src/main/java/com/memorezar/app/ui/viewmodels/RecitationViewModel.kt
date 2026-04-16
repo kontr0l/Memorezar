@@ -15,6 +15,7 @@ import com.memorezar.app.data.models.MemorizationMode
 import com.memorezar.app.data.models.Quote
 import com.memorezar.app.data.models.Recording
 import com.memorezar.app.data.services.AudioRecorderService
+import com.memorezar.app.data.services.AuthService
 import com.memorezar.app.data.services.EquivalenceService
 import com.memorezar.app.data.services.RecordingService
 import com.memorezar.app.data.services.TextToSpeechService
@@ -114,6 +115,12 @@ data class AudioPlaybackState(
      *  toggle state in the edit sheet so the user can flip it either way. */
     val editingIsPublic: Boolean = false,
     val editingPublicRecording: Recording? = null,
+    /** When the user edits Private→Public and ANOTHER recording is already
+     *  public for this quote+language, we route through a Replace confirmation.
+     *  This holds the pending save so the alert's Replace action can execute it. */
+    val pendingReplacePublicRecording: Recording? = null,
+    val pendingReplaceLocalRecording: LocalRecording? = null,
+    val pendingReplaceNewName: String? = null,
     // Picker
     val showRecordingPicker: Boolean = false,
     val localRecordings: List<LocalRecording> = emptyList(),
@@ -198,7 +205,8 @@ class RecitationViewModel @Inject constructor(
     private val recordingService: RecordingService,
     val localRecordingStore: LocalRecordingStore,
     private val equivalenceService: EquivalenceService,
-    private val userEquivalencesStore: UserEquivalencesStore
+    private val userEquivalencesStore: UserEquivalencesStore,
+    private val authService: AuthService
 ) : ViewModel(), SpeechRecognitionDelegate {
 
     private val _uiState = MutableStateFlow(RecitationUiState())
@@ -464,6 +472,9 @@ class RecitationViewModel @Inject constructor(
             } catch (_: Exception) { emptyList() }
             val fullPlaylist = local.map { PlaybackSource.Local(it) } + community.map { PlaybackSource.Community(it) }
             _audioState.update { it.copy(communityRecordings = community, isLoadingCommunity = false, playlist = fullPlaylist) }
+            // After community loads, reconcile legacy locals (uploaded before
+            // communityRecordingId existed) by matching uploader_name + language.
+            reconcileLocalCommunityLinks(quoteTextHash)
         }
     }
 
@@ -742,18 +753,24 @@ class RecitationViewModel @Inject constructor(
             language = q.primaryLanguage ?: "en"
         )
 
-        if (shareWithCommunity) {
+        if (shareWithCommunity && saved != null) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    recordingService.uploadRecording(
+                    val uploaded = recordingService.uploadRecording(
                         audioData = data,
                         quoteTextHash = quoteTextHash,
                         quoteTitle = q.displayTitle,
                         durationSeconds = duration,
-                        language = q.primaryLanguage ?: "en"
+                        language = q.primaryLanguage ?: "en",
+                        uploaderName = saved.name
                     )
-                    // Refresh community list so the just-uploaded recording
-                    // appears under the Community tab without a screen reopen.
+                    if (uploaded != null) {
+                        // Authoritative link: this local is now the shared one.
+                        // Also wipe any stale pointer on other locals (e.g., if the
+                        // server-side upsert collapsed with an existing row).
+                        localRecordingStore.clearCommunityLinksTo(uploaded.id)
+                        localRecordingStore.setCommunityRecordingId(saved.id, uploaded.id)
+                    }
                     withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
                 } catch (e: Exception) {
                     Log.w(TAG, "Upload failed: ${e.message}")
@@ -774,8 +791,50 @@ class RecitationViewModel @Inject constructor(
     }
 
     fun deleteLocalRecording(recording: LocalRecording) {
+        // If this local was published, delete the linked community row + file.
+        // Favorited recordings (saved from someone else's community row) never
+        // touch the remote copy — they're not ours to delete.
+        val linkedId = recording.communityRecordingId
+        if (linkedId != null && !recording.isFavorite) {
+            val communityRec = _audioState.value.communityRecordings.firstOrNull { it.id == linkedId }
+            if (communityRec != null) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        recordingService.deleteMyRecording(communityRec)
+                        localRecordingStore.clearCommunityLinksTo(linkedId)
+                        withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Delete community copy failed: ${e.message}")
+                    }
+                }
+            }
+        }
         localRecordingStore.deleteRecording(recording)
         loadRecordingsForCurrentQuote()
+    }
+
+    /** One-time migration / safety pass run after community recordings load.
+     *  For each of the current user's community recordings, if no local has
+     *  its id as communityRecordingId yet, try to match by uploader_name +
+     *  language. Only links when unambiguous (exactly one candidate). Mirrors
+     *  iOS reconcileLocalCommunityLinks. */
+    private fun reconcileLocalCommunityLinks(quoteHash: String) {
+        val userId = authService.currentUser.value?.id ?: return
+        val locals = localRecordingStore.recordingsForHash(quoteHash)
+        val mine = _audioState.value.communityRecordings.filter { it.userId == userId }
+
+        for (community in mine) {
+            if (locals.any { it.communityRecordingId == community.id }) continue
+            val candidates = locals.filter {
+                it.language == community.language
+                    && it.name == community.uploaderName
+                    && it.communityRecordingId == null
+                    && !it.isFavorite
+            }
+            if (candidates.size == 1) {
+                localRecordingStore.setCommunityRecordingId(candidates[0].id, community.id)
+            }
+        }
     }
 
     /** Navigate to prev/next recording in playlist. */
@@ -835,28 +894,49 @@ class RecitationViewModel @Inject constructor(
 
     /** Open save sheet for editing current recording name. */
     fun editCurrentRecording() {
-        val src = _audioState.value.currentSource
+        var src = _audioState.value.currentSource
+        // If the user tapped Edit while viewing their own community recording,
+        // find the local that's linked to it (via communityRecordingId) and
+        // re-point currentSource at that local. The edit sheet only manages
+        // local state, so we need a local in hand. If no matching local exists
+        // (e.g. they signed in on a fresh device without restoring), bail — we
+        // can't edit a recording whose audio isn't on this device.
+        if (src is PlaybackSource.Community) {
+            val myId = authService.currentUser.value?.id
+            if (src.recording.userId != myId) return
+            val matchingLocal = localRecordingStore.recordings.value.firstOrNull {
+                it.communityRecordingId == src.recording.id
+            } ?: return
+            val localSource = PlaybackSource.Local(matchingLocal)
+            _audioState.update { it.copy(currentSource = localSource) }
+            src = localSource
+        }
         if (src is PlaybackSource.Local) {
+            val linkedCommunityId = src.recording.communityRecordingId
+            val initiallyPublic = linkedCommunityId != null
+            // Find the matching community recording in-memory if we have it
+            // (purely UX — the flag from communityRecordingId is authoritative).
+            val matchingRec = linkedCommunityId?.let { cid ->
+                _audioState.value.communityRecordings.firstOrNull { it.id == cid }
+            }
             _audioState.update { it.copy(
                 editingRecordingName = src.recording.name ?: "",
-                editingIsPublic = false,
-                editingPublicRecording = null,
+                editingIsPublic = initiallyPublic,
+                editingPublicRecording = matchingRec,
                 showSaveSheet = true
             )}
-            // Check server-side whether this user already has a public row for
-            // this quote hash + language; if so, show the toggle as Public so
-            // the user can flip it off to unpublish. fetchMyRecording returns
-            // null when signed-out, so no extra auth guard is needed.
-            viewModelScope.launch(Dispatchers.IO) {
-                val mine = recordingService.fetchMyRecording(
-                    quoteTextHash = src.recording.quoteTextHash,
-                    language = src.recording.language
-                )
-                if (mine != null) {
-                    _audioState.update { it.copy(
-                        editingIsPublic = true,
-                        editingPublicRecording = mine
-                    )}
+            // If the link exists but we don't have the community row cached
+            // (e.g. first open after install), fetch it so we know the Recording
+            // object for a later delete in the Public→Private path.
+            if (initiallyPublic && matchingRec == null) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    val mine = recordingService.fetchMyRecording(
+                        quoteTextHash = src.recording.quoteTextHash,
+                        language = src.recording.language
+                    )
+                    if (mine != null && mine.id == linkedCommunityId) {
+                        _audioState.update { it.copy(editingPublicRecording = mine) }
+                    }
                 }
             }
         }
@@ -882,54 +962,113 @@ class RecitationViewModel @Inject constructor(
     /** Update recording name and optionally share with community. */
     fun updateRecording(newName: String, shareWithCommunity: Boolean) {
         val src = _audioState.value.currentSource
-        if (src is PlaybackSource.Local) {
-            localRecordingStore.updateRecordingName(src.recording.id, newName)
-            val updated = src.recording.copy(name = newName)
-            val wasPublic = _audioState.value.editingIsPublic
-            val existingPublic = _audioState.value.editingPublicRecording
-            _audioState.update { it.copy(
-                currentSource = PlaybackSource.Local(updated),
-                showSaveSheet = false,
-                editingRecordingName = null,
-                editingIsPublic = false,
-                editingPublicRecording = null
-            )}
-            loadRecordingsForCurrentQuote()
+        if (src !is PlaybackSource.Local) return
+        val q = quote ?: return
 
-            val q = quote ?: return
-            when {
-                // Private → Public: upload now.
-                shareWithCommunity && !wasPublic -> {
-                    val audioData = localRecordingStore.loadAudioData(src.recording) ?: return
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            recordingService.uploadRecording(
-                                audioData = audioData,
-                                quoteTextHash = src.recording.quoteTextHash,
-                                quoteTitle = q.displayTitle,
-                                durationSeconds = src.recording.durationSeconds,
-                                language = src.recording.language
-                            )
-                            withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Upload failed: ${e.message}")
+        localRecordingStore.updateRecordingName(src.recording.id, newName)
+        val updated = src.recording.copy(name = newName)
+        val wasPublic = _audioState.value.editingIsPublic
+        val existingPublic = _audioState.value.editingPublicRecording
+
+        _audioState.update { it.copy(
+            currentSource = PlaybackSource.Local(updated),
+            showSaveSheet = false,
+            editingRecordingName = null,
+            editingIsPublic = false,
+            editingPublicRecording = null
+        )}
+        loadRecordingsForCurrentQuote()
+
+        when {
+            // Private → Public. Check if ANOTHER local is already public for this
+            // user+language on the server. If so, show Replace alert. Otherwise upload.
+            shareWithCommunity && !wasPublic -> {
+                viewModelScope.launch(Dispatchers.IO) {
+                    val otherPublic = recordingService.fetchMyRecording(
+                        quoteTextHash = updated.quoteTextHash,
+                        language = updated.language
+                    )
+                    if (otherPublic != null) {
+                        // Stage the replace and surface the confirmation.
+                        withContext(Dispatchers.Main) {
+                            _audioState.update { it.copy(
+                                pendingReplacePublicRecording = otherPublic,
+                                pendingReplaceLocalRecording = updated,
+                                pendingReplaceNewName = newName
+                            )}
                         }
-                    }
-                }
-                // Public → Private: delete the server-side row + audio file
-                // so the recording stops showing up in the community tab for
-                // other users. The local copy remains untouched.
-                !shareWithCommunity && wasPublic && existingPublic != null -> {
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            recordingService.deleteMyRecording(existingPublic)
-                            withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Unpublish failed: ${e.message}")
-                        }
+                    } else {
+                        // No collision — straight upload path.
+                        performUploadForLocal(updated, newName)
                     }
                 }
             }
+            // Public → Private: delete the linked community row + file.
+            !shareWithCommunity && wasPublic && existingPublic != null -> {
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        recordingService.deleteMyRecording(existingPublic)
+                        localRecordingStore.clearCommunityLinksTo(existingPublic.id)
+                        withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Unpublish failed: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+
+    /** Confirmed Replace: delete the other public row, upload this local. */
+    fun confirmReplacePublic() {
+        val existing = _audioState.value.pendingReplacePublicRecording ?: return
+        val local = _audioState.value.pendingReplaceLocalRecording ?: return
+        val name = _audioState.value.pendingReplaceNewName ?: local.name ?: ""
+        _audioState.update { it.copy(
+            pendingReplacePublicRecording = null,
+            pendingReplaceLocalRecording = null,
+            pendingReplaceNewName = null
+        )}
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                recordingService.deleteMyRecording(existing)
+                localRecordingStore.clearCommunityLinksTo(existing.id)
+            } catch (e: Exception) {
+                Log.w(TAG, "Replace: delete of previous public row failed: ${e.message}")
+                // Fall through — upload will still succeed via upsert.
+            }
+            performUploadForLocal(local, name)
+        }
+    }
+
+    /** Cancelled Replace: local stays private, existing community row untouched. */
+    fun cancelReplacePublic() {
+        _audioState.update { it.copy(
+            pendingReplacePublicRecording = null,
+            pendingReplaceLocalRecording = null,
+            pendingReplaceNewName = null
+        )}
+    }
+
+    /** Upload a specific local as a community recording, then write the link. */
+    private suspend fun performUploadForLocal(local: LocalRecording, uploaderName: String) {
+        val q = quote ?: return
+        val audioData = localRecordingStore.loadAudioData(local) ?: return
+        try {
+            val uploaded = recordingService.uploadRecording(
+                audioData = audioData,
+                quoteTextHash = local.quoteTextHash,
+                quoteTitle = q.displayTitle,
+                durationSeconds = local.durationSeconds,
+                language = local.language,
+                uploaderName = uploaderName
+            )
+            if (uploaded != null) {
+                localRecordingStore.clearCommunityLinksTo(uploaded.id)
+                localRecordingStore.setCommunityRecordingId(local.id, uploaded.id)
+            }
+            withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
+        } catch (e: Exception) {
+            Log.w(TAG, "Upload failed: ${e.message}")
         }
     }
 

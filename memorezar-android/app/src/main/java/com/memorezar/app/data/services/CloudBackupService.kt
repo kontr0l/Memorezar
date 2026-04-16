@@ -56,7 +56,8 @@ class CloudBackupService @Inject constructor(
     private val authService: AuthService,
     private val quoteStore: QuoteStore,
     private val settingsStore: SettingsStore,
-    private val tutorialStore: TutorialStore
+    private val tutorialStore: TutorialStore,
+    private val localRecordingStore: com.memorezar.app.data.storage.LocalRecordingStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json {
@@ -123,6 +124,12 @@ class CloudBackupService @Inject constructor(
         _backupState.value = BackupState.BACKING_UP
 
         try {
+            // Upload every local recording's audio file to the private
+            // `recording-backups` bucket. Empty manifest if the user has no
+            // locals. Idempotent via x-upsert: true.
+            val currentLocals = localRecordingStore.recordings.value
+            val recordingManifest = uploadRecordingAudioFiles(currentLocals)
+
             val payload = BackupPayload(
                 backupVersion = BackupPayload.CURRENT_VERSION,
                 createdAt = System.currentTimeMillis(),
@@ -132,7 +139,9 @@ class CloudBackupService @Inject constructor(
                 packVersions = quoteStore.installedPackVersions(),
                 settings = settingsStore.settings.value,
                 completedTips = tutorialStore.completedTips.value.toList(),
-                hasCompletedOnboarding = tutorialStore.hasCompletedOnboarding.value
+                hasCompletedOnboarding = tutorialStore.hasCompletedOnboarding.value,
+                localRecordings = currentLocals,
+                recordingAudioManifest = recordingManifest
             )
 
             val payloadJson = json.encodeToString(payload)
@@ -220,6 +229,12 @@ class CloudBackupService @Inject constructor(
                 hasCompletedOnboarding = payload.hasCompletedOnboarding
             )
 
+            // Local recordings: wipe on-disk audio first, then replace metadata,
+            // then download audio from the backup manifest. Mirrors iOS order.
+            localRecordingStore.wipeAllAudioFiles()
+            localRecordingStore.replaceAll(payload.localRecordings)
+            downloadRecordingAudioFiles(payload.recordingAudioManifest)
+
             _backupState.value = BackupState.IDLE
             Log.i(TAG, "Restore complete")
         } catch (e: Exception) {
@@ -273,5 +288,101 @@ class CloudBackupService @Inject constructor(
         if (hours < 24) return "$hours hr ago"
         val days = kotlin.math.ceil(hours / 24.0).toInt()
         return "$days days ago"
+    }
+
+    // -- Audio upload/download (Back Up Now / Restore) ---------------------------
+
+    /**
+     * Upload every local recording's .m4a to the private `recording-backups`
+     * bucket at <user_id>/<local_recording_id>.m4a. Idempotent via x-upsert.
+     * Returns the manifest to embed in the payload. Mirrors iOS.
+     */
+    private suspend fun uploadRecordingAudioFiles(
+        recordings: List<com.memorezar.app.data.models.LocalRecording>
+    ): List<com.memorezar.app.data.models.RecordingAudioEntry> {
+        val userId = authService.currentUser.value?.id ?: run {
+            Log.i(TAG, "Audio upload skipped: not signed in")
+            return emptyList()
+        }
+        if (recordings.isEmpty()) return emptyList()
+        Log.i(TAG, "Audio upload starting: ${recordings.size} recordings for user=$userId")
+
+        val manifest = mutableListOf<com.memorezar.app.data.models.RecordingAudioEntry>()
+        var missing = 0
+
+        for (recording in recordings) {
+            val audioData = localRecordingStore.loadAudioData(recording)
+            if (audioData == null) {
+                missing++
+                continue
+            }
+            val remotePath = "$userId/${recording.id}.m4a"
+            val uploadURL = "${SupabaseConfig.RECORDING_BACKUPS_URL}/$remotePath"
+            try {
+                val response: io.ktor.client.statement.HttpResponse = httpClient.post(uploadURL) {
+                    // Explicit headers — don't loop authService.headers() because
+                    // the default Content-Type would conflict with the audio one.
+                    header("apikey", SupabaseConfig.ANON_KEY)
+                    header("Authorization", "Bearer ${authService.accessToken ?: ""}")
+                    header("Content-Type", "audio/mp4")
+                    header("x-upsert", "true")
+                    setBody(audioData)
+                }
+                if (response.status.isSuccess()) {
+                    manifest.add(com.memorezar.app.data.models.RecordingAudioEntry(
+                        recordingId = recording.id,
+                        localFileName = recording.localFileName,
+                        remoteStoragePath = remotePath
+                    ))
+                } else {
+                    val body = try { response.bodyAsText() } catch (_: Exception) { "<no body>" }
+                    Log.e(TAG, "Audio upload HTTP ${response.status.value} for ${recording.localFileName} — body: $body")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Audio upload threw for ${recording.localFileName}: ${e.message}")
+            }
+        }
+
+        Log.i(TAG, "Audio upload done: uploaded=${manifest.size} / total=${recordings.size} (missingOnDisk=$missing)")
+        return manifest
+    }
+
+    /**
+     * Download each audio file in the manifest back to the local recordings
+     * directory. Skipped files don't crash restore — metadata entries will
+     * just have no audio on disk until the user records again or backs up.
+     */
+    private suspend fun downloadRecordingAudioFiles(
+        manifest: List<com.memorezar.app.data.models.RecordingAudioEntry>
+    ) {
+        val token = authService.accessToken ?: run {
+            Log.i(TAG, "Audio download skipped: not signed in")
+            return
+        }
+        if (manifest.isEmpty()) return
+        Log.i(TAG, "Audio download starting: ${manifest.size} files in manifest")
+
+        var successes = 0
+        for (entry in manifest) {
+            val url = "${SupabaseConfig.RECORDING_BACKUPS_URL}/${entry.remoteStoragePath}"
+            try {
+                val response: io.ktor.client.statement.HttpResponse = httpClient.get(url) {
+                    header("apikey", SupabaseConfig.ANON_KEY)
+                    header("Authorization", "Bearer $token")
+                }
+                if (!response.status.isSuccess()) {
+                    val body = try { response.bodyAsText() } catch (_: Exception) { "<no body>" }
+                    Log.e(TAG, "Audio download HTTP ${response.status.value} for ${entry.localFileName} body=$body")
+                    continue
+                }
+                val bytes: ByteArray = response.body()
+                if (localRecordingStore.writeAudioFile(bytes, entry.localFileName)) {
+                    successes++
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Audio download threw for ${entry.localFileName}: ${e.message}")
+            }
+        }
+        Log.i(TAG, "Audio download done: wrote=$successes / total=${manifest.size}")
     }
 }

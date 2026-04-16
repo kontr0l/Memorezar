@@ -899,6 +899,24 @@ fun RecitationScreen(
         )
     }
 
+    // Replace Recording confirmation — shown when editing Private→Public and
+    // another community recording (by this user, same language) already exists.
+    if (audioState.pendingReplacePublicRecording != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.cancelReplacePublic() },
+            title = { Text("Replace Recording?") },
+            text = { Text("You already have a recording for this quote in this language. Uploading will replace it.") },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmReplacePublic() }) {
+                    Text("Replace", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.cancelReplacePublic() }) { Text("Cancel") }
+            }
+        )
+    }
+
     // Delete confirmation dialog
     if (audioState.showDeleteConfirm) {
         AlertDialog(

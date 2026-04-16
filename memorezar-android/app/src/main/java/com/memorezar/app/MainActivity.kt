@@ -39,6 +39,8 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var purchaseService: PurchaseService
     @Inject lateinit var supportTicketService: SupportTicketService
     @Inject lateinit var cloudBackupService: CloudBackupService
+    @Inject lateinit var localRecordingStore: com.memorezar.app.data.storage.LocalRecordingStore
+    @Inject lateinit var recordingService: com.memorezar.app.data.services.RecordingService
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,7 +82,9 @@ class MainActivity : ComponentActivity() {
                     alertManager = alertManager,
                     purchaseService = purchaseService,
                     supportTicketService = supportTicketService,
-                    cloudBackupService = cloudBackupService
+                    cloudBackupService = cloudBackupService,
+                    localRecordingStore = localRecordingStore,
+                    recordingService = recordingService
                 )
             }
         }

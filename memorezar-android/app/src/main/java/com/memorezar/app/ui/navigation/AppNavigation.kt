@@ -92,7 +92,9 @@ fun AppNavigation(
     alertManager: AlertManager,
     purchaseService: PurchaseService,
     supportTicketService: SupportTicketService,
-    cloudBackupService: CloudBackupService
+    cloudBackupService: CloudBackupService,
+    localRecordingStore: com.memorezar.app.data.storage.LocalRecordingStore,
+    recordingService: com.memorezar.app.data.services.RecordingService
 ) {
     val context = LocalContext.current
     val hasCompletedOnboarding by tutorialStore.hasCompletedOnboarding.collectAsState()
@@ -376,6 +378,8 @@ fun AppNavigation(
                     alertManager = alertManager,
                     cloudBackupService = cloudBackupService,
                     supportTicketService = supportTicketService,
+                    localRecordingStore = localRecordingStore,
+                    recordingService = recordingService,
                     onShowAuthSheet = { showAuthSheet = true },
                     onShowContactSupport = { showContactSupport = true },
                     modifier = Modifier.padding(padding)
