@@ -987,21 +987,66 @@ struct RecitationScreen: View {
                 Spacer()
 
                 if isCommunitySource {
-                    // FLAG (community only)
-                    Button {
-                        playbackFlagReason = ""
-                        showPlaybackFlagAlert = true
-                    } label: {
-                        VStack(spacing: 3) {
-                            Image(systemName: "flag")
-                                .font(.system(size: 18))
-                                .frame(height: 24)
-                            Text("FLAG")
-                                .font(.system(size: 9, weight: .semibold))
-                                .frame(height: 14)
+                    // Is this community recording MINE (not just "isCommunity")?
+                    // If yes, and there's a matching local on this device via
+                    // the explicit communityRecordingId link, show EDIT so the
+                    // user can flip Public→Private without navigating back to
+                    // Yours. Matches Android v2.8.9 behavior.
+                    let communityRec = playbackSource?.communityRecording
+                    let myId = authService.currentUser?.id
+                    let isMyOwnCommunityRecording = communityRec != nil
+                        && communityRec?.userId != nil
+                        && communityRec?.userId == myId
+                    let matchingLocal: LocalRecording? = isMyOwnCommunityRecording
+                        ? localRecordingStore.recordings.first { $0.communityRecordingId == communityRec?.id }
+                        : nil
+
+                    if isMyOwnCommunityRecording, let local = matchingLocal {
+                        // EDIT (own community recording, matching local exists)
+                        Button {
+                            // Swap the playback source to the linked local so the
+                            // edit sheet's state (alreadyShared, etc.) reflects a
+                            // local-backed recording. The audio is the same — the
+                            // Supabase row and on-device file are the two views of it.
+                            playbackSource = .local(local)
+                            if let idx = playbackPlaylist.firstIndex(where: { $0.id == communityRec?.id }) {
+                                playbackPlaylist[idx] = .local(local)
+                            }
+                            recordingName = local.name ?? ""
+                            let alreadyShared = local.communityRecordingId != nil
+                            shareWithCommunity = alreadyShared
+                            wasSharedAtEditOpen = alreadyShared
+                            isEditingExistingRecording = true
+                            showSaveRecordingSheet = true
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 18))
+                                    .frame(height: 24)
+                                Text("EDIT")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .frame(height: 14)
+                            }
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 50)
                         }
-                        .foregroundColor(.white.opacity(0.7))
-                        .frame(width: 50)
+                    } else {
+                        // FLAG (community only, not mine)
+                        Button {
+                            playbackFlagReason = ""
+                            showPlaybackFlagAlert = true
+                        } label: {
+                            VStack(spacing: 3) {
+                                Image(systemName: "flag")
+                                    .font(.system(size: 18))
+                                    .frame(height: 24)
+                                Text("FLAG")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .frame(height: 14)
+                            }
+                            .foregroundColor(.white.opacity(0.7))
+                            .frame(width: 50)
+                        }
                     }
 
                     Spacer()

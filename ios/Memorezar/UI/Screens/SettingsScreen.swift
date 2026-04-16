@@ -318,11 +318,19 @@ struct SettingsScreen: View {
                         }
                         Button("Cancel", role: .cancel) { }
                     } message: {
-                        if let date = cloudBackupService.cloudBackupDate {
-                            Text("This will replace all local data with your cloud backup from \(date.formatted(date: .abbreviated, time: .shortened)).")
-                        } else {
-                            Text("This will replace all local data with your cloud backup.")
-                        }
+                        // Matches Android v2.9.0: main line + relative "Last
+                        // backed up X ago" subtitle (same phrasing as the
+                        // Account-section footer).
+                        let whenText: String = {
+                            if let date = cloudBackupService.lastBackupDate {
+                                return "\n\nLast backed up \(relativeBackupTime(date))"
+                            } else if let date = cloudBackupService.cloudBackupDate {
+                                return "\n\nLast backed up \(relativeBackupTime(date))"
+                            } else {
+                                return ""
+                            }
+                        }()
+                        Text("This will replace all local data with your cloud backup." + whenText)
                     }
                 }
 
@@ -380,7 +388,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v74.2")
+                Text("v74.4")
                     .foregroundColor(.secondary)
             }
 

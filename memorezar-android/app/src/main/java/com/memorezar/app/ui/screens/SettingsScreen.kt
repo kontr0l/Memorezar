@@ -289,10 +289,17 @@ fun SettingsScreen(
                         }
 
                         if (showRestoreConfirm) {
+                            val bodyText = buildString {
+                                append(stringResource(R.string.restore_from_cloud_message))
+                                lastBackup?.let { millis ->
+                                    append("\n\n")
+                                    append(stringResource(R.string.last_backed_up, cloudBackupService.formatRelativeTime(millis)))
+                                }
+                            }
                             AlertDialog(
                                 onDismissRequest = { showRestoreConfirm = false },
                                 title = { Text(stringResource(R.string.restore_from_cloud_title)) },
-                                text = { Text(stringResource(R.string.restore_from_cloud_message)) },
+                                text = { Text(bodyText) },
                                 confirmButton = {
                                     TextButton(onClick = {
                                         showRestoreConfirm = false
@@ -406,7 +413,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.8.9")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.0")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
