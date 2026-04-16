@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Memorezar — Memorize with your voice</title>
+  <meta name="description" content="Memorezar helps you memorize through speaking, listening, and gentle correction. Practice prayers, poetry, speeches, schoolwork, and more." />
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --surface-alt: #eef4ff;
+      --text: #172b4d;
+      --muted: #5e6c84;
+      --line: #dfe1e6;
+      --blue: #0052cc;
+      --blue-2: #1d7afc;
+      --blue-3: #deebff;
+      --navy: #091e42;
+      --shadow: 0 12px 40px rgba(9, 30, 66, 0.10);
+      --radius: 20px;
+      --max: 1160px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #f8fbff 0%, #ffffff 48%, #f7f8fa 100%);
+      color: var(--text);
+      line-height: 1.55;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    .container {
+      width: min(calc(100% - 32px), var(--max));
+      margin: 0 auto;
+    }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(14px);
+      background: rgba(255,255,255,0.82);
+      border-bottom: 1px solid rgba(223,225,230,0.7);
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      min-height: 76px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-weight: 800;
+      color: var(--navy);
+      letter-spacing: -0.02em;
+    }
+
+    .brand img.icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      box-shadow: 0 8px 20px rgba(29, 122, 252, 0.16);
+    }
+
+    .brand img.wordmark {
+      height: 28px;
+      width: auto;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.97rem;
+    }
+
+    .nav-links a:hover { color: var(--blue); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 0 20px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-weight: 700;
+      transition: 180ms ease;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-2) 100%);
+      color: #fff;
+      box-shadow: 0 14px 30px rgba(0,82,204,0.24);
+    }
+
+    .btn-primary:hover { transform: translateY(-1px); }
+
+    .btn-secondary {
+      background: #fff;
+      border-color: var(--line);
+      color: var(--navy);
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 64px 0 48px;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: -120px auto auto -120px;
+      width: 360px;
+      height: 360px;
+      background: radial-gradient(circle, rgba(29,122,252,0.12), transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.08fr 0.92fr;
+      gap: 42px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      background: var(--blue-3);
+      color: var(--blue);
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 0.9rem;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.5rem, 5vw, 4.5rem);
+      line-height: 0.96;
+      letter-spacing: -0.05em;
+      color: var(--navy);
+      max-width: 720px;
+    }
+
+    .hero p.lead {
+      margin: 20px 0 0;
+      font-size: 1.16rem;
+      color: var(--muted);
+      max-width: 640px;
+    }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .download-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: #0f172a;
+      color: #fff;
+      border-radius: 16px;
+      padding: 12px 18px;
+      min-width: 182px;
+      box-shadow: var(--shadow);
+    }
+
+    .download-badge svg {
+      width: 28px;
+      height: 28px;
+      flex: none;
+    }
+
+    .download-badge small {
+      display: block;
+      font-size: 0.72rem;
+      opacity: 0.82;
+      line-height: 1.1;
+    }
+
+    .download-badge strong {
+      display: block;
+      font-size: 1rem;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    .hero-card {
+      position: relative;
+      background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+      border: 1px solid #dbe5ff;
+      border-radius: 30px;
+      box-shadow: 0 24px 60px rgba(9, 30, 66, 0.12);
+      padding: 24px;
+    }
+
+    .app-preview {
+      display: grid;
+      gap: 18px;
+    }
+
+    .preview-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 20px;
+    }
+
+    .preview-top .mini-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .preview-top .mini-brand img {
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #e9f2ff;
+      color: var(--blue);
+      font-weight: 700;
+      font-size: 0.86rem;
+    }
+
+    .practice-panel {
+      display: grid;
+      grid-template-columns: 1fr 220px;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+    }
+
+    .speech-line {
+      height: 11px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #d7e7ff 0%, #edf4ff 100%);
+      margin: 10px 0;
+    }
+
+    .speech-line:nth-child(2) { width: 94%; }
+    .speech-line:nth-child(3) { width: 70%; }
+    .speech-line:nth-child(4) { width: 80%; }
+
+    .wave {
+      height: 64px;
+      margin-top: 16px;
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 8px 50%, rgba(29,122,252,0.12) 0 3px, transparent 3px),
+        linear-gradient(180deg, #f6faff, #e8f2ff);
+      border: 1px solid #dbe8ff;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .wave::after {
+      content: "";
+      position: absolute;
+      inset: 12px 10px;
+      border-radius: 12px;
+      background: repeating-linear-gradient(
+        90deg,
+        rgba(29,122,252,0.15) 0 10px,
+        rgba(29,122,252,0.65) 10px 12px,
+        rgba(29,122,252,0.15) 12px 22px
+      );
+      mask: radial-gradient(circle at 5% 50%, transparent 0 4px, #000 5px), linear-gradient(#000, #000);
+      opacity: 0.9;
+    }
+
+    .sprite-box {
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #ffffff 0%, #f0f6ff 100%);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      min-height: 100%;
+      padding: 18px;
+    }
+
+    .sprite-box img {
+      max-height: 220px;
+      object-fit: contain;
+    }
+
+    .section {
+      padding: 42px 0;
+    }
+
+    .section-head {
+      max-width: 760px;
+      margin-bottom: 26px;
+    }
+
+    .section-head h2 {
+      margin: 0 0 10px;
+      font-size: clamp(2rem, 3vw, 3rem);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+      color: var(--navy);
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.06rem;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .feature-card {
+      position: relative;
+      overflow: hidden;
+      min-height: 100%;
+    }
+
+    .feature-card h3 {
+      margin: 0 0 10px;
+      font-size: 1.2rem;
+      color: var(--navy);
+      letter-spacing: -0.02em;
+    }
+
+    .feature-card p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .feature-media {
+      margin-top: 18px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .feature-media img {
+      max-height: 140px;
+    }
+
+    .benefits {
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .check-list {
+      display: grid;
+      gap: 14px;
+      margin-top: 4px;
+    }
+
+    .check-item {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .check-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: #e9f2ff;
+      color: var(--blue);
+      font-weight: 900;
+    }
+
+    .steps {
+      display: grid;
+      gap: 14px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 14px;
+      align-items: start;
+      padding: 14px;
+      border-radius: 18px;
+      background: #fbfcff;
+      border: 1px solid var(--line);
+    }
+
+    .step-num {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-2) 100%);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 1rem;
+    }
+
+    .quote-banner {
+      border-radius: 28px;
+      padding: 32px;
+      background: linear-gradient(135deg, #0b4cc2 0%, #1d7afc 100%);
+      color: #fff;
+      box-shadow: 0 24px 60px rgba(0,82,204,0.25);
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .quote-banner h2,
+    .quote-banner p { color: #fff; }
+
+    .quote-banner p {
+      opacity: 0.92;
+      margin: 10px 0 0;
+    }
+
+    .quote-banner img {
+      justify-self: end;
+      max-height: 220px;
+      filter: drop-shadow(0 20px 32px rgba(9, 30, 66, 0.15));
+    }
+
+    .privacy {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .privacy h2 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 3vw, 2.8rem);
+      line-height: 1.04;
+      letter-spacing: -0.04em;
+    }
+
+    .privacy h3 {
+      margin-top: 28px;
+      margin-bottom: 8px;
+      font-size: 1.15rem;
+      color: var(--navy);
+    }
+
+    .privacy p, .privacy li {
+      color: var(--muted);
+    }
+
+    .privacy ul {
+      padding-left: 20px;
+      margin: 8px 0 0;
+    }
+
+    .site-footer {
+      padding: 28px 0 54px;
+    }
+
+    .footer-shell {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .footer-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .footer-links {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .footer-links a {
+      color: var(--blue);
+      font-weight: 700;
+    }
+
+    .footer-links a:hover { text-decoration: underline; }
+
+    .small-note {
+      font-size: 0.92rem;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .benefits,
+      .quote-banner,
+      .practice-panel,
+      .grid-3 {
+        grid-template-columns: 1fr;
+      }
+
+      .quote-banner img {
+        justify-self: start;
+      }
+
+      .nav-links {
+        display: none;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .hero { padding-top: 36px; }
+      .preview-top { flex-direction: column; align-items: flex-start; }
+      .brand img.wordmark { height: 24px; }
+      .download-badge { width: 100%; justify-content: flex-start; }
+      .privacy, .card, .hero-card { border-radius: 20px; }
+      .quote-banner { padding: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container nav">
+      <a class="brand" href="#top" aria-label="Memorezar home">
+        <img class="icon" src="app.icon.png" alt="Memorezar app icon" />
+        <img class="wordmark" src="logo.png" alt="Memorezar" />
+      </a>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#features">Features</a>
+        <a href="#benefits">Benefits</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="#privacy-policy">Privacy</a>
+        <a href="#download" class="btn btn-primary">Download</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow">Voice-based memorization, made calm and simple</div>
+          <h1>Memorize with your voice. Practice with confidence.</h1>
+          <p class="lead">
+            Memorezar helps you learn and retain prayers, poems, speeches, vocabulary, class material, and meaningful texts by letting you speak them out loud, hear yourself, and get guided support when you miss a word.
+          </p>
+
+          <div class="cta-row" id="download" style="display: none;">
+            <a class="download-badge" href="#" aria-label="Download on the App Store">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M16.2 12.7c0-2.2 1.8-3.3 1.9-3.4-1-1.5-2.6-1.7-3.2-1.7-1.3-.1-2.5.8-3.2.8-.7 0-1.7-.8-2.8-.8-1.4 0-2.8.8-3.5 2-.8 1.4-.2 3.5.6 4.7.9 1.4 1.8 3 3.1 2.9 1.3-.1 1.7-.8 3.1-.8s1.8.8 3.2.8c1.3 0 2.1-1.2 3-2.6.6-1 1-2 1-2.1-.1 0-3.2-1.2-3.2-3.8Zm-2.1-6.6c.7-.8 1.2-1.8 1-2.9-1 .1-2.1.7-2.8 1.5-.7.7-1.2 1.8-1 2.8 1 .1 2.1-.5 2.8-1.4Z" fill="currentColor"/>
+              </svg>
+              <span><small>Download on the</small><strong>App Store</strong></span>
+            </a>
+            <a class="download-badge" href="#" aria-label="Get it on Google Play">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 2.8c-.2.2-.3.5-.3.9v16.6c0 .4.1.7.3.9l9.3-9.2L3 2.8Zm12.4 6.6-2.5 2.4 2.5 2.5 3.1-1.8c.9-.5.9-1.1 0-1.6l-3.1-1.5Zm-1 .6L4.2 4.1l7.4 7.3-7.4 7.3 10.2-5.9 2.8-1.6-2.8-1.6Z" fill="currentColor"/>
+              </svg>
+              <span><small>Get it on</small><strong>Google Play</strong></span>
+            </a>
+          </div>
+          <p class="small-note" style="display: none;">Replace the <code>#</code> links above with your live App Store and Google Play URLs.</p>
+        </div>
+
+        <div class="hero-card">
+          <div class="app-preview">
+            <div class="preview-top">
+              <div class="mini-brand">
+                <img src="app.icon.png" alt="Memorezar icon" />
+                <div>
+                  <strong style="display:block;font-size:1.1rem;color:var(--navy)">Memorezar</strong>
+                  <span style="color:var(--muted)">Memorization practice with listening and gentle feedback</span>
+                </div>
+              </div>
+              <span class="pill">Speak • Listen • Remember</span>
+            </div>
+
+            <div class="practice-panel">
+              <div class="card">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                  <strong style="font-size:1.04rem;color:var(--navy)">Practice session</strong>
+                  <span class="pill">Live listening</span>
+                </div>
+                <div style="margin-top:14px;color:var(--muted);font-weight:600;">“Recite the passage out loud and we’ll follow along.”</div>
+                <div class="speech-line"></div>
+                <div class="speech-line"></div>
+                <div class="speech-line"></div>
+                <div class="wave"></div>
+              </div>
+              <div class="sprite-box">
+                <img src="sprite.pray2.png" alt="Memorezar mascot in a calm prayer pose" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head">
+          <h2>A memorization app that feels encouraging, not intimidating</h2>
+          <p>
+            Inspired by modern product sites with a clean, trustworthy feel, Memorezar is designed to make repeated practice calmer, clearer, and more effective.
+          </p>
+        </div>
+
+        <div class="grid-3">
+          <article class="card feature-card">
+            <h3>Practice out loud</h3>
+            <p>
+              Use your own voice to work through material naturally. Speaking what you are learning helps strengthen recall and makes practice more active than silent rereading.
+            </p>
+            <div class="feature-media">
+              <img src="sprite.pray1.png" alt="Mascot meditating peacefully" />
+            </div>
+          </article>
+
+          <article class="card feature-card">
+            <h3>We listen as you recite</h3>
+            <p>
+              As you speak, the app follows along and helps you stay on track. If you say a mistaken word, skip one, or swap the order, Memorezar can gently guide you back.
+            </p>
+            <div class="feature-media">
+              <img src="sprite.mistake4.png" alt="Mascot reacting to a mistake" />
+            </div>
+          </article>
+
+          <article class="card feature-card">
+            <h3>Designed for meaningful repetition</h3>
+            <p>
+              Whether you're practicing prayers, schoolwork, speeches, or poetry, the experience is built to help you return often and improve steadily without friction.
+            </p>
+            <div class="feature-media">
+              <img src="sprite.pray4.png" alt="Mascot kneeling in prayer" />
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="benefits">
+      <div class="container benefits">
+        <div class="card">
+          <div class="section-head" style="margin-bottom:18px;">
+            <h2>Why memorization still matters</h2>
+            <p>
+              Good memorization is not about pressure. It is about familiarity, fluency, confidence, and having important words ready when you need them.
+            </p>
+          </div>
+          <div class="check-list">
+            <div class="check-item">
+              <div class="check-icon">✓</div>
+              <div>
+                <strong>Better recall for school and study</strong>
+                <div style="color:var(--muted)">Review vocabulary, facts, passages, formulas, and presentations in a more active way.</div>
+              </div>
+            </div>
+            <div class="check-item">
+              <div class="check-icon">✓</div>
+              <div>
+                <strong>More confidence when speaking</strong>
+                <div style="color:var(--muted)">Practice until the words feel natural, steady, and ready to share.</div>
+              </div>
+            </div>
+            <div class="check-item">
+              <div class="check-icon">✓</div>
+              <div>
+                <strong>Less passive rereading</strong>
+                <div style="color:var(--muted)">Use repetition with attention instead of reading the same lines without retaining them.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="display:grid;grid-template-columns:1fr 190px;gap:18px;align-items:center;">
+          <div>
+            <h3 style="margin:0 0 10px;font-size:1.35rem;color:var(--navy)">A helpful companion for classwork, speeches, and personal practice</h3>
+            <p style="margin:0;color:var(--muted)">
+              Memorezar supports the moments when repetition leads to growth: studying for exams, preparing a talk, learning a passage, or keeping treasured words close.
+            </p>
+          </div>
+          <div style="display:flex;justify-content:center;">
+            <img src="sprite.work3.png" alt="Mascot reading productively" style="max-height:180px;" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="how-it-works">
+      <div class="container">
+        <div class="section-head">
+          <h2>How it works</h2>
+          <p>
+            Keep the flow simple: choose your text, speak through it, and get support when you need it.
+          </p>
+        </div>
+
+        <div class="grid-3">
+          <article class="card">
+            <div class="step-num">1</div>
+            <h3 style="margin:16px 0 10px;">Choose what to memorize</h3>
+            <p style="margin:0;color:var(--muted)">
+              Load the text you want to practice, whether it is a prayer, lesson, poem, quotation, or speech.
+            </p>
+          </article>
+          <article class="card">
+            <div class="step-num">2</div>
+            <h3 style="margin:16px 0 10px;">Recite it out loud</h3>
+            <p style="margin:0;color:var(--muted)">
+              The app listens as you speak so your practice feels dynamic, focused, and closer to real recall.
+            </p>
+          </article>
+          <article class="card">
+            <div class="step-num">3</div>
+            <h3 style="margin:16px 0 10px;">Get gentle correction</h3>
+            <p style="margin:0;color:var(--muted)">
+              If you miss a word or make a mistake, Memorezar helps you notice it and continue improving without breaking momentum.
+            </p>
+          </article>
+        </div>
+
+        <div class="card" style="margin-top:20px;display:grid;grid-template-columns:1.05fr 0.95fr;gap:20px;align-items:center;">
+          <div>
+            <h3 style="margin:0 0 10px;font-size:1.35rem;">Gentle correction that keeps you moving</h3>
+            <div class="steps">
+              <div class="step">
+                <div class="step-num">A</div>
+                <div>
+                  <strong>We follow along while you speak</strong>
+                  <div style="color:var(--muted)">No need to stop every few seconds and check where you are.</div>
+                </div>
+              </div>
+              <div class="step">
+                <div class="step-num">B</div>
+                <div>
+                  <strong>We help catch mistaken words</strong>
+                  <div style="color:var(--muted)">A missed word or wrong phrase becomes a learning moment, not a frustrating reset.</div>
+                </div>
+              </div>
+              <div class="step">
+                <div class="step-num">C</div>
+                <div>
+                  <strong>We help strengthen accuracy over time</strong>
+                  <div style="color:var(--muted)">Repeated guided practice helps the correct version feel more natural.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:center;">
+            <img src="sprite.mistake1.png" alt="Mascot reacting to a spoken mistake" style="max-height:250px;" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="quote-banner">
+          <div>
+            <h2>Memorization can be peaceful, personal, and powerful.</h2>
+            <p>
+              Built for repeated practice, spoken learning, and encouraging progress — Memorezar helps bring important words closer to heart and mind.
+            </p>
+            <div class="cta-row" style="margin-top:22px;">
+              <a class="btn btn-secondary" href="#privacy-policy">Read privacy policy</a>
+              <a class="btn btn-primary" href="#download">Get the app</a>
+            </div>
+          </div>
+          <img src="sprite.pray3.png" alt="Memorezar mascot in a peaceful pose" />
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="privacy-policy">
+      <div class="container">
+        <div class="privacy">
+          <h2>Privacy Policy</h2>
+          <p><strong>Last updated:</strong> March 12, 2026</p>
+          <p>
+            Memorezar respects your privacy. This Privacy Policy explains what information may be collected when you use the Memorezar website and mobile application, how that information may be used, and the choices available to you.
+          </p>
+
+          <h3>1. Information we may collect</h3>
+          <p>Depending on the features you use, Memorezar may collect the following categories of information:</p>
+          <ul>
+            <li>Account information, such as your name, email address, login credentials, or profile details.</li>
+            <li>Practice content you choose to upload, enter, or save inside the app, such as passages, prayers, quotations, study material, or notes.</li>
+            <li>Voice-related interaction data necessary to provide memorization and listening features.</li>
+            <li>Usage information, such as session activity, device type, operating system, app version, crash data, and general analytics.</li>
+            <li>Communications you send to us, including support requests and feedback.</li>
+          </ul>
+
+          <h3>2. How we use information</h3>
+          <p>We may use information to:</p>
+          <ul>
+            <li>Provide, maintain, and improve the Memorezar app and website.</li>
+            <li>Enable memorization, listening, review, correction, and progress-related features.</li>
+            <li>Personalize your experience and save your preferences.</li>
+            <li>Respond to support inquiries and communicate important updates.</li>
+            <li>Monitor performance, troubleshoot bugs, and protect the security of the service.</li>
+            <li>Comply with legal obligations and enforce our terms.</li>
+          </ul>
+
+          <h3>3. Voice data and spoken practice</h3>
+          <p>
+            Because Memorezar is built around spoken memorization, certain voice-related data may be processed to deliver listening, alignment, and correction features. Where applicable, voice input may be processed by Memorezar and/or trusted service providers strictly for app functionality, improvement, safety, and support. You should adjust this section to match your actual technical implementation.
+          </p>
+
+          <h3>4. Sharing of information</h3>
+          <p>We do not sell your personal information. We may share information only in limited cases, such as:</p>
+          <ul>
+            <li>With service providers who help us operate the app, such as hosting, analytics, authentication, storage, customer support, or speech-processing providers.</li>
+            <li>When required by law, legal process, or governmental request.</li>
+            <li>To protect rights, safety, security, users, or the public.</li>
+            <li>As part of a merger, acquisition, financing, or sale of business assets.</li>
+          </ul>
+
+          <h3>5. Data retention</h3>
+          <p>
+            We retain information only for as long as necessary to provide the service, fulfill the purposes described in this Privacy Policy, resolve disputes, enforce agreements, and comply with legal obligations.
+          </p>
+
+          <h3>6. Your choices</h3>
+          <ul>
+            <li>You may be able to access, update, or delete certain account information from within the app.</li>
+            <li>You may request deletion of your account or stored data by contacting us.</li>
+            <li>You can control certain device permissions, including microphone access, through your device settings.</li>
+            <li>You may opt out of certain non-essential communications.</li>
+          </ul>
+
+          <h3>7. Security</h3>
+          <p>
+            We use reasonable administrative, technical, and organizational safeguards intended to protect information. However, no method of transmission or storage is completely secure, and we cannot guarantee absolute security.
+          </p>
+
+          <h3>8. International users</h3>
+          <p>
+            Your information may be processed in countries other than your own, where privacy laws may differ. By using the service, you understand that information may be transferred to and processed in such locations, subject to applicable safeguards where required.
+          </p>
+
+          <h3>9. Changes to this Privacy Policy</h3>
+          <p>
+            We may update this Privacy Policy from time to time. If we make material changes, we may notify users by updating the date above, posting a notice in the app or website, or by other appropriate means.
+          </p>
+
+          <h3>10. Contact us</h3>
+          <p>
+            If you have questions about this Privacy Policy or would like to request access, correction, or deletion of your information, contact us at <a href="mailto:privacy@memorezar.com" style="color:var(--blue);font-weight:700;">privacy@memorezar.com</a>.
+          </p>
+
+          <p class="small-note">
+            Important: this privacy policy is a polished starter template, not legal advice. You should replace placeholders and confirm the final language with your real data flows, jurisdictions, and legal requirements before publishing.
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-shell">
+      <div class="footer-left">
+        <img src="app.icon.png" alt="Memorezar icon" style="width:34px;height:34px;border-radius:10px;" />
+        <span>© 2026 Memorezar. All rights reserved.</span>
+      </div>
+      <div class="footer-links">
+        <a href="#">App Store</a>
+        <a href="#">Google Play</a>
+        <a href="#privacy-policy">Privacy Policy</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
