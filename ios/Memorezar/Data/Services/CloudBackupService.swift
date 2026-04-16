@@ -45,9 +45,11 @@ final class CloudBackupService: ObservableObject {
             lastBackupDate = Date(timeIntervalSince1970: interval)
         }
 
-        // Observe sign-in events
+        // Observe sign-in events. Do NOT use .dropFirst(): if the user was
+        // already signed in before this service subscribed (cold-launch restore
+        // from Keychain), that's the emission we need. The nil-guard inside the
+        // closure covers the "initial nil" case dropFirst was meant to avoid.
         AuthService.shared.$currentUser
-            .dropFirst() // skip initial nil
             .removeDuplicates(by: { $0?.id == $1?.id })
             .sink { [weak self] user in
                 guard let self, user != nil else { return }

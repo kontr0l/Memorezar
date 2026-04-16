@@ -89,6 +89,14 @@ struct SettingsScreen: View {
                     }
                 }
             }
+            .task {
+                // Re-check cloud backup existence when Settings appears. Covers
+                // the case where the cold-launch check failed (no network) —
+                // otherwise the Restore button stays stuck disabled.
+                if authService.isSignedIn {
+                    _ = await cloudBackupService.checkForCloudBackup()
+                }
+            }
             .alert("Reset Settings", isPresented: $showingResetAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Reset", role: .destructive) {
@@ -340,7 +348,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v72.4")
+                Text("v72.5")
                     .foregroundColor(.secondary)
             }
 
