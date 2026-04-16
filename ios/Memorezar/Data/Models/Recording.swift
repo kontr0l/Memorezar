@@ -52,6 +52,11 @@ struct LocalRecording: Identifiable, Codable {
     var name: String?              // user-provided name for the recording
     var quoteId: UUID?             // parent quote ID (for cross-language lookup)
     var language: String            // language code when recorded
+    /// If this local has been published to the community, this is the id
+    /// of that community row. nil = private/local-only. Set on successful
+    /// upload, cleared on unshare/replace/delete. Authoritative — no more
+    /// guessing via user_id+language heuristics.
+    var communityRecordingId: UUID?
 
     init(
         id: UUID = UUID(),
@@ -65,7 +70,8 @@ struct LocalRecording: Identifiable, Codable {
         uploaderName: String? = nil,
         name: String? = nil,
         quoteId: UUID? = nil,
-        language: String = "en"
+        language: String = "en",
+        communityRecordingId: UUID? = nil
     ) {
         self.id = id
         self.quoteTextHash = quoteTextHash
@@ -79,9 +85,12 @@ struct LocalRecording: Identifiable, Codable {
         self.name = name
         self.quoteId = quoteId
         self.language = language
+        self.communityRecordingId = communityRecordingId
     }
 
-    // Backward-compatible decoding: old recordings without language default to "en"
+    // Backward-compatible decoding: old recordings without language default to "en",
+    // and older recordings without communityRecordingId default to nil (reconciled
+    // later by RecitationScreen when the community list loads).
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
@@ -96,6 +105,7 @@ struct LocalRecording: Identifiable, Codable {
         name = try container.decodeIfPresent(String.self, forKey: .name)
         quoteId = try container.decodeIfPresent(UUID.self, forKey: .quoteId)
         language = try container.decodeIfPresent(String.self, forKey: .language) ?? "en"
+        communityRecordingId = try container.decodeIfPresent(UUID.self, forKey: .communityRecordingId)
     }
 }
 

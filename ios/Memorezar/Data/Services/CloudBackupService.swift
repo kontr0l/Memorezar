@@ -1,5 +1,11 @@
 import Foundation
 import Combine
+import os
+
+/// System-log channel for CloudBackup messages. Unlike plain `print()`,
+/// these show up in Console.app and `log show/stream` with subsystem
+/// "com.memorezar.app" and category "CloudBackup".
+private let backupLog = Logger(subsystem: "com.memorezar.app", category: "CloudBackup")
 
 /// Backs up all user data to Supabase as a single JSONB snapshot
 /// and restores it on a new device when the user signs in.
@@ -48,6 +54,7 @@ final class CloudBackupService: ObservableObject {
     weak var settingsStore: SettingsStore?
     weak var userEquivalencesStore: UserEquivalencesStore?
     weak var tutorialStore: TutorialStore?
+    weak var localRecordingStore: LocalRecordingStore?
 
     private init() {
         // Clean up the legacy device-wide key — any future reads should come
@@ -103,7 +110,12 @@ final class CloudBackupService: ObservableObject {
             // 1. Upload category images
             let imageManifest = await uploadCategoryImages(categories: quoteStore.categories)
 
-            // 2. Build payload
+            // 2. Upload local recording audio files (private bucket, owner-only RLS).
+            //    Empty manifest if localRecordingStore isn't wired or user has no recordings.
+            let currentLocals = localRecordingStore?.recordings ?? []
+            let recordingManifest = await uploadRecordingAudioFiles(recordings: currentLocals)
+
+            // 3. Build payload
             let payload = BackupPayload(
                 backupVersion: BackupPayload.currentVersion,
                 createdAt: Date(),
@@ -115,7 +127,9 @@ final class CloudBackupService: ObservableObject {
                 userEquivalences: userEquivalencesStore.equivalences.mapValues { Array($0) },
                 completedTips: Array(tutorialStore.completedTips),
                 hasCompletedOnboarding: tutorialStore.hasCompletedOnboarding,
-                categoryImageManifest: imageManifest
+                categoryImageManifest: imageManifest,
+                localRecordings: currentLocals,
+                recordingAudioManifest: recordingManifest
             )
 
             // 3. Encode
@@ -255,6 +269,16 @@ final class CloudBackupService: ObservableObject {
 
         // 5. Download category images
         await downloadCategoryImages(manifest: payload.categoryImageManifest)
+
+        // 6. Restore local recordings: wipe on-disk files first, then replace
+        //    metadata, then download audio files. Order matters — we don't
+        //    want a partial state where metadata references a file we haven't
+        //    downloaded yet, or leftover files from pre-restore state.
+        if let localRecordingStore {
+            localRecordingStore.wipeAllAudioFiles()
+            localRecordingStore.replaceAll(payload.localRecordings)
+            await downloadRecordingAudioFiles(manifest: payload.recordingAudioManifest)
+        }
 
         isRestoring = false
         backupState = .idle
@@ -402,6 +426,100 @@ final class CloudBackupService: ObservableObject {
         let dir = docs.appendingPathComponent("category_images", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
+    }
+
+    // MARK: - Recording Audio Upload/Download (Back Up Now / Restore)
+
+    /// Upload every local recording's .m4a to the private `recording-backups`
+    /// bucket at `<user_id>/<local_recording_id>.m4a`. Idempotent via
+    /// `x-upsert: true` — safe to run on every Back Up Now.
+    /// Returns the manifest to embed in the backup payload.
+    private func uploadRecordingAudioFiles(recordings: [LocalRecording]) async -> [RecordingAudioEntry] {
+        guard let userId = AuthService.shared.currentUser?.id,
+              let token = AuthService.shared.accessToken,
+              let store = localRecordingStore else {
+            backupLog.info("Audio upload skipped: userId=\(AuthService.shared.currentUser?.id ?? "nil", privacy: .public) hasToken=\(AuthService.shared.accessToken != nil, privacy: .public) storeWired=\(self.localRecordingStore != nil, privacy: .public)")
+            return []
+        }
+        backupLog.info("Audio upload starting: \(recordings.count, privacy: .public) recordings for user=\(userId, privacy: .public)")
+
+        var manifest: [RecordingAudioEntry] = []
+        var missingFiles = 0
+
+        for recording in recordings {
+            let localURL = store.audioFileURL(for: recording)
+            guard let audioData = try? Data(contentsOf: localURL) else {
+                missingFiles += 1
+                continue
+            }
+
+            let remotePath = "\(userId)/\(recording.id.uuidString).m4a"
+            let uploadURL = SupabaseConfig.recordingBackupsStorageURL.appendingPathComponent(remotePath)
+
+            var request = URLRequest(url: uploadURL)
+            request.httpMethod = "POST"
+            request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            request.setValue("audio/mp4", forHTTPHeaderField: "Content-Type")
+            request.setValue("true", forHTTPHeaderField: "x-upsert")
+            request.httpBody = audioData
+
+            do {
+                let (respData, response) = try await session.data(for: request)
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                if (200...299).contains(code) {
+                    manifest.append(RecordingAudioEntry(
+                        recordingId: recording.id.uuidString,
+                        localFileName: recording.localFileName,
+                        remoteStoragePath: remotePath
+                    ))
+                } else {
+                    let body = String(data: respData, encoding: .utf8) ?? "no body"
+                    backupLog.error("Audio upload HTTP \(code, privacy: .public) for \(recording.localFileName, privacy: .public) — body: \(body, privacy: .public)")
+                }
+            } catch {
+                backupLog.error("Audio upload threw for \(recording.localFileName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+
+        backupLog.info("Audio upload done: uploaded=\(manifest.count, privacy: .public) / total=\(recordings.count, privacy: .public) (missingOnDisk=\(missingFiles, privacy: .public))")
+        return manifest
+    }
+
+    /// Download each audio file referenced in the manifest back into
+    /// Documents/recordings/<localFileName>.m4a. Skipped files won't
+    /// crash the restore — the metadata entry will just have no audio
+    /// until the user re-records or backs up again.
+    private func downloadRecordingAudioFiles(manifest: [RecordingAudioEntry]) async {
+        guard let token = AuthService.shared.accessToken,
+              let store = localRecordingStore else {
+            backupLog.info("Audio download skipped: hasToken=\(AuthService.shared.accessToken != nil, privacy: .public) storeWired=\(self.localRecordingStore != nil, privacy: .public)")
+            return
+        }
+        backupLog.info("Audio download starting: \(manifest.count, privacy: .public) files in manifest")
+
+        var successes = 0
+        for entry in manifest {
+            let downloadURL = SupabaseConfig.recordingBackupsStorageURL.appendingPathComponent(entry.remoteStoragePath)
+            var request = URLRequest(url: downloadURL)
+            request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            do {
+                let (data, response) = try await session.data(for: request)
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                guard (200...299).contains(code) else {
+                    let body = String(data: data, encoding: .utf8) ?? "no body"
+                    backupLog.error("Audio download HTTP \(code, privacy: .public) for \(entry.localFileName, privacy: .public) — url=\(downloadURL.absoluteString, privacy: .public) body=\(body, privacy: .public)")
+                    continue
+                }
+                if store.writeAudioFile(data: data, localFileName: entry.localFileName) {
+                    successes += 1
+                }
+            } catch {
+                backupLog.error("Audio download threw for \(entry.localFileName, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        backupLog.info("Audio download done: wrote=\(successes, privacy: .public) / total=\(manifest.count, privacy: .public)")
     }
 }
 

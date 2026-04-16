@@ -71,10 +71,17 @@ struct RecitationScreen: View {
     @State private var isUploading = false
     @State private var showSaveRecordingSheet = false
     @State private var isEditingExistingRecording = false
+    /// Captured at edit-sheet open time so Save can detect Public→Private
+    /// transitions and delete the community recording accordingly.
+    @State private var wasSharedAtEditOpen = false
     @State private var recordingName = ""
     @State private var showAuthSheet = false
     @State private var showReplaceRecordingAlert = false
     @State private var existingRecording: Recording?
+    /// When set, the Replace-alert → performUpload path uploads THIS local
+    /// recording (used by the Edit → Public flow where we want to share a
+    /// specific older local, not the newest one).
+    @State private var pendingUploadLocal: LocalRecording?
     @State private var showPaywall = false
 
     init(quote: Quote, isTutorialMode: Bool = false) {
@@ -431,9 +438,12 @@ struct RecitationScreen: View {
                 AlertManager.shared.stopResultSound()
             }) {
                 resultsSheet
-                    // In tutorial mode the user must tap Continue/Done on the
-                    // sheet itself — swipe-down and tap-outside are disabled.
-                    .interactiveDismissDisabled(isTutorialMode)
+                    // In tutorial mode AND in master mode the user must tap
+                    // an explicit button on the sheet itself — swipe-down
+                    // and tap-outside are disabled. Master mode records a
+                    // pass/fail via the buttons, so accidental dismissal
+                    // would lose the result silently.
+                    .interactiveDismissDisabled(isTutorialMode || viewModel.isMasterMode)
             }
             .sheet(isPresented: $showSaveRecordingSheet, onDismiss: {
                 isEditingExistingRecording = false
@@ -453,7 +463,16 @@ struct RecitationScreen: View {
 
                         Section {
                             if authService.isSignedIn {
-                                Toggle(isOn: $shareWithCommunity) {
+                                // Toggle represents "Private" mode: ON = private
+                                // (safer default), OFF = public. Underlying state
+                                // is still shareWithCommunity (true = public),
+                                // we just invert the binding for display so a
+                                // flipped switch visually means "I've unlocked
+                                // this to share", not "I've turned off privacy".
+                                Toggle(isOn: Binding(
+                                    get: { !shareWithCommunity },
+                                    set: { shareWithCommunity = !$0 }
+                                )) {
                                     Label(
                                         shareWithCommunity ? String(localized: "Public") : String(localized: "Private"),
                                         systemImage: shareWithCommunity ? "globe" : "lock.fill"
@@ -527,27 +546,52 @@ struct RecitationScreen: View {
                                             playbackPlaylist[idx] = .local(updated)
                                             playbackSource = .local(updated)
                                         }
-                                        // Upload to community if sharing was toggled on
+                                        // Sharing state transitions:
+                                        //   was=false, now=true  → upload (or Replace-alert if another is public)
+                                        //   was=true,  now=false → delete the existing community recording
+                                        //   was=true,  now=true  → re-upload (upsert refreshes uploader_name)
+                                        //   was=false, now=false → no-op
+                                        let wasShared = wasSharedAtEditOpen
+                                        let myId = authService.currentUser?.id
                                         if shareWithCommunity {
-                                            Task {
-                                                guard let data = localRecordingStore.loadAudioData(for: local) else { return }
-                                                let quoteHash = RecordingService.shared.hashQuoteText(viewModel.activeText)
-                                                do {
-                                                    let filePath = try await RecordingService.shared.uploadAudio(data: data)
-                                                    let recording = try await RecordingService.shared.createRecording(
-                                                        quoteTextHash: quoteHash,
-                                                        quoteTitle: viewModel.activeTitle,
-                                                        uploaderName: recordingName,
-                                                        filePath: filePath,
-                                                        durationSeconds: local.durationSeconds,
-                                                        language: local.language
-                                                    )
-                                                    communityRecordings.insert(recording, at: 0)
-                                                } catch {
-                                                    print("[RecitationScreen] Upload error: \(error)")
+                                            // Is there a DIFFERENT public recording by this user in
+                                            // this language already? If so, route through the Replace
+                                            // alert so the user explicitly confirms the swap.
+                                            let otherPublic: Recording? = wasShared ? nil : communityRecordings.first { rec in
+                                                rec.userId != nil && rec.userId == myId && rec.language == local.language
+                                            }
+                                            if let other = otherPublic {
+                                                existingRecording = other
+                                                pendingUploadLocal = local
+                                                showReplaceRecordingAlert = true
+                                            } else {
+                                                // Direct upload: either no conflicting public recording,
+                                                // or we're refreshing the same one that was already shared.
+                                                pendingUploadLocal = local
+                                                Task { await performUpload() }
+                                            }
+                                        } else if wasShared {
+                                            // Public → Private: delete the specific community row this
+                                            // local is linked to (authoritative via communityRecordingId).
+                                            if let linkedId = local.communityRecordingId {
+                                                let filePath = communityRecordings.first(where: { $0.id == linkedId })?.filePath
+                                                Task {
+                                                    do {
+                                                        try await RecordingService.shared.deleteRecording(
+                                                            id: linkedId,
+                                                            filePath: filePath
+                                                        )
+                                                        await MainActor.run {
+                                                            communityRecordings.removeAll { $0.id == linkedId }
+                                                            localRecordingStore.clearCommunityLinksTo(communityId: linkedId)
+                                                        }
+                                                    } catch {
+                                                        print("[RecitationScreen] Unshare failed: \(error)")
+                                                    }
                                                 }
                                             }
                                         }
+                                        wasSharedAtEditOpen = false
                                     }
                                 } else {
                                     stopRecordingPreview()
@@ -570,10 +614,42 @@ struct RecitationScreen: View {
                     .presentationDragIndicator(.hidden)
             }
             .alert(String(localized: "Replace Recording?"), isPresented: $showReplaceRecordingAlert) {
+                // Replace: delete the old community recording (DB row + audio
+                // file), then upload the new one. The new recording ends up
+                // Public; the old one effectively becomes Private (its local
+                // copy on the user's device is untouched — only the community
+                // copy is unshared).
                 Button("Replace", role: .destructive) {
-                    Task { await performUpload() }
+                    Task {
+                        if let existing = existingRecording {
+                            do {
+                                try await RecordingService.shared.deleteRecording(
+                                    id: existing.id,
+                                    filePath: existing.filePath
+                                )
+                                await MainActor.run {
+                                    communityRecordings.removeAll { $0.id == existing.id }
+                                    // Any local that claimed to be linked to the old
+                                    // community row is now unlinked (it's gone).
+                                    localRecordingStore.clearCommunityLinksTo(communityId: existing.id)
+                                }
+                            } catch {
+                                // Fall through to upload anyway — the upsert in
+                                // createRecording will still merge-duplicates on
+                                // the unique constraint, so replace works even
+                                // if the explicit delete fails.
+                                print("[RecitationScreen] Replace: delete of old community recording failed (\(error)) — continuing to upload")
+                            }
+                        }
+                        await performUpload()
+                        await MainActor.run { existingRecording = nil }
+                    }
                 }
-                Button("Cancel", role: .cancel) { }
+                // Cancel: new recording stays Private (no upload), old
+                // community recording stays Public — no server change.
+                Button("Cancel", role: .cancel) {
+                    existingRecording = nil
+                }
             } message: {
                 Text(String(localized: "You already have a recording for this quote in this language. Uploading will replace it."))
             }
@@ -623,7 +699,7 @@ struct RecitationScreen: View {
                         playbackPlayer = nil
                         isPlaying = false
                         playbackSource = nil
-                        localRecordingStore.deleteRecording(recording)
+                        deleteLocalRecording(recording)
                         playbackPlaylist = buildPlaylist()
                         if let first = playbackPlaylist.first {
                             selectRecording(first)
@@ -653,6 +729,7 @@ struct RecitationScreen: View {
                 communityRecordingCount = await RecordingService.shared.fetchRecordingCount(forHash: hash)
                 communityRecordings = await RecordingService.shared.fetchRecordings(forHash: hash)
                 isLoadingRecordings = false
+                reconcileLocalCommunityLinks(for: hash)
             }
         }
     }
@@ -953,7 +1030,12 @@ struct RecitationScreen: View {
                     Button {
                         if let local = playbackSource?.localRecording {
                             recordingName = local.name ?? ""
-                            shareWithCommunity = false
+                            // Authoritative: is THIS specific local linked to
+                            // a community row? (Not just "does the user have
+                            // any community recording in this language".)
+                            let alreadyShared = local.communityRecordingId != nil
+                            shareWithCommunity = alreadyShared
+                            wasSharedAtEditOpen = alreadyShared
                             isEditingExistingRecording = true
                             showSaveRecordingSheet = true
                         }
@@ -1413,7 +1495,7 @@ struct RecitationScreen: View {
                                         isPlaying = false
                                         playbackSource = nil
                                     }
-                                    localRecordingStore.deleteRecording(recording)
+                                    deleteLocalRecording(recording)
                                 } label: {
                                     if recording.isFavorite {
                                         Label("Unsave", systemImage: "heart.slash")
@@ -1502,7 +1584,7 @@ struct RecitationScreen: View {
                                 isPlaying = false
                                 playbackSource = nil
                             }
-                            localRecordingStore.deleteRecording(recording)
+                            deleteLocalRecording(recording)
                         } label: {
                             Image(systemName: "heart.fill")
                                 .font(.body)
@@ -1983,11 +2065,70 @@ struct RecitationScreen: View {
         }
     }
 
+    /// One-time migration / safety pass run after community recordings load.
+    /// For each of the current user's community recordings, if no local has
+    /// its id as `communityRecordingId` yet, try to match by
+    /// `uploader_name == local.name` + same language (recordings uploaded
+    /// before this field existed). Only links when the match is unambiguous
+    /// (exactly one candidate). Non-matching locals stay unlinked — the user
+    /// can re-share via the Edit toggle to establish the link.
+    private func reconcileLocalCommunityLinks(for quoteHash: String) {
+        guard let myId = authService.currentUser?.id else { return }
+        let locals = localRecordingStore.recordings(forHash: quoteHash)
+        let mine = communityRecordings.filter { $0.userId == myId }
+
+        for community in mine {
+            // Already linked?
+            if locals.contains(where: { $0.communityRecordingId == community.id }) {
+                continue
+            }
+            // Candidate: same language, same name, no existing link.
+            let candidates = locals.filter {
+                $0.language == community.language
+                    && $0.name == community.uploaderName
+                    && $0.communityRecordingId == nil
+                    && !$0.isFavorite
+            }
+            if candidates.count == 1 {
+                localRecordingStore.setCommunityRecordingId(for: candidates[0], id: community.id)
+            }
+        }
+    }
+
+    /// Deletes a local recording. If this local was published to the
+    /// community (communityRecordingId is set), the community row + file
+    /// are deleted too — an explicit 1:1 link, no heuristics. Favorited
+    /// recordings (saved from someone else's community recording) are
+    /// treated as local-only.
+    private func deleteLocalRecording(_ recording: LocalRecording) {
+        if let linkedId = recording.communityRecordingId, !recording.isFavorite {
+            let filePath = communityRecordings.first(where: { $0.id == linkedId })?.filePath
+            Task {
+                do {
+                    try await RecordingService.shared.deleteRecording(
+                        id: linkedId,
+                        filePath: filePath
+                    )
+                    await MainActor.run {
+                        communityRecordings.removeAll { $0.id == linkedId }
+                        localRecordingStore.clearCommunityLinksTo(communityId: linkedId)
+                    }
+                } catch {
+                    print("[RecitationScreen] Delete community copy failed: \(error)")
+                }
+            }
+        }
+
+        localRecordingStore.deleteRecording(recording)
+    }
+
     private func performUpload() async {
         let quoteHash = RecordingService.shared.hashQuoteText(viewModel.activeText)
-        // Get audio data from the most recently saved local recording
+        // Edit flow sets pendingUploadLocal to upload a specific local;
+        // new-recording flow falls back to the most recently saved local.
         let localRecs = localRecordingStore.recordings(forHash: quoteHash)
-        guard let newest = localRecs.last,
+        let localToUpload: LocalRecording? = pendingUploadLocal ?? localRecs.last
+        guard let newest = localToUpload,
               let data = localRecordingStore.loadAudioData(for: newest) else { return }
 
         isUploading = true
@@ -2007,10 +2148,17 @@ struct RecitationScreen: View {
             } else {
                 communityRecordings.insert(recording, at: 0)
             }
+            // Authoritative link: this local is now THE shared recording in
+            // this language. Any other locals that claimed to be linked to
+            // a stale id get cleared so the "Public" badge only applies to
+            // the actual shared one.
+            localRecordingStore.clearCommunityLinksTo(communityId: recording.id)
+            localRecordingStore.setCommunityRecordingId(for: newest, id: recording.id)
         } catch {
             print("[RecitationScreen] Upload error: \(error)")
         }
         isUploading = false
+        await MainActor.run { pendingUploadLocal = nil }
     }
 
     private func formatPlaybackTime(_ seconds: TimeInterval) -> String {

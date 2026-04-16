@@ -7,6 +7,7 @@ struct SettingsScreen: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var purchaseService: PurchaseService
     @EnvironmentObject var cloudBackupService: CloudBackupService
+    @EnvironmentObject var localRecordingStore: LocalRecordingStore
     @State private var showingResetAlert = false
     @State private var showRestoreConfirm = false
     @State private var showingDeleteDataAlert = false
@@ -72,17 +73,24 @@ struct SettingsScreen: View {
                 }
                 AlertManager.shared.previewTheme(newValue)
             }
-            .overlay(
-                showFlash ?
+            // ViewBuilder-trailing-closure form (the older .overlay(content)
+            // with a nil-returning ternary stopped re-rendering on state flips
+            // in iOS 17+ — the optional View would sometimes silently skip
+            // the update, leaving showFlash=true with no red tint visible).
+            .overlay {
+                if showFlash {
                     Color.red.opacity(0.3)
                         .ignoresSafeArea()
                         .allowsHitTesting(false)
-                    : nil
-            )
+                        .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.1), value: showFlash)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .onAppear {
                 AlertManager.shared.onVisualAlert = {
+                    print("[Settings] visual alert fired — showFlash set to true")
                     showFlash = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                         showFlash = false
@@ -108,12 +116,32 @@ struct SettingsScreen: View {
             .alert("Delete All Data", isPresented: $showingDeleteDataAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Delete", role: .destructive) {
+                    // Fire off the community-unshare cleanup async, then wipe
+                    // everything local. The unshare requests run in parallel
+                    // in the background — we don't block the UI on them.
+                    let toUnshare = localRecordingStore.recordings.compactMap { r -> (UUID, String?)? in
+                        guard !r.isFavorite, let cid = r.communityRecordingId else { return nil }
+                        return (cid, r.localFileName)
+                    }
+                    Task.detached(priority: .background) {
+                        for (communityId, _) in toUnshare {
+                            do {
+                                try await RecordingService.shared.deleteRecording(id: communityId, filePath: nil)
+                            } catch {
+                                print("[Settings] Delete All Data: community unshare failed for \(communityId): \(error)")
+                            }
+                        }
+                    }
+                    // Local wipe: quotes + sessions + categories, tutorials,
+                    // AND local recordings (metadata + audio files on disk).
                     quoteStore.clearAllData()
                     tutorialStore.resetAll()
                     tutorialStore.hasCompletedOnboarding = false
+                    localRecordingStore.wipeAllAudioFiles()
+                    localRecordingStore.replaceAll([])
                 }
             } message: {
-                Text("This will delete all your quotes, practice history, and statistics. This action cannot be undone.")
+                Text("This will delete all your quotes, practice history, statistics, and local recordings. Any recordings you've shared to the community will also be removed. This action cannot be undone.")
             }
             .alert("Delete My Account?", isPresented: $showingDeleteAccountAlert) {
                 Button("Cancel", role: .cancel) { }
@@ -352,7 +380,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v73.1")
+                Text("v74.2")
                     .foregroundColor(.secondary)
             }
 
@@ -422,6 +450,11 @@ struct SettingsScreen: View {
                 quoteStore.clearAllData()
                 tutorialStore.resetAll()
                 settingsStore.resetToDefaults()
+                // Community recordings are already deleted server-side by the
+                // delete-user-account Edge Function's cascade — we only need
+                // to wipe the local audio files + metadata here.
+                localRecordingStore.wipeAllAudioFiles()
+                localRecordingStore.replaceAll([])
                 authService.signOut()
                 deleteAccountInFlight = false
                 deleteAccountConfirmationMessage = serverError == nil

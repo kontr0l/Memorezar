@@ -29,6 +29,7 @@ struct MemorezerApp: App {
                     cloudBackupService.settingsStore = settingsStore
                     cloudBackupService.userEquivalencesStore = userEquivalencesStore
                     cloudBackupService.tutorialStore = tutorialStore
+                    cloudBackupService.localRecordingStore = localRecordingStore
 
                     purchaseService.configure()
                     authService.restoreSession()

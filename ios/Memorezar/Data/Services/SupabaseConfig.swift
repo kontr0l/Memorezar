@@ -48,6 +48,14 @@ enum SupabaseConfig {
         URL(string: "\(projectURL)/storage/v1/object/public/user-images/\(path)")!
     }
 
+    /// Private bucket for per-user audio backups. Owner-only RLS —
+    /// files at <user_id>/<local_recording_id>.m4a. Uploaded on Back Up
+    /// Now, downloaded on Restore. NOT for community recordings (those
+    /// live in the public `recordings` bucket).
+    static var recordingBackupsStorageURL: URL {
+        URL(string: "\(projectURL)/storage/v1/object/recording-backups")!
+    }
+
     // MARK: - Headers
 
     static var headers: [String: String] {

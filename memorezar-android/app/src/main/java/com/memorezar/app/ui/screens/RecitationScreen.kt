@@ -777,6 +777,17 @@ fun RecitationScreen(
             var showPanel by remember { mutableStateOf(false) }
             LaunchedEffect(Unit) { showPanel = true }
 
+            // Tutorial AND master mode lock dismissal — tapping the backdrop
+            // and pressing system-back are both blocked. Master mode records
+            // a pass/fail via the explicit Try Again / Done buttons; an
+            // accidental dismissal would lose the mastery result silently.
+            val lockDismissal = isTutorialMode || uiState.isMasterMode
+            if (lockDismissal) {
+                androidx.activity.compose.BackHandler(enabled = true) {
+                    // Intentionally no-op: user must tap a button on the panel.
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -786,9 +797,7 @@ fun RecitationScreen(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
-                        // In tutorial mode the user must tap Continue/Done on the
-                        // sheet itself — tapping the backdrop does nothing.
-                        if (!isTutorialMode) viewModel.dismissCompletion()
+                        if (!lockDismissal) viewModel.dismissCompletion()
                     },
                 contentAlignment = Alignment.BottomCenter
             ) {
@@ -3853,9 +3862,13 @@ private fun SaveRecordingSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    // Switch represents "Private" mode: ON = private (safer
+                    // default, visually a locked-in protection), OFF = public.
+                    // Underlying `share` still means "publicly shared" for
+                    // persistence; only the UI is inverted.
                     Switch(
-                        checked = share,
-                        onCheckedChange = { share = it }
+                        checked = !share,
+                        onCheckedChange = { isPrivate -> share = !isPrivate }
                     )
                 }
             } else {

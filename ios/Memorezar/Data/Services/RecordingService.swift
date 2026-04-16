@@ -179,6 +179,53 @@ class RecordingService {
         return recording
     }
 
+    /// Delete a community recording (DB row + audio file in storage).
+    /// Requires the current user to own the recording — RLS enforces this
+    /// server-side. The audio file in Supabase Storage is best-effort: if the
+    /// DB delete succeeds but the file delete fails, the row is gone so the
+    /// recording is effectively unshared.
+    func deleteRecording(id: UUID, filePath: String?) async throws {
+        guard SupabaseConfig.isConfigured,
+              let token = AuthService.shared.accessToken else {
+            throw RecordingError.createFailed
+        }
+
+        // 1. Delete the DB row
+        var components = URLComponents(url: SupabaseConfig.recordingsURL, resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "id", value: "eq.\(id.uuidString)")]
+        guard let url = components.url else { throw RecordingError.createFailed }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            print("[RecordingService] DELETE row failed status=\(code)")
+            throw RecordingError.createFailed
+        }
+
+        // 2. Best-effort delete the audio file from storage. If this fails the
+        // row is already gone, so the recording is unshared either way.
+        if let filePath = filePath, !filePath.isEmpty {
+            let storageURL = SupabaseConfig.storageURL.appendingPathComponent(filePath)
+            var fileRequest = URLRequest(url: storageURL)
+            fileRequest.httpMethod = "DELETE"
+            fileRequest.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+            fileRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            do {
+                let (_, fileResponse) = try await session.data(for: fileRequest)
+                if let http = fileResponse as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    print("[RecordingService] Storage DELETE returned status=\(http.statusCode) — row already gone, continuing")
+                }
+            } catch {
+                print("[RecordingService] Storage DELETE threw \(error) — row already gone, continuing")
+            }
+        }
+    }
+
     /// Check if the current user already has a recording for this quote+language
     func fetchMyRecording(forHash hash: String, language: String) async -> Recording? {
         guard SupabaseConfig.isConfigured,

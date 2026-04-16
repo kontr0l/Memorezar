@@ -77,6 +77,26 @@ final class LocalRecordingStore: ObservableObject {
         save()
     }
 
+    /// Set or clear a local's community recording id (the link to its
+    /// published Supabase row). Pass `nil` to mark the local as unshared.
+    func setCommunityRecordingId(for recording: LocalRecording, id: UUID?) {
+        guard let index = recordings.firstIndex(where: { $0.id == recording.id }) else { return }
+        recordings[index].communityRecordingId = id
+        save()
+    }
+
+    /// Clear the communityRecordingId of any local that was pointing at
+    /// `communityId`. Useful after deleting a community recording, since
+    /// multiple locals shouldn't claim the same community row.
+    func clearCommunityLinksTo(communityId: UUID) {
+        var changed = false
+        for i in recordings.indices where recordings[i].communityRecordingId == communityId {
+            recordings[i].communityRecordingId = nil
+            changed = true
+        }
+        if changed { save() }
+    }
+
     /// Delete a local recording (removes both the file and metadata)
     func deleteRecording(_ recording: LocalRecording) {
         let fileURL = recordingsDirectory.appendingPathComponent(recording.localFileName)
@@ -114,6 +134,46 @@ final class LocalRecordingStore: ObservableObject {
     func loadAudioData(for recording: LocalRecording) -> Data? {
         let fileURL = recordingsDirectory.appendingPathComponent(recording.localFileName)
         return try? Data(contentsOf: fileURL)
+    }
+
+    // MARK: - Backup / Restore
+
+    /// Replace the entire recordings array (used by cloud restore). Does NOT
+    /// touch audio files on disk — the caller writes those separately via
+    /// `writeAudioFile`.
+    func replaceAll(_ newRecordings: [LocalRecording]) {
+        recordings = newRecordings
+        save()
+    }
+
+    /// Write audio data to the recordings directory at the given filename.
+    /// Used during cloud-restore download.
+    @discardableResult
+    func writeAudioFile(data: Data, localFileName: String) -> Bool {
+        let fileURL = recordingsDirectory.appendingPathComponent(localFileName)
+        do {
+            try data.write(to: fileURL)
+            return true
+        } catch {
+            print("[LocalRecordingStore] Failed to write audio file \(localFileName): \(error)")
+            return false
+        }
+    }
+
+    /// Absolute file URL for a recording's audio (used by backup upload).
+    func audioFileURL(for recording: LocalRecording) -> URL {
+        recordingsDirectory.appendingPathComponent(recording.localFileName)
+    }
+
+    /// Delete all audio files on disk. Used before a cloud restore to avoid
+    /// leaving stale .m4a files around for recordings that no longer exist
+    /// in the restored metadata array.
+    func wipeAllAudioFiles() {
+        let dir = recordingsDirectory
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        for url in files {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     // MARK: - Persistence

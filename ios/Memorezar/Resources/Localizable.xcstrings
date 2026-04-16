@@ -1911,6 +1911,9 @@
         }
       }
     },
+    "Local data was cleared and you've been signed out, but the server-side delete didn't complete. Please contact support if you see your data again." : {
+
+    },
     "Master This Quote" : {
       "localizations" : {
         "es" : {
@@ -3625,7 +3628,7 @@
         }
       }
     },
-    "This will permanently delete your account, cloud backups, and any community recordings you've shared. The request is processed within 30 days. You'll be signed out immediately." : {
+    "This will permanently delete your account, cloud backups, community recordings, and all your local data (quotes, practice history, stats). This cannot be undone." : {
 
     },
     "This will remove the pack and its %lld %@. You can re-add it anytime from Browse." : {
@@ -3946,7 +3949,7 @@
         }
       }
     },
-    "v73.1" : {
+    "v73.3" : {
 
     },
     "Version" : {
@@ -4089,7 +4092,7 @@
         }
       }
     },
-    "Your account deletion request has been received. Your account and data will be permanently deleted within 30 days." : {
+    "Your account and all associated data have been deleted." : {
 
     },
     "Your Email" : {
