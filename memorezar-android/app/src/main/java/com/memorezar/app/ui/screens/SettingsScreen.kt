@@ -246,12 +246,15 @@ fun SettingsScreen(
                 if (currentUser != null) {
                     val displayEmail = currentUser?.email
                     val isPrivateRelay = displayEmail?.contains("privaterelay.appleid.com") == true
-                    val displayName = if (!isPrivateRelay && !displayEmail.isNullOrEmpty()) {
-                        currentUser?.displayName ?: displayEmail.substringBefore("@")
-                    } else {
+                    // Match iOS: just show the email next to the person icon, no
+                    // separate display name. Falls back to "Apple Account" for
+                    // private-relay sign-ins where we don't have a real address.
+                    val accountText = if (isPrivateRelay || displayEmail.isNullOrEmpty()) {
                         stringResource(R.string.apple_account)
+                    } else {
+                        displayEmail
                     }
-                    IconInfoRow(Icons.Default.Person, displayName, if (isPrivateRelay) stringResource(R.string.signed_in_with_apple) else (displayEmail ?: ""))
+                    IconInfoRow(Icons.Default.Person, accountText, "")
                     CardDivider()
 
                     // Backup
