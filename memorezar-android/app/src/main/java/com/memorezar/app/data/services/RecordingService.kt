@@ -4,6 +4,7 @@ import android.util.Log
 import com.memorezar.app.data.models.Recording
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -78,7 +79,15 @@ class RecordingService @Inject constructor(
         val uploadResponse: HttpResponse = httpClient.post(
             "${SupabaseConfig.STORAGE_URL}/$storagePath"
         ) {
-            for ((k, v) in authService.headers()) header(k, v)
+            // Skip Content-Type from authService.headers() — Ktor's `header()`
+            // appends rather than replaces, so looping in our default JSON
+            // Content-Type and then adding "audio/mp4" produces a duplicate
+            // Content-Type header. Supabase Storage 400s on that, and the
+            // upload silently fails (which is why "share with community" didn't
+            // surface recordings in the community tab).
+            for ((k, v) in authService.headers()) {
+                if (!k.equals("Content-Type", ignoreCase = true)) header(k, v)
+            }
             header("Content-Type", "audio/mp4")
             setBody(audioData)
         }
@@ -108,6 +117,61 @@ class RecordingService @Inject constructor(
         }
         if (!metaResponse.status.isSuccess()) {
             throw Exception("Failed to save recording metadata (${metaResponse.status.value})")
+        }
+    }
+
+    /**
+     * Look up the signed-in user's own community recording for the given quote
+     * hash + language, if any. Used by the edit sheet to determine whether the
+     * recording is currently public.
+     */
+    suspend fun fetchMyRecording(quoteTextHash: String, language: String): Recording? {
+        val userId = authService.currentUser.value?.id ?: return null
+        return try {
+            val url = "${SupabaseConfig.RECORDINGS_URL}" +
+                "?quote_text_hash=eq.$quoteTextHash" +
+                "&language=eq.$language" +
+                "&user_id=eq.$userId" +
+                "&select=*&limit=1"
+            val response = httpClient.get(url) {
+                for ((k, v) in authService.headers()) header(k, v)
+            }
+            if (!response.status.isSuccess()) return null
+            val body: String = response.body()
+            json.decodeFromString<List<Recording>>(body).firstOrNull()
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchMyRecording failed: ${e.message}")
+            null
+        }
+    }
+
+    /**
+     * Remove the caller's own community recording: delete the audio file from
+     * Storage, then delete the recordings row. Used when the user toggles a
+     * previously-public recording back to private.
+     */
+    suspend fun deleteMyRecording(recording: Recording) {
+        // 1. Delete audio file from Storage.
+        try {
+            val storageDelete: HttpResponse = httpClient.delete(
+                "${SupabaseConfig.STORAGE_URL}/${recording.filePath}"
+            ) {
+                for ((k, v) in authService.headers()) header(k, v)
+            }
+            if (!storageDelete.status.isSuccess()) {
+                Log.w(TAG, "Storage delete returned ${storageDelete.status.value}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Storage delete failed: ${e.message}")
+        }
+        // 2. Delete recordings row. RLS ensures we can only delete our own.
+        val rowDelete: HttpResponse = httpClient.delete(
+            "${SupabaseConfig.RECORDINGS_URL}?id=eq.${recording.id}"
+        ) {
+            for ((k, v) in authService.headers()) header(k, v)
+        }
+        if (!rowDelete.status.isSuccess()) {
+            throw Exception("Failed to delete recording row (${rowDelete.status.value})")
         }
     }
 

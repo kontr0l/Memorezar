@@ -871,6 +871,7 @@ fun RecitationScreen(
             recordingDuration = audioState.recordingDuration,
             recordingFilePath = if (isEditing) null else viewModel.getRecordingFilePath(),
             initialName = audioState.editingRecordingName ?: "",
+            initialShare = audioState.editingIsPublic,
             isEditing = isEditing,
             isSignedIn = isSignedIn != null,
             onSignIn = onShowAuthSheet,
@@ -3704,7 +3705,7 @@ private fun PillActionButton(icon: ImageVector, label: String, tint: Color, onCl
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(icon, null, tint = displayTint, modifier = Modifier.size(20.dp).offset(y = 2.dp))
+        Icon(icon, null, tint = displayTint, modifier = Modifier.size(20.dp).offset(y = 5.dp))
         Text(label, fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = displayTint,
             modifier = Modifier.offset(y = 1.dp))
     }
@@ -3720,6 +3721,7 @@ private fun SaveRecordingSheet(
     recordingDuration: Double,
     recordingFilePath: String?,
     initialName: String = "",
+    initialShare: Boolean = false,
     isEditing: Boolean = false,
     isSignedIn: Boolean = false,
     onSignIn: () -> Unit = {},
@@ -3727,7 +3729,9 @@ private fun SaveRecordingSheet(
     onDiscard: () -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
-    var share by remember { mutableStateOf(false) }
+    // Key on initialShare so an async public-state check (fetchMyRecording)
+    // can flip the toggle from false → true after the sheet is already open.
+    var share by remember(initialShare) { mutableStateOf(initialShare) }
     var isNameError by remember { mutableStateOf(false) }
 
     // Preview playback state

@@ -98,6 +98,7 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.datastore.preferences)
     implementation(libs.security.crypto)
+    implementation("androidx.browser:browser:1.8.0")
 
     // Hilt DI
     implementation(libs.hilt.android)

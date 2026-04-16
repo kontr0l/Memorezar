@@ -47,6 +47,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import android.content.Intent
 import android.net.Uri
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.ui.platform.LocalContext
 import com.memorezar.app.core.alert.AlertManager
 import com.memorezar.app.data.models.MemorizationMode
@@ -490,8 +491,21 @@ fun AppNavigation(
                 onDismiss = { showAuthSheet = false },
                 onGoogleSignIn = {
                     val url = authService.getGoogleOAuthURL()
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    context.startActivity(intent)
+                    // Chrome Custom Tabs keeps the OAuth flow on top of our task
+                    // (vs. Intent.ACTION_VIEW which can launch an external
+                    // browser in a separate task). When the deep-link callback
+                    // fires, Android reliably routes back to MainActivity via
+                    // onNewIntent instead of recreating the activity and
+                    // resetting navigation to Home — this is what was kicking
+                    // users out of the save-recording flow after signing in.
+                    val customTabsIntent = CustomTabsIntent.Builder().build()
+                    try {
+                        customTabsIntent.launchUrl(context, Uri.parse(url))
+                    } catch (_: Exception) {
+                        // Fallback for devices without a Custom Tabs provider.
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                        context.startActivity(intent)
+                    }
                 }
             )
         }

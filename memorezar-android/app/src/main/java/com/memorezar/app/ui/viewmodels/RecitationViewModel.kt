@@ -109,6 +109,11 @@ data class AudioPlaybackState(
     val showSaveSheet: Boolean = false,
     val showDeleteConfirm: Boolean = false,
     val editingRecordingName: String? = null,
+    /** Whether the recording currently being edited has a matching public
+     *  (community) row on the server. Drives the initial Public/Private
+     *  toggle state in the edit sheet so the user can flip it either way. */
+    val editingIsPublic: Boolean = false,
+    val editingPublicRecording: Recording? = null,
     // Picker
     val showRecordingPicker: Boolean = false,
     val localRecordings: List<LocalRecording> = emptyList(),
@@ -711,7 +716,12 @@ class RecitationViewModel @Inject constructor(
     }
 
     fun dismissSaveSheet() {
-        _audioState.update { it.copy(showSaveSheet = false) }
+        _audioState.update { it.copy(
+            showSaveSheet = false,
+            editingRecordingName = null,
+            editingIsPublic = false,
+            editingPublicRecording = null
+        )}
     }
 
     /** Get the file path for preview playback of the just-recorded audio. */
@@ -742,6 +752,9 @@ class RecitationViewModel @Inject constructor(
                         durationSeconds = duration,
                         language = q.primaryLanguage ?: "en"
                     )
+                    // Refresh community list so the just-uploaded recording
+                    // appears under the Community tab without a screen reopen.
+                    withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
                 } catch (e: Exception) {
                     Log.w(TAG, "Upload failed: ${e.message}")
                 }
@@ -826,8 +839,26 @@ class RecitationViewModel @Inject constructor(
         if (src is PlaybackSource.Local) {
             _audioState.update { it.copy(
                 editingRecordingName = src.recording.name ?: "",
+                editingIsPublic = false,
+                editingPublicRecording = null,
                 showSaveSheet = true
             )}
+            // Check server-side whether this user already has a public row for
+            // this quote hash + language; if so, show the toggle as Public so
+            // the user can flip it off to unpublish. fetchMyRecording returns
+            // null when signed-out, so no extra auth guard is needed.
+            viewModelScope.launch(Dispatchers.IO) {
+                val mine = recordingService.fetchMyRecording(
+                    quoteTextHash = src.recording.quoteTextHash,
+                    language = src.recording.language
+                )
+                if (mine != null) {
+                    _audioState.update { it.copy(
+                        editingIsPublic = true,
+                        editingPublicRecording = mine
+                    )}
+                }
+            }
         }
     }
 
@@ -840,7 +871,9 @@ class RecitationViewModel @Inject constructor(
             _audioState.update { it.copy(
                 currentSource = PlaybackSource.Local(updated),
                 showSaveSheet = false,
-                editingRecordingName = null
+                editingRecordingName = null,
+                editingIsPublic = false,
+                editingPublicRecording = null
             )}
             loadRecordingsForCurrentQuote()
         }
@@ -852,28 +885,48 @@ class RecitationViewModel @Inject constructor(
         if (src is PlaybackSource.Local) {
             localRecordingStore.updateRecordingName(src.recording.id, newName)
             val updated = src.recording.copy(name = newName)
+            val wasPublic = _audioState.value.editingIsPublic
+            val existingPublic = _audioState.value.editingPublicRecording
             _audioState.update { it.copy(
                 currentSource = PlaybackSource.Local(updated),
                 showSaveSheet = false,
-                editingRecordingName = null
+                editingRecordingName = null,
+                editingIsPublic = false,
+                editingPublicRecording = null
             )}
             loadRecordingsForCurrentQuote()
 
-            // Upload to community if requested
-            if (shareWithCommunity) {
-                val audioData = localRecordingStore.loadAudioData(src.recording) ?: return
-                val q = quote ?: return
-                viewModelScope.launch(Dispatchers.IO) {
-                    try {
-                        recordingService.uploadRecording(
-                            audioData = audioData,
-                            quoteTextHash = src.recording.quoteTextHash,
-                            quoteTitle = q.displayTitle,
-                            durationSeconds = src.recording.durationSeconds,
-                            language = src.recording.language
-                        )
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Upload failed: ${e.message}")
+            val q = quote ?: return
+            when {
+                // Private → Public: upload now.
+                shareWithCommunity && !wasPublic -> {
+                    val audioData = localRecordingStore.loadAudioData(src.recording) ?: return
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            recordingService.uploadRecording(
+                                audioData = audioData,
+                                quoteTextHash = src.recording.quoteTextHash,
+                                quoteTitle = q.displayTitle,
+                                durationSeconds = src.recording.durationSeconds,
+                                language = src.recording.language
+                            )
+                            withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Upload failed: ${e.message}")
+                        }
+                    }
+                }
+                // Public → Private: delete the server-side row + audio file
+                // so the recording stops showing up in the community tab for
+                // other users. The local copy remains untouched.
+                !shareWithCommunity && wasPublic && existingPublic != null -> {
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            recordingService.deleteMyRecording(existingPublic)
+                            withContext(Dispatchers.Main) { loadRecordingsForCurrentQuote() }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Unpublish failed: ${e.message}")
+                        }
                     }
                 }
             }
