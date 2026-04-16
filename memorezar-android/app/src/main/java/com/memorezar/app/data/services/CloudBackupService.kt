@@ -23,6 +23,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -40,7 +41,13 @@ import javax.inject.Singleton
 
 private const val TAG = "CloudBackup"
 private const val BACKUPS_URL = "${SupabaseConfig.PROJECT_URL}/rest/v1/user_backups"
-private const val LAST_BACKUP_KEY = "memorezar_last_backup_millis"
+/** Legacy device-wide key — no longer written. Cleared on first init after upgrade
+ *  so it can't leak User A's backup timestamp into User B's next sign-in. */
+private const val LEGACY_LAST_BACKUP_KEY = "memorezar_last_backup_millis"
+/** Per-user key prefix. The footer's "last backed up X ago" is specific to the
+ *  signed-in user_id; without this scoping, timestamps leak across users
+ *  signing in on the same device. */
+private const val LAST_BACKUP_KEY_PREFIX = "memorezar_last_backup_millis_"
 
 @Singleton
 class CloudBackupService @Inject constructor(
@@ -71,18 +78,42 @@ class CloudBackupService @Inject constructor(
     private val _cloudBackupExists = MutableStateFlow(false)
     val cloudBackupExists: StateFlow<Boolean> = _cloudBackupExists.asStateFlow()
 
-    init {
-        val stored = prefs.getLong(LAST_BACKUP_KEY, -1L)
-        if (stored > 0) _lastBackupDate.value = stored
+    private fun lastBackupKey(userId: String) = "$LAST_BACKUP_KEY_PREFIX$userId"
 
-        // Check for cloud backup on sign-in
+    init {
+        // Clean up the legacy device-wide key. Any future reads come from the
+        // per-user key set in handleSignIn() below.
+        prefs.edit().remove(LEGACY_LAST_BACKUP_KEY).apply()
+
+        // Observe auth changes. Handles BOTH sign-in (load per-user timestamp,
+        // check cloud) and sign-out (clear in-memory state) so nothing from
+        // the previous user leaks into the next one.
         scope.launch {
-            authService.currentUser.collect { user ->
-                if (user != null) {
-                    checkForCloudBackup()
+            authService.currentUser
+                .distinctUntilChangedBy { it?.id }
+                .collect { user ->
+                    if (user != null) {
+                        handleSignIn(user.id)
+                    } else {
+                        handleSignOut()
+                    }
                 }
-            }
         }
+    }
+
+    private suspend fun handleSignIn(userId: String) {
+        // Load this user's last-backup timestamp (null if never backed up on
+        // this device under this user_id).
+        val stored = prefs.getLong(lastBackupKey(userId), -1L)
+        _lastBackupDate.value = if (stored > 0) stored else null
+        // Reset cloud-side state; checkForCloudBackup will populate it.
+        _cloudBackupExists.value = false
+        checkForCloudBackup()
+    }
+
+    private fun handleSignOut() {
+        _lastBackupDate.value = null
+        _cloudBackupExists.value = false
     }
 
     // MARK: - Backup
@@ -110,9 +141,11 @@ class CloudBackupService @Inject constructor(
             val now = System.currentTimeMillis()
             _lastBackupDate.value = now
             _cloudBackupExists.value = true
-            prefs.edit().putLong(LAST_BACKUP_KEY, now).apply()
+            authService.currentUser.value?.id?.let { userId ->
+                prefs.edit().putLong(lastBackupKey(userId), now).apply()
+            }
             _backupState.value = BackupState.IDLE
-            Log.i(TAG, "Backup complete")
+            Log.i(TAG, "Backup complete for user ${authService.currentUser.value?.id ?: "?"}")
         } catch (e: Exception) {
             Log.e(TAG, "Backup failed: ${e.message}", e)
             _backupState.value = BackupState.ERROR

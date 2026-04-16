@@ -29,7 +29,17 @@ final class CloudBackupService: ObservableObject {
 
     private var debounceTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
-    private let lastBackupKey = "memorezar_last_backup_date"
+    /// Legacy device-wide key — no longer written to. Cleaned up on first
+    /// sign-in after upgrade so it can't haunt the next signed-in user.
+    private let legacyLastBackupKey = "memorezar_last_backup_date"
+    /// Per-user key prefix. The footer's "last backed up X ago" must be scoped
+    /// to the specific user_id — otherwise User A's timestamp shows up when
+    /// User B signs in on the same device.
+    private let lastBackupKeyPrefix = "memorezar_last_backup_date_"
+    private func lastBackupKey(for userId: String) -> String {
+        "\(lastBackupKeyPrefix)\(userId)"
+    }
+
     private let session = URLSession.shared
 
     // MARK: - Weak references to stores (set during app init)
@@ -40,20 +50,24 @@ final class CloudBackupService: ObservableObject {
     weak var tutorialStore: TutorialStore?
 
     private init() {
-        // Restore last backup date
-        if let interval = UserDefaults.standard.object(forKey: lastBackupKey) as? Double {
-            lastBackupDate = Date(timeIntervalSince1970: interval)
-        }
+        // Clean up the legacy device-wide key — any future reads should come
+        // from the per-user key via onSignIn().
+        UserDefaults.standard.removeObject(forKey: legacyLastBackupKey)
 
-        // Observe sign-in events. Do NOT use .dropFirst(): if the user was
+        // Observe auth changes. Do NOT use .dropFirst(): if the user was
         // already signed in before this service subscribed (cold-launch restore
-        // from Keychain), that's the emission we need. The nil-guard inside the
-        // closure covers the "initial nil" case dropFirst was meant to avoid.
+        // from Keychain), that's the emission we need. We handle BOTH sign-in
+        // and sign-out here so lastBackupDate/cloudBackupDate/cloudBackupExists
+        // never leak between users on the same device.
         AuthService.shared.$currentUser
             .removeDuplicates(by: { $0?.id == $1?.id })
             .sink { [weak self] user in
-                guard let self, user != nil else { return }
-                Task { await self.onSignIn() }
+                guard let self else { return }
+                if let userId = user?.id {
+                    Task { await self.onSignIn(userId: userId) }
+                } else {
+                    Task { await self.onSignOut() }
+                }
             }
             .store(in: &cancellables)
     }
@@ -112,11 +126,15 @@ final class CloudBackupService: ObservableObject {
             // 4. UPSERT to Supabase
             try await upsertBackup(payloadData)
 
-            lastBackupDate = Date()
+            let now = Date()
+            lastBackupDate = now
+            cloudBackupDate = now
             cloudBackupExists = true
-            UserDefaults.standard.set(lastBackupDate!.timeIntervalSince1970, forKey: lastBackupKey)
+            if let userId = AuthService.shared.currentUser?.id {
+                UserDefaults.standard.set(now.timeIntervalSince1970, forKey: lastBackupKey(for: userId))
+            }
             backupState = .idle
-            print("[CloudBackup] Backup complete")
+            print("[CloudBackup] Backup complete for user \(AuthService.shared.currentUser?.id ?? "?")")
         } catch {
             print("[CloudBackup] Backup failed: \(error.localizedDescription)")
             backupState = .error(error.localizedDescription)
@@ -142,6 +160,8 @@ final class CloudBackupService: ObservableObject {
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                print("[CloudBackup] Check HTTP \(code) — leaving local state untouched")
                 return false
             }
             let rows = try JSONDecoder().decode([[String: String]].self, from: data)
@@ -152,6 +172,16 @@ final class CloudBackupService: ObservableObject {
             }
             let exists = !rows.isEmpty
             await MainActor.run { cloudBackupExists = exists }
+            // NOTE: we used to also clear `lastBackupDate` here when the result
+            // was empty, but "200 OK + 0 rows" can mean either "no backup" OR
+            // "RLS filtered our own row" OR "different provider user_id". All
+            // three return 0 rows indistinguishably. Clearing UserDefaults in
+            // those cases nuked the user's "last backed up X ago" footer
+            // immediately after a successful backup — wrong and scary. The
+            // Restore row is hidden when cloudBackupExists=false, which is the
+            // actionable UI concern; the footer can stay honest about local
+            // write history.
+            print("[CloudBackup] Check result: exists=\(exists), rows=\(rows.count)")
             return exists
         } catch {
             print("[CloudBackup] Check failed: \(error.localizedDescription)")
@@ -233,10 +263,30 @@ final class CloudBackupService: ObservableObject {
 
     // MARK: - Sign-In Handler
 
-    private func onSignIn() async {
-        // Check if a cloud backup exists so the Restore button is enabled/disabled correctly.
-        // No auto-prompt — user must manually tap "Restore from Backup" if they want it.
+    private func onSignIn(userId: String) async {
+        // Load this user's last-backup timestamp from their per-user UserDefaults
+        // key. nil if this user hasn't backed up on this device yet.
+        let restoredDate: Date? = UserDefaults.standard
+            .object(forKey: lastBackupKey(for: userId))
+            .flatMap { $0 as? Double }
+            .map { Date(timeIntervalSince1970: $0) }
+        await MainActor.run {
+            lastBackupDate = restoredDate
+            // Reset cloud-side state; checkForCloudBackup will populate it.
+            cloudBackupDate = nil
+            cloudBackupExists = false
+        }
+        // Check if a cloud backup exists so the Restore row shows/hides correctly.
         _ = await checkForCloudBackup()
+    }
+
+    @MainActor
+    private func onSignOut() async {
+        // Clear every bit of in-memory backup state so nothing from the
+        // previous user leaks into the next sign-in.
+        lastBackupDate = nil
+        cloudBackupDate = nil
+        cloudBackupExists = false
     }
 
     // MARK: - Supabase REST Helpers

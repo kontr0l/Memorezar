@@ -263,34 +263,38 @@ struct SettingsScreen: View {
                 }
                 .disabled(cloudBackupService.backupState == .backingUp)
 
-                // Restore from Backup
-                Button {
-                    showRestoreConfirm = true
-                } label: {
-                    Label("Restore from Backup", systemImage: "arrow.down.circle")
-                }
-                .disabled(cloudBackupService.backupState == .restoring || !cloudBackupService.cloudBackupExists)
-                .confirmationDialog(
-                    "Restore from cloud backup?",
-                    isPresented: $showRestoreConfirm,
-                    titleVisibility: .visible
-                ) {
-                    Button("Replace with Cloud Data") {
-                        Task {
-                            do {
-                                let payload = try await cloudBackupService.fetchBackupPayload()
-                                await cloudBackupService.applyRestore(payload)
-                            } catch {
-                                print("[Settings] Restore failed: \(error.localizedDescription)")
+                // Restore from Backup — only show the row when a backup actually
+                // exists on the server. Hiding (rather than disabling) prevents
+                // user confusion when the footer and button state used to drift.
+                if cloudBackupService.cloudBackupExists {
+                    Button {
+                        showRestoreConfirm = true
+                    } label: {
+                        Label("Restore from Backup", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(cloudBackupService.backupState == .restoring)
+                    .confirmationDialog(
+                        "Restore from cloud backup?",
+                        isPresented: $showRestoreConfirm,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Replace with Cloud Data") {
+                            Task {
+                                do {
+                                    let payload = try await cloudBackupService.fetchBackupPayload()
+                                    await cloudBackupService.applyRestore(payload)
+                                } catch {
+                                    print("[Settings] Restore failed: \(error.localizedDescription)")
+                                }
                             }
                         }
-                    }
-                    Button("Cancel", role: .cancel) { }
-                } message: {
-                    if let date = cloudBackupService.cloudBackupDate {
-                        Text("This will replace all local data with your cloud backup from \(date.formatted(date: .abbreviated, time: .shortened)).")
-                    } else {
-                        Text("This will replace all local data with your cloud backup.")
+                        Button("Cancel", role: .cancel) { }
+                    } message: {
+                        if let date = cloudBackupService.cloudBackupDate {
+                            Text("This will replace all local data with your cloud backup from \(date.formatted(date: .abbreviated, time: .shortened)).")
+                        } else {
+                            Text("This will replace all local data with your cloud backup.")
+                        }
                     }
                 }
 
@@ -348,7 +352,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v72.5")
+                Text("v72.9")
                     .foregroundColor(.secondary)
             }
 

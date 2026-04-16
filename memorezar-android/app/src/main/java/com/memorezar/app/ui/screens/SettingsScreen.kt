@@ -269,26 +269,33 @@ fun SettingsScreen(
                     IconClickRow(Icons.Default.ArrowUpward, stringResource(R.string.back_up_now)) {
                         coroutineScope.launch { cloudBackupService.performBackup() }
                     }
-                    CardDivider()
-                    IconClickRow(Icons.Default.ArrowDownward, stringResource(R.string.restore_from_backup)) {
-                        showRestoreConfirm = true
-                    }
 
-                    if (showRestoreConfirm) {
-                        AlertDialog(
-                            onDismissRequest = { showRestoreConfirm = false },
-                            title = { Text(stringResource(R.string.restore_from_cloud_title)) },
-                            text = { Text(stringResource(R.string.restore_from_cloud_message)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    showRestoreConfirm = false
-                                    coroutineScope.launch { cloudBackupService.fetchAndRestore() }
-                                }) { Text(stringResource(R.string.replace_with_cloud_data), color = MaterialTheme.colorScheme.error) }
-                            },
-                            dismissButton = {
-                                TextButton(onClick = { showRestoreConfirm = false }) { Text(stringResource(R.string.cancel)) }
-                            }
-                        )
+                    // Restore row only shows when a backup actually exists on
+                    // the server — mirrors iOS behavior. Hiding (vs disabling)
+                    // avoids the confusing case where the row is visible but
+                    // tapping it fails because there's nothing to restore.
+                    if (backupExists) {
+                        CardDivider()
+                        IconClickRow(Icons.Default.ArrowDownward, stringResource(R.string.restore_from_backup)) {
+                            showRestoreConfirm = true
+                        }
+
+                        if (showRestoreConfirm) {
+                            AlertDialog(
+                                onDismissRequest = { showRestoreConfirm = false },
+                                title = { Text(stringResource(R.string.restore_from_cloud_title)) },
+                                text = { Text(stringResource(R.string.restore_from_cloud_message)) },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        showRestoreConfirm = false
+                                        coroutineScope.launch { cloudBackupService.fetchAndRestore() }
+                                    }) { Text(stringResource(R.string.replace_with_cloud_data), color = MaterialTheme.colorScheme.error) }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showRestoreConfirm = false }) { Text(stringResource(R.string.cancel)) }
+                                }
+                            )
+                        }
                     }
 
                     CardDivider()
@@ -383,7 +390,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.7.5")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.7.6")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
