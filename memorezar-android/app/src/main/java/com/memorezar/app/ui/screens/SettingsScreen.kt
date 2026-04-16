@@ -310,10 +310,14 @@ fun SettingsScreen(
                     var showDeleteAccountConfirm by remember { mutableStateOf(false) }
                     var showDeleteReceivedDialog by remember { mutableStateOf(false) }
                     var deleteAccountInFlight by remember { mutableStateOf(false) }
+                    var deleteReceivedMessage by remember { mutableStateOf("") }
 
                     IconClickRow(Icons.Default.Delete, stringResource(R.string.delete_my_account), color = MaterialTheme.colorScheme.error) {
                         if (!deleteAccountInFlight) showDeleteAccountConfirm = true
                     }
+
+                    val successMsg = stringResource(R.string.delete_account_received_message)
+                    val partialMsg = stringResource(R.string.delete_account_partial_message)
 
                     if (showDeleteAccountConfirm) {
                         AlertDialog(
@@ -324,21 +328,20 @@ fun SettingsScreen(
                                 TextButton(onClick = {
                                     showDeleteAccountConfirm = false
                                     deleteAccountInFlight = true
-                                    val email = currentUser?.email ?: ""
-                                    val userId = currentUser?.id ?: "unknown"
-                                    val body = "Account deletion requested from in-app Settings. User ID: $userId."
                                     coroutineScope.launch {
-                                        try {
-                                            supportTicketService.submitTicket(
-                                                reason = SupportReason.ACCOUNT_DELETION,
-                                                message = body,
-                                                email = email
-                                            )
-                                        } catch (_: Exception) {
-                                            // Still sign out even if the ticket fails;
-                                            // the user can re-submit via support later.
-                                        }
+                                        // Server-side cascade delete first so the JWT
+                                        // is still valid when the Edge Function checks
+                                        // it. If it fails, still wipe locally + sign
+                                        // out so the user isn't stuck on a dead session.
+                                        val serverError = authService.deleteAccountOnServer()
+
+                                        // Local wipe = same as Delete All Data + Reset Settings.
+                                        quoteStore.clearAllData()
+                                        tutorialStore.resetAll()
+                                        settingsStore.resetToDefaults()
                                         authService.signOut()
+
+                                        deleteReceivedMessage = if (serverError == null) successMsg else partialMsg
                                         deleteAccountInFlight = false
                                         showDeleteReceivedDialog = true
                                     }
@@ -358,7 +361,7 @@ fun SettingsScreen(
                         AlertDialog(
                             onDismissRequest = { showDeleteReceivedDialog = false },
                             title = { Text(stringResource(R.string.delete_account_received_title)) },
-                            text = { Text(stringResource(R.string.delete_account_received_message)) },
+                            text = { Text(deleteReceivedMessage) },
                             confirmButton = {
                                 TextButton(onClick = { showDeleteReceivedDialog = false }) {
                                     Text(stringResource(R.string.ok))
@@ -393,7 +396,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.7.6")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.7.7")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }

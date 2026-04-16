@@ -275,6 +275,36 @@ class AuthService @Inject constructor(
         }
     }
 
+    // MARK: - Account Deletion
+
+    /**
+     * Calls the `delete-user-account` Edge Function with the current user's
+     * JWT. Returns null on success, an error string on failure. The function
+     * cascade-deletes recordings (rows + audio files), user_backups,
+     * support_tickets, and the auth.users row.
+     */
+    suspend fun deleteAccountOnServer(): String? {
+        val token = accessToken ?: return "Not signed in"
+        return try {
+            val response: HttpResponse = httpClient.post(
+                "${SupabaseConfig.PROJECT_URL}/functions/v1/delete-user-account"
+            ) {
+                header("apikey", SupabaseConfig.ANON_KEY)
+                header("Authorization", "Bearer $token")
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+            if (response.status.isSuccess()) {
+                null
+            } else {
+                val body: String = try { response.body() } catch (_: Exception) { "" }
+                "HTTP ${response.status.value}: $body"
+            }
+        } catch (e: Exception) {
+            e.message ?: "Unknown error"
+        }
+    }
+
     // MARK: - Helpers
 
     /** Build standard Supabase headers with current auth token. */

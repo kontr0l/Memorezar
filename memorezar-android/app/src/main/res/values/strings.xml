@@ -147,10 +147,11 @@
     <!-- Account Deletion -->
     <string name="delete_my_account">Delete My Account</string>
     <string name="delete_account_title">Delete My Account?</string>
-    <string name="delete_account_message">This will permanently delete your account, cloud backups, and any community recordings you\'ve shared. The request is processed within 30 days. You\'ll be signed out immediately.</string>
+    <string name="delete_account_message">This will permanently delete your account, cloud backups, community recordings, and all your local data (quotes, practice history, stats). This cannot be undone.</string>
     <string name="delete_account_confirm">Delete Account</string>
     <string name="delete_account_received_title">Request Received</string>
-    <string name="delete_account_received_message">Your account deletion request has been received. Your account and data will be permanently deleted within 30 days.</string>
+    <string name="delete_account_received_message">Your account and all associated data have been deleted.</string>
+    <string name="delete_account_partial_message">Local data was cleared and you\'ve been signed out, but the server-side delete didn\'t complete. Please contact support if you see your data again.</string>
 
     <!-- Paywall -->
     <string name="unlock_pro">Unlock Memorezar Pro</string>

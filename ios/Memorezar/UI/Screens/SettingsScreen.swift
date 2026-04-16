@@ -121,7 +121,7 @@ struct SettingsScreen: View {
                     submitAccountDeletionRequest()
                 }
             } message: {
-                Text("This will permanently delete your account, cloud backups, and any community recordings you've shared. The request is processed within 30 days. You'll be signed out immediately.")
+                Text("This will permanently delete your account, cloud backups, community recordings, and all your local data (quotes, practice history, stats). This cannot be undone.")
             }
             .alert("Request Received", isPresented: Binding(
                 get: { deleteAccountConfirmationMessage != nil },
@@ -352,7 +352,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v72.9")
+                Text("v73.0")
                     .foregroundColor(.secondary)
             }
 
@@ -401,35 +401,57 @@ struct SettingsScreen: View {
         }
     }
 
-    /// Files an account-deletion support ticket and signs the user out. The
-    /// in-app mechanism satisfies the Play Store / App Store deletion
-    /// requirement; the backend fulfills the deletion within 30 days.
+    /// Performs the full account deletion: server-side cascade (recordings +
+    /// audio files + cloud backups + support tickets + auth user), then local
+    /// data wipe + sign-out. Combines what Sign Out and Delete All Data do,
+    /// plus the Supabase cleanup.
     private func submitAccountDeletionRequest() {
         guard !deleteAccountInFlight else { return }
         deleteAccountInFlight = true
 
-        let userEmail = authService.currentUser?.email ?? ""
-        let userId = authService.currentUser?.id ?? "unknown"
-        let message = "Account deletion requested from in-app Settings. User ID: \(userId)."
-
         Task {
-            do {
-                try await SupportTicketService.shared.submitTicket(
-                    reason: .accountDeletion,
-                    message: message,
-                    email: userEmail
-                )
-            } catch {
-                // Even if the ticket fails, sign the user out and surface a
-                // graceful message — they can retry or contact support directly.
-                print("[Settings] Deletion ticket failed: \(error.localizedDescription)")
+            let serverError = await deleteUserAccountOnServer()
+            if let err = serverError {
+                print("[Settings] Server-side account delete failed: \(err)")
+                // Fall through anyway — local wipe + signOut still happens so
+                // the user isn't stuck on a dead session.
             }
 
             await MainActor.run {
+                // Local wipe = same path as the Delete All Data button.
+                quoteStore.clearAllData()
+                tutorialStore.resetAll()
+                settingsStore.resetToDefaults()
                 authService.signOut()
                 deleteAccountInFlight = false
-                deleteAccountConfirmationMessage = String(localized: "Your account deletion request has been received. Your account and data will be permanently deleted within 30 days.")
+                deleteAccountConfirmationMessage = serverError == nil
+                    ? String(localized: "Your account and all associated data have been deleted.")
+                    : String(localized: "Local data was cleared and you've been signed out, but the server-side delete didn't complete. Please contact support if you see your data again.")
             }
+        }
+    }
+
+    /// Calls the delete-user-account Edge Function with the user's JWT.
+    /// Returns nil on success, an error string on failure.
+    private func deleteUserAccountOnServer() async -> String? {
+        guard let token = authService.accessToken else {
+            return "Not signed in"
+        }
+        let url = URL(string: "\(SupabaseConfig.projectURL)/functions/v1/delete-user-account")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        req.timeoutInterval = 20
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            guard let http = response as? HTTPURLResponse else { return "no response" }
+            if (200...299).contains(http.statusCode) { return nil }
+            let body = String(data: data, encoding: .utf8) ?? ""
+            return "HTTP \(http.statusCode): \(body)"
+        } catch {
+            return error.localizedDescription
         }
     }
 }
