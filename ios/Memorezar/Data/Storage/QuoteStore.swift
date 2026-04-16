@@ -150,9 +150,11 @@ final class QuoteStore: ObservableObject {
               let image = UIImage(data: data),
               let jpegData = image.jpegData(compressionQuality: 0.85),
               let filename = saveCategoryImage(jpegData, for: category.id) else { return }
-        if let idx = categories.firstIndex(where: { $0.id == category.id }) {
-            categories[idx].imageSource = .local(filename)
-            saveCategories()
+        await MainActor.run {
+            if let idx = categories.firstIndex(where: { $0.id == category.id }) {
+                categories[idx].imageSource = .local(filename)
+                saveCategories()
+            }
         }
     }
 
@@ -574,9 +576,14 @@ final class QuoteStore: ObservableObject {
               let image = UIImage(data: data),
               let jpegData = image.jpegData(compressionQuality: 0.85),
               let filename = saveCategoryImage(jpegData, for: categoryId) else { return }
-        if let idx = categories.firstIndex(where: { $0.id == categoryId }) {
-            categories[idx].imageSource = .local(filename)
-            saveCategories()
+        // Dispatch back to the main actor so the @Published mutation fires
+        // on the main thread — otherwise SwiftUI won't re-render the Library
+        // grid until the next navigation event.
+        await MainActor.run {
+            if let idx = categories.firstIndex(where: { $0.id == categoryId }) {
+                categories[idx].imageSource = .local(filename)
+                saveCategories()
+            }
         }
     }
 

@@ -375,19 +375,33 @@ struct SuggestionPackCard: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottomLeading) {
-                // Cover image — remote URL or gradient fallback.
-                // Forced into geo.size and clipped locally so wide/tall
-                // images can never escape the card bounds.
+                // Cover image — remote URL or gradient fallback. Uses the
+                // phase-based AsyncImage API so the load survives LazyVGrid
+                // re-layouts (the 2-callback form can silently abandon a
+                // load mid-layout, leaving a permanent gradient placeholder).
                 Group {
                     if let urlString = pack.coverURL, let url = URL(string: urlString) {
-                        AsyncImage(url: url) { image in
-                            image.resizable().scaledToFill()
-                        } placeholder: {
-                            LinearGradient(
-                                colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image.resizable().scaledToFill()
+                            case .failure:
+                                // Retry on next render by changing identity.
+                                // Fallback to gradient meanwhile.
+                                LinearGradient(
+                                    colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            case .empty:
+                                LinearGradient(
+                                    colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            @unknown default:
+                                EmptyView()
+                            }
                         }
                     } else {
                         LinearGradient(
