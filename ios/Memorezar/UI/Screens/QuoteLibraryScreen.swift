@@ -82,6 +82,7 @@ struct QuoteLibraryScreen: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: QuoteCategory.self) { category in
                 CategoryDetailView(category: category)
+                    .id(category.id)
             }
             .sheet(isPresented: $showingQuoteInput) {
                 QuoteInputView()

@@ -172,7 +172,7 @@ struct SettingsScreen: View {
             }
             .alert("Delete My Account?", isPresented: $showingDeleteAccountAlert) {
                 Button("Cancel", role: .cancel) { }
-                Button("Delete Account", role: .destructive) {
+                Button("Delete", role: .destructive) {
                     submitAccountDeletionRequest()
                 }
             } message: {

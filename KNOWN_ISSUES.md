@@ -27,6 +27,8 @@ All text that is part of the app UI (buttons, labels, messages, section headers,
 
 5. **After staging, run `git diff --cached --stat` and sanity-check the numbers.** Large unexpected deletions (e.g., 540 deletions in a commit about "pack navigation") mean something went wrong. STOP, investigate with `git diff --cached -- <file>`, and fix before committing.
 
+6. **Never `git rebase --skip` without diffing the skipped commit.** A conflicting commit may contain changes that the remote does NOT have — skipping it drops those silently. Before skipping, run `git diff HEAD <commit-hash>` or `git show <commit-hash>` to verify every change in the skipped commit is already present on the remote. If even one hunk is unique, cherry-pick or manually apply it instead of skipping.
+
 For major refactors or multi-device work, use feature branches + PRs so reviewers can catch regressions before they hit main.
 
 ---
