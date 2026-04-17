@@ -383,17 +383,12 @@ fun SettingsScreen(
                                         // out so the user isn't stuck on a dead session.
                                         val serverError = authService.deleteAccountOnServer()
 
-                                        // Local wipe = same as Delete All Data + Reset Settings.
-                                        // Server-side community recordings are
-                                        // cascade-deleted by delete-user-account
-                                        // Edge Function; we only wipe locally here.
-                                        quoteStore.clearAllData()
-                                        tutorialStore.resetAll()
-                                        settingsStore.resetToDefaults()
-                                        localRecordingStore.wipeAllAudioFiles()
-                                        localRecordingStore.replaceAll(emptyList())
-                                        authService.signOut()
-
+                                        // Show confirmation BEFORE wiping — because
+                                        // tutorialStore.resetAll() flips hasCompletedOnboarding
+                                        // which immediately navigates to OnboardingFlow,
+                                        // disposing this SettingsScreen and swallowing any
+                                        // dialog set after. The user dismisses the dialog,
+                                        // THEN the wipe + sign-out fires.
                                         deleteReceivedMessage = if (serverError == null) successMsg else partialMsg
                                         deleteAccountInFlight = false
                                         showDeleteReceivedDialog = true
@@ -411,12 +406,25 @@ fun SettingsScreen(
                     }
 
                     if (showDeleteReceivedDialog) {
+                        // Wipe runs AFTER the user dismisses this dialog —
+                        // tutorialStore.resetAll() navigates to OnboardingFlow
+                        // which would dispose SettingsScreen (and this dialog)
+                        // if we wiped before showing it.
+                        val finishWipe = {
+                            showDeleteReceivedDialog = false
+                            quoteStore.clearAllData()
+                            tutorialStore.resetAll()
+                            settingsStore.resetToDefaults()
+                            localRecordingStore.wipeAllAudioFiles()
+                            localRecordingStore.replaceAll(emptyList())
+                            authService.signOut()
+                        }
                         AlertDialog(
-                            onDismissRequest = { showDeleteReceivedDialog = false },
+                            onDismissRequest = finishWipe,
                             title = { Text(stringResource(R.string.delete_account_received_title)) },
                             text = { Text(deleteReceivedMessage) },
                             confirmButton = {
-                                TextButton(onClick = { showDeleteReceivedDialog = false }) {
+                                TextButton(onClick = finishWipe) {
                                     Text(stringResource(R.string.ok))
                                 }
                             }
@@ -449,7 +457,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.2")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.3")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }

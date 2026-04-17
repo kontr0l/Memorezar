@@ -267,8 +267,17 @@ final class CloudBackupService: ObservableObject {
             hasCompletedOnboarding: payload.hasCompletedOnboarding
         )
 
-        // 5. Download category images
+        // 5. Download category images from user-images backup bucket
+        backupLog.info("Category image manifest has \(payload.categoryImageManifest.count) entries")
         await downloadCategoryImages(manifest: payload.categoryImageManifest)
+
+        // 5b. Validate: fix .local(filename) entries where file is missing
+        let fixedCount = quoteStore.fixMissingCoverImageFiles(imagesDirectory: categoryImagesDirectory)
+        if fixedCount > 0 {
+            backupLog.info("Fixed \(fixedCount) categories with missing image files → .none")
+        }
+
+
 
         // 6. Restore local recordings: wipe on-disk files first, then replace
         //    metadata, then download audio files. Order matters — we don't

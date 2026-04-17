@@ -422,7 +422,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v74.8")
+                Text("v75.3")
                     .foregroundColor(.secondary)
             }
 
@@ -509,6 +509,11 @@ struct SettingsScreen: View {
     /// Calls the delete-user-account Edge Function with the user's JWT.
     /// Returns nil on success, an error string on failure.
     private func deleteUserAccountOnServer() async -> String? {
+        // Force a token refresh before the delete call — Supabase JWTs expire
+        // after 1 hour and the Edge Functions gateway rejects expired tokens
+        // with 401 (no function logs, just silent failure). The 50-min refresh
+        // timer can miss if the app was backgrounded.
+        await authService.refreshTokenIfNeeded()
         guard let token = authService.accessToken else {
             return "Not signed in"
         }

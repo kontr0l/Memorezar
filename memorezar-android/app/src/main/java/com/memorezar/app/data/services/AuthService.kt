@@ -284,6 +284,11 @@ class AuthService @Inject constructor(
      * support_tickets, and the auth.users row.
      */
     suspend fun deleteAccountOnServer(): String? {
+        // Force a token refresh — Supabase JWTs expire after 1 hour and the
+        // Edge Functions gateway rejects expired tokens with 401 (silent, no
+        // function logs). The 50-min refresh timer can miss if the app was
+        // backgrounded.
+        refreshTokenIfNeeded()
         val token = accessToken ?: return "Not signed in"
         return try {
             val response: HttpResponse = httpClient.post(

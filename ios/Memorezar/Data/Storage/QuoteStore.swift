@@ -442,7 +442,7 @@ final class QuoteStore: ObservableObject {
         }
     }
 
-    private func saveCategories() {
+    func saveCategories() {
         do {
             let data = try JSONEncoder().encode(categories)
             userDefaults.set(data, forKey: categoriesKey)
@@ -571,8 +571,26 @@ final class QuoteStore: ObservableObject {
         pendingCategoryNavigation = category
     }
 
+    /// Post-restore validation: any category with `.local(filename)` where
+    /// the file is missing on disk gets reset to `.none`. Returns the count.
+    @discardableResult
+    func fixMissingCoverImageFiles(imagesDirectory: URL) -> Int {
+        var count = 0
+        for i in categories.indices {
+            if case .local(let filename) = categories[i].imageSource {
+                let fileURL = imagesDirectory.appendingPathComponent(filename)
+                if !FileManager.default.fileExists(atPath: fileURL.path) {
+                    categories[i].imageSource = .none
+                    count += 1
+                }
+            }
+        }
+        if count > 0 { saveCategories() }
+        return count
+    }
+
     /// Download a remote cover image and save it locally for a category
-    private func downloadAndSaveCoverImage(from urlString: String, for categoryId: UUID) async {
+    func downloadAndSaveCoverImage(from urlString: String, for categoryId: UUID) async {
         guard let url = URL(string: urlString),
               let (data, _) = try? await URLSession.shared.data(from: url),
               let image = UIImage(data: data),
@@ -600,8 +618,26 @@ final class QuoteStore: ObservableObject {
         saveQuotes()
         saveSessions()
         saveCategories()
+
+        userDefaults.removeObject(forKey: packVersionsKey)
         for (packId, version) in packVersions {
             setInstalledPackVersion(packId, version: version)
+        }
+
+        // Reconcile: any pack in installedPackVersions that has no matching
+        // category is orphaned. Remove so it reappears in Home browse.
+        var cleaned = installedPackVersions
+        var removed = [String]()
+        for packId in cleaned.keys {
+            let hasCategory = categories.contains { $0.sourcePackId == packId }
+            if !hasCategory {
+                cleaned.removeValue(forKey: packId)
+                removed.append(packId)
+            }
+        }
+        if !removed.isEmpty {
+            userDefaults.set(cleaned, forKey: packVersionsKey)
+            print("[QuoteStore] Restore reconcile: removed orphaned packVersions \(removed)")
         }
     }
 
