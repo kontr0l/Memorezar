@@ -6,6 +6,7 @@ struct QuoteLibraryScreen: View {
     @State private var showingQuoteInput = false
     @State private var showingNewCategory = false
     @State private var categoryToDelete: QuoteCategory?
+    @State private var settingsCategory: QuoteCategory?
     @Binding var path: NavigationPath
     private let columns = [
         GridItem(.flexible(), spacing: 12),
@@ -81,7 +82,9 @@ struct QuoteLibraryScreen: View {
             .tipOverlay(.addCategory, verticalOffset: 55)
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: QuoteCategory.self) { category in
-                CategoryDetailView(category: category)
+                CategoryDetailView(category: category, libraryPath: $path, onOpenSettings: {
+                    settingsCategory = quoteStore.categories.first { $0.id == category.id } ?? category
+                })
                     .id(category.id)
             }
             .sheet(isPresented: $showingQuoteInput) {
@@ -89,6 +92,28 @@ struct QuoteLibraryScreen: View {
             }
             .sheet(isPresented: $showingNewCategory) {
                 CategoryEditView()
+            }
+            .sheet(item: $settingsCategory) { category in
+                CategorySettingsView(
+                    category: category,
+                    onDeleted: {
+                        let catToDelete = category
+                        // 1. Pop CategoryDetailView instantly so Library
+                        //    root is behind the sheet during slide-down.
+                        var tx = Transaction()
+                        tx.disablesAnimations = true
+                        withTransaction(tx) { path = NavigationPath() }
+                        // 2. Dismiss the sheet (normal slide-down over Library).
+                        settingsCategory = nil
+                        // 3. Delete with the same animation as the
+                        //    context-menu "Remove Pack" flow.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                            withAnimation(.easeInOut(duration: 0.35)) {
+                                quoteStore.deleteCategory(catToDelete)
+                            }
+                        }
+                    }
+                )
             }
             .alert(
                 categoryToDelete?.sourcePackId != nil
@@ -235,20 +260,23 @@ struct CategoryDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var quoteStore: QuoteStore
     let category: QuoteCategory
+    @Binding var libraryPath: NavigationPath
+    var onOpenSettings: (() -> Void)?
 
     @State private var searchText = ""
     @State private var selectedQuote: Quote?
     @State private var quoteToEdit: Quote?
     @State private var showingQuoteInput = false
-    @State private var showingCategorySettings = false
     @State private var showNavTitle = false
     @State private var editedName: String
     @FocusState private var titleFieldFocused: Bool
 
     private var isPack: Bool { category.sourcePackId != nil }
 
-    init(category: QuoteCategory) {
+    init(category: QuoteCategory, libraryPath: Binding<NavigationPath> = .constant(NavigationPath()), onOpenSettings: (() -> Void)? = nil) {
         self.category = category
+        self._libraryPath = libraryPath
+        self.onOpenSettings = onOpenSettings
         _editedName = State(initialValue: category.name)
     }
 
@@ -359,12 +387,6 @@ struct CategoryDetailView: View {
         .sheet(item: $quoteToEdit) { quote in
             QuoteInputView(quoteToEdit: quote)
         }
-        .sheet(isPresented: $showingCategorySettings) {
-            CategorySettingsView(
-                category: currentCategory,
-                onDeleted: { dismiss() }
-            )
-        }
         .onAppear {
             editedName = currentCategory.name
         }
@@ -379,7 +401,7 @@ struct CategoryDetailView: View {
         HStack(alignment: .top, spacing: 12) {
             // Cover photo thumbnail — tap to open category settings
             Button {
-                showingCategorySettings = true
+                onOpenSettings?()
             } label: {
                 CategoryThumbnail(category: currentCategory, size: 70)
                     .overlay(
@@ -764,8 +786,6 @@ struct CategorySettingsView: View {
             ) {
                 Button("Cancel", role: .cancel) {}
                 Button(isPack ? String(localized: "Remove") : String(localized: "Delete"), role: .destructive) {
-                    quoteStore.deleteCategory(category)
-                    dismiss()
                     onDeleted?()
                 }
             } message: {
