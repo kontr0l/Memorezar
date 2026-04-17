@@ -41,6 +41,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -299,30 +302,23 @@ fun SettingsScreen(
                                     append(stringResource(R.string.last_backed_up, cloudBackupService.formatRelativeTime(millis)))
                                 }
                             }
-                            AlertDialog(
-                                onDismissRequest = { showRestoreConfirm = false },
-                                title = { Text(stringResource(R.string.restore_from_cloud_title)) },
-                                text = { Text(bodyText) },
-                                confirmButton = {
-                                    TextButton(onClick = {
-                                        showRestoreConfirm = false
-                                        coroutineScope.launch {
-                                            cloudBackupService.fetchAndRestore()
-                                            // Short confirmation — mirrors the
-                                            // PDF-saved toast pattern used
-                                            // elsewhere in the app and the
-                                            // iOS "Welcome back" bottom toast.
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.restore_complete_toast),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    }) { Text(stringResource(R.string.replace_with_cloud_data), color = MaterialTheme.colorScheme.error) }
+                            SettingsAlert(
+                                title = stringResource(R.string.restore_from_cloud_title),
+                                message = bodyText,
+                                confirmLabel = "Restore",
+                                isDestructive = false,
+                                onConfirm = {
+                                    showRestoreConfirm = false
+                                    coroutineScope.launch {
+                                        cloudBackupService.fetchAndRestore()
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.restore_complete_toast),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
                                 },
-                                dismissButton = {
-                                    TextButton(onClick = { showRestoreConfirm = false }) { Text(stringResource(R.string.cancel)) }
-                                }
+                                onDismiss = { showRestoreConfirm = false }
                             )
                         }
                     }
@@ -334,23 +330,15 @@ fun SettingsScreen(
                     }
 
                     if (showSignOutConfirm) {
-                        AlertDialog(
-                            onDismissRequest = { showSignOutConfirm = false },
-                            title = { Text(stringResource(R.string.sign_out_title)) },
-                            text = { Text(stringResource(R.string.sign_out_message)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    showSignOutConfirm = false
-                                    authService.signOut()
-                                }) {
-                                    Text(stringResource(R.string.sign_out), color = MaterialTheme.colorScheme.error)
-                                }
+                        SettingsAlert(
+                            title = stringResource(R.string.sign_out_title),
+                            message = stringResource(R.string.sign_out_message),
+                            confirmLabel = stringResource(R.string.sign_out),
+                            onConfirm = {
+                                showSignOutConfirm = false
+                                authService.signOut()
                             },
-                            dismissButton = {
-                                TextButton(onClick = { showSignOutConfirm = false }) {
-                                    Text(stringResource(R.string.cancel))
-                                }
-                            }
+                            onDismiss = { showSignOutConfirm = false }
                         )
                     }
 
@@ -369,49 +357,26 @@ fun SettingsScreen(
                     val partialMsg = stringResource(R.string.delete_account_partial_message)
 
                     if (showDeleteAccountConfirm) {
-                        AlertDialog(
-                            onDismissRequest = { showDeleteAccountConfirm = false },
-                            title = { Text(stringResource(R.string.delete_account_title)) },
-                            text = { Text(stringResource(R.string.delete_account_message)) },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    showDeleteAccountConfirm = false
-                                    deleteAccountInFlight = true
-                                    coroutineScope.launch {
-                                        // Server-side cascade delete first so the JWT
-                                        // is still valid when the Edge Function checks
-                                        // it. If it fails, still wipe locally + sign
-                                        // out so the user isn't stuck on a dead session.
-                                        val serverError = authService.deleteAccountOnServer()
-
-                                        // Show confirmation BEFORE wiping — because
-                                        // tutorialStore.resetAll() flips hasCompletedOnboarding
-                                        // which immediately navigates to OnboardingFlow,
-                                        // disposing this SettingsScreen and swallowing any
-                                        // dialog set after. The user dismisses the dialog,
-                                        // THEN the wipe + sign-out fires.
-                                        deleteSucceeded = serverError == null
-                                        deleteReceivedMessage = if (serverError == null) successMsg else partialMsg
-                                        deleteAccountInFlight = false
-                                        showDeleteReceivedDialog = true
-                                    }
-                                }) {
-                                    Text(stringResource(R.string.delete_account_confirm), color = MaterialTheme.colorScheme.error)
+                        SettingsAlert(
+                            title = stringResource(R.string.delete_account_title),
+                            message = stringResource(R.string.delete_account_message),
+                            confirmLabel = stringResource(R.string.delete),
+                            onConfirm = {
+                                showDeleteAccountConfirm = false
+                                deleteAccountInFlight = true
+                                coroutineScope.launch {
+                                    val serverError = authService.deleteAccountOnServer()
+                                    deleteSucceeded = serverError == null
+                                    deleteReceivedMessage = if (serverError == null) successMsg else partialMsg
+                                    deleteAccountInFlight = false
+                                    showDeleteReceivedDialog = true
                                 }
                             },
-                            dismissButton = {
-                                TextButton(onClick = { showDeleteAccountConfirm = false }) {
-                                    Text(stringResource(R.string.cancel))
-                                }
-                            }
+                            onDismiss = { showDeleteAccountConfirm = false }
                         )
                     }
 
                     if (showDeleteReceivedDialog) {
-                        // Wipe runs AFTER the user dismisses this dialog —
-                        // tutorialStore.resetAll() navigates to OnboardingFlow
-                        // which would dispose SettingsScreen (and this dialog)
-                        // if we wiped before showing it.
                         val finishWipe = {
                             showDeleteReceivedDialog = false
                             quoteStore.clearAllData()
@@ -421,15 +386,13 @@ fun SettingsScreen(
                             localRecordingStore.replaceAll(emptyList())
                             authService.signOut()
                         }
-                        AlertDialog(
-                            onDismissRequest = finishWipe,
-                            title = { Text(stringResource(if (deleteSucceeded) R.string.delete_account_success_title else R.string.delete_account_failed_title)) },
-                            text = { Text(deleteReceivedMessage) },
-                            confirmButton = {
-                                TextButton(onClick = finishWipe) {
-                                    Text(stringResource(R.string.ok))
-                                }
-                            }
+                        SettingsAlert(
+                            title = stringResource(if (deleteSucceeded) R.string.delete_account_success_title else R.string.delete_account_failed_title),
+                            message = deleteReceivedMessage,
+                            confirmLabel = stringResource(R.string.ok),
+                            onConfirm = finishWipe,
+                            onDismiss = finishWipe,
+                            isDestructive = false
                         )
                     }
                 } else {
@@ -459,7 +422,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.5")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.6")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }
@@ -489,59 +452,45 @@ fun SettingsScreen(
 
         // Alerts
         if (showResetAlert) {
-            AlertDialog(
-                onDismissRequest = { showResetAlert = false },
-                title = { Text(stringResource(R.string.reset_settings)) },
-                text = { Text(stringResource(R.string.reset_settings_message)) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        settingsStore.resetToDefaults()
-                        showResetAlert = false
-                    }) { Text(stringResource(R.string.reset), color = MaterialTheme.colorScheme.error) }
+            SettingsAlert(
+                title = stringResource(R.string.reset_settings),
+                message = stringResource(R.string.reset_settings_message),
+                confirmLabel = stringResource(R.string.reset),
+                isDestructive = false,
+                onConfirm = {
+                    settingsStore.resetToDefaults()
+                    showResetAlert = false
                 },
-                dismissButton = {
-                    TextButton(onClick = { showResetAlert = false }) { Text(stringResource(R.string.cancel)) }
-                }
+                onDismiss = { showResetAlert = false }
             )
         }
 
         if (showDeleteDataAlert) {
             val deleteScope = rememberCoroutineScope()
-            AlertDialog(
-                onDismissRequest = { showDeleteDataAlert = false },
-                title = { Text(stringResource(R.string.delete_all_data)) },
-                text = { Text(stringResource(R.string.delete_all_data_message)) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        // Fan out an unshare for every local that's linked to a
-                        // community row. Runs in the background — we don't block
-                        // the UI waiting for each request.
-                        val toUnshare = localRecordingStore.recordings.value
-                            .filter { !it.isFavorite && it.communityRecordingId != null }
-                        deleteScope.launch(Dispatchers.IO) {
-                            for (local in toUnshare) {
-                                val cid = local.communityRecordingId ?: continue
-                                // We don't have the Recording object handy for
-                                // every one — construct a stub with just the id
-                                // and file_path the server will look up from
-                                // the row.
-                                try {
-                                    recordingService.deleteRecordingById(cid)
-                                } catch (e: Exception) {
-                                    android.util.Log.w("Settings", "Delete All Data unshare failed for $cid: ${e.message}")
-                                }
+            SettingsAlert(
+                title = stringResource(R.string.delete_all_data),
+                message = stringResource(R.string.delete_all_data_message),
+                confirmLabel = stringResource(R.string.delete),
+                onConfirm = {
+                    val toUnshare = localRecordingStore.recordings.value
+                        .filter { !it.isFavorite && it.communityRecordingId != null }
+                    deleteScope.launch(Dispatchers.IO) {
+                        for (local in toUnshare) {
+                            val cid = local.communityRecordingId ?: continue
+                            try {
+                                recordingService.deleteRecordingById(cid)
+                            } catch (e: Exception) {
+                                android.util.Log.w("Settings", "Delete All Data unshare failed for $cid: ${e.message}")
                             }
                         }
-                        quoteStore.clearAllData()
-                        tutorialStore.resetAll()
-                        localRecordingStore.wipeAllAudioFiles()
-                        localRecordingStore.replaceAll(emptyList())
-                        showDeleteDataAlert = false
-                    }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+                    }
+                    quoteStore.clearAllData()
+                    tutorialStore.resetAll()
+                    localRecordingStore.wipeAllAudioFiles()
+                    localRecordingStore.replaceAll(emptyList())
+                    showDeleteDataAlert = false
                 },
-                dismissButton = {
-                    TextButton(onClick = { showDeleteDataAlert = false }) { Text(stringResource(R.string.cancel)) }
-                }
+                onDismiss = { showDeleteDataAlert = false }
             )
         }
 
@@ -716,6 +665,53 @@ private fun IconPickerRow(
             }
         }
     }
+}
+
+@Composable
+private fun SettingsAlert(
+    title: String,
+    message: String,
+    confirmLabel: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    isDestructive: Boolean = true
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = { Text(message) },
+        confirmButton = {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp, start = 8.dp, end = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                ) {
+                    Text(stringResource(R.string.cancel), fontWeight = FontWeight.Medium)
+                }
+                Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isDestructive) MaterialTheme.colorScheme.error else Color(0xFF3478F6),
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                ) {
+                    Text(confirmLabel, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+    )
 }
 
 private fun formatDuration(millis: Double): String {
