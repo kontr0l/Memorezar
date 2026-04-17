@@ -6,9 +6,9 @@ struct HomeScreen: View {
     @EnvironmentObject var tutorialStore: TutorialStore
     @State private var selectedQuote: Quote?
     @State private var showingQuoteInput = false
-    @State private var showMasteredList = false
-    @State private var showStreakDetail = false
-    @State private var showAccuracyDetail = false
+    // Stat detail screens are pushed via HomeRoute (path-based) so that
+    // clearing homePath from the tab bar reliably pops them — isPresented
+    // bools would stay true independently (same issue PackSearch had).
     @State private var remotePacks: [SuggestionPack] = []
     @State private var showPackRequest = false
     @Binding var path: NavigationPath
@@ -21,6 +21,9 @@ struct HomeScreen: View {
     /// of the Home root after a tab switch.
     private enum HomeRoute: Hashable {
         case packSearch
+        case masteredQuotes
+        case streakDetail
+        case accuracyDetail
     }
 
     init(path: Binding<NavigationPath> = .constant(NavigationPath())) {
@@ -59,19 +62,16 @@ struct HomeScreen: View {
             .tipOverlay(.browsePacks, verticalOffset: -15)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(isPresented: $showMasteredList) {
-                MasteredQuotesView()
-            }
-            .navigationDestination(isPresented: $showStreakDetail) {
-                StreakDetailView()
-            }
-            .navigationDestination(isPresented: $showAccuracyDetail) {
-                AccuracyDetailView()
-            }
             .navigationDestination(for: HomeRoute.self) { route in
                 switch route {
                 case .packSearch:
                     PackSearchView(packs: remotePacks)
+                case .masteredQuotes:
+                    MasteredQuotesView()
+                case .streakDetail:
+                    StreakDetailView()
+                case .accuracyDetail:
+                    AccuracyDetailView()
                 }
             }
             .navigationDestination(for: SuggestionPack.self) { pack in
@@ -242,7 +242,7 @@ struct HomeScreen: View {
 
             HStack(spacing: 12) {
                 Button {
-                    showMasteredList = true
+                    path.append(HomeRoute.masteredQuotes)
                 } label: {
                     StatCard(
                         title: "Mastered",
@@ -254,7 +254,7 @@ struct HomeScreen: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    showStreakDetail = true
+                    path.append(HomeRoute.streakDetail)
                 } label: {
                     StatCard(
                         title: "Streak",
@@ -266,7 +266,7 @@ struct HomeScreen: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    showAccuracyDetail = true
+                    path.append(HomeRoute.accuracyDetail)
                 } label: {
                     StatCard(
                         title: "Accuracy",
