@@ -372,72 +372,82 @@ struct SuggestionPackCard: View {
     let pack: SuggestionPack
     private var lang: String { LanguageHelper.preferredLanguageCode }
 
+    /// Bumped on failure to force AsyncImage to retry by changing its identity.
+    @State private var retryToken = 0
+
     var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .bottomLeading) {
-                // Cover image — remote URL or gradient fallback. Uses the
-                // phase-based AsyncImage API so the load survives LazyVGrid
-                // re-layouts (the 2-callback form can silently abandon a
-                // load mid-layout, leaving a permanent gradient placeholder).
-                Group {
-                    if let urlString = pack.coverURL, let url = URL(string: urlString) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().scaledToFill()
-                            case .failure:
-                                // Retry on next render by changing identity.
-                                // Fallback to gradient meanwhile.
-                                LinearGradient(
-                                    colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            case .empty:
-                                LinearGradient(
-                                    colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            @unknown default:
-                                EmptyView()
+        ZStack(alignment: .bottomLeading) {
+            // Cover image. Avoids GeometryReader (which can propose zero size
+            // on the first layout pass inside a LazyVGrid, causing AsyncImage
+            // to silently fail for certain images). Uses .contentMode(.fill)
+            // with clipping instead.
+            Group {
+                if let urlString = pack.coverURL, let url = URL(string: urlString) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image.resizable().scaledToFill()
+                        case .failure:
+                            LinearGradient(
+                                colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .onAppear {
+                                // Auto-retry once after a short delay so
+                                // transient network blips don't leave a
+                                // permanent gradient.
+                                if retryToken < 2 {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                                        retryToken += 1
+                                    }
+                                }
                             }
+                        case .empty:
+                            LinearGradient(
+                                colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        @unknown default:
+                            EmptyView()
                         }
-                    } else {
-                        LinearGradient(
-                            colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
                     }
+                    .id(retryToken)
+                } else {
+                    LinearGradient(
+                        colors: [.indigo.opacity(0.6), .purple.opacity(0.8)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 }
-                .frame(width: geo.size.width, height: geo.size.height)
-                .clipped()
-
-                // Dark gradient overlay at bottom — same as CategoryCard
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.7)],
-                    startPoint: .center,
-                    endPoint: .bottom
-                )
-
-                // Pack name and quote count — same layout as CategoryCard
-                VStack(alignment: .leading, spacing: 4) {
-                    Spacer()
-
-                    Text(pack.localizedName(for: lang))
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-
-                    Text(String(localized: "\(pack.quotes.count) quotes"))
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.8))
-                }
-                .padding(12)
             }
+
+            // Dark gradient overlay at bottom — same as CategoryCard
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.7)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+
+            // Pack name and quote count — same layout as CategoryCard
+            VStack(alignment: .leading, spacing: 4) {
+                Spacer()
+
+                Text(pack.localizedName(for: lang))
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+
+                Text(String(localized: "\(pack.quotes.count) quotes"))
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.8))
+            }
+            .padding(12)
         }
         .frame(height: 200)
+        .frame(maxWidth: .infinity)
+        .clipped()
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: 0x777777), lineWidth: 2))
