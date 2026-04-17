@@ -359,6 +359,7 @@ fun SettingsScreen(
                     var showDeleteReceivedDialog by remember { mutableStateOf(false) }
                     var deleteAccountInFlight by remember { mutableStateOf(false) }
                     var deleteReceivedMessage by remember { mutableStateOf("") }
+                    var deleteSucceeded by remember { mutableStateOf(false) }
 
                     IconClickRow(Icons.Default.Delete, stringResource(R.string.delete_my_account), color = MaterialTheme.colorScheme.error) {
                         if (!deleteAccountInFlight) showDeleteAccountConfirm = true
@@ -389,6 +390,7 @@ fun SettingsScreen(
                                         // disposing this SettingsScreen and swallowing any
                                         // dialog set after. The user dismisses the dialog,
                                         // THEN the wipe + sign-out fires.
+                                        deleteSucceeded = serverError == null
                                         deleteReceivedMessage = if (serverError == null) successMsg else partialMsg
                                         deleteAccountInFlight = false
                                         showDeleteReceivedDialog = true
@@ -421,7 +423,7 @@ fun SettingsScreen(
                         }
                         AlertDialog(
                             onDismissRequest = finishWipe,
-                            title = { Text(stringResource(R.string.delete_account_received_title)) },
+                            title = { Text(stringResource(if (deleteSucceeded) R.string.delete_account_success_title else R.string.delete_account_failed_title)) },
                             text = { Text(deleteReceivedMessage) },
                             confirmButton = {
                                 TextButton(onClick = finishWipe) {
@@ -457,7 +459,7 @@ fun SettingsScreen(
             // ── About ──
             SectionHeader(stringResource(R.string.about))
             SettingsCard {
-                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.3")
+                IconInfoRow(Icons.Default.Info, stringResource(R.string.version), "v2.9.5")
                 CardDivider()
                 IconClickRow(Icons.Default.Email, stringResource(R.string.contact_support)) { onShowContactSupport() }
             }

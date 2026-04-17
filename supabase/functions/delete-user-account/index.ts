@@ -38,10 +38,23 @@ serve(async (req: Request) => {
     return json({ error: "Method not allowed" }, 405);
   }
 
-  // Pull and validate the caller's JWT.
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const token = authHeader.replace(/^Bearer\s+/i, "");
-  if (!token) return json({ error: "Missing Authorization header" }, 401);
+  // Pull the caller's JWT. Prefer the request body's `access_token` field
+  // over the Authorization header — the Edge Functions gateway rejects ES256
+  // JWTs in the header (UNAUTHORIZED_UNSUPPORTED_TOKEN_ALGORITHM), but
+  // Supabase Auth itself supports ES256 via admin.auth.getUser(). Passing
+  // the token in the body bypasses the gateway check while still verifying
+  // the user properly server-side.
+  let token: string | null = null;
+  try {
+    const body = await req.json();
+    token = body?.access_token ?? null;
+  } catch { /* no body or not JSON */ }
+  if (!token) {
+    // Fallback: try the Authorization header (works for HS256 projects)
+    const authHeader = req.headers.get("Authorization") ?? "";
+    token = authHeader.replace(/^Bearer\s+/i, "") || null;
+  }
+  if (!token) return json({ error: "Missing access_token in body or Authorization header" }, 401);
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -49,7 +62,7 @@ serve(async (req: Request) => {
 
   const { data: userRes, error: userErr } = await admin.auth.getUser(token);
   if (userErr || !userRes?.user) {
-    return json({ error: "Invalid or expired token" }, 401);
+    return json({ error: `Invalid or expired token: ${userErr?.message ?? "unknown"}` }, 401);
   }
   const userId = userRes.user.id;
 

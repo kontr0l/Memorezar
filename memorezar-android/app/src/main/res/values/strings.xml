@@ -153,6 +153,8 @@
     <string name="delete_account_message">This will permanently delete your account, cloud backups, community recordings, and all your local data (quotes, practice history, stats). This cannot be undone.</string>
     <string name="delete_account_confirm">Delete Account</string>
     <string name="delete_account_received_title">Request Received</string>
+    <string name="delete_account_success_title">Account Deleted</string>
+    <string name="delete_account_failed_title">Delete Failed</string>
     <string name="delete_account_received_message">Your account and all associated data have been deleted.</string>
     <string name="delete_account_partial_message">Local data was cleared and you\'ve been signed out, but the server-side delete didn\'t complete. Please contact support if you see your data again.</string>
 

@@ -284,20 +284,20 @@ class AuthService @Inject constructor(
      * support_tickets, and the auth.users row.
      */
     suspend fun deleteAccountOnServer(): String? {
-        // Force a token refresh — Supabase JWTs expire after 1 hour and the
-        // Edge Functions gateway rejects expired tokens with 401 (silent, no
-        // function logs). The 50-min refresh timer can miss if the app was
-        // backgrounded.
         refreshTokenIfNeeded()
         val token = accessToken ?: return "Not signed in"
         return try {
+            // Use anon key for Authorization — the Edge Functions gateway
+            // rejects ES256 JWTs (newer Supabase projects). The user's real
+            // token goes in the body where the function verifies it via
+            // admin.auth.getUser() (which supports ES256).
             val response: HttpResponse = httpClient.post(
                 "${SupabaseConfig.PROJECT_URL}/functions/v1/delete-user-account"
             ) {
                 header("apikey", SupabaseConfig.ANON_KEY)
-                header("Authorization", "Bearer $token")
+                header("Authorization", "Bearer ${SupabaseConfig.ANON_KEY}")
                 contentType(ContentType.Application.Json)
-                setBody("{}")
+                setBody("""{"access_token":"$token"}""")
             }
             if (response.status.isSuccess()) {
                 null

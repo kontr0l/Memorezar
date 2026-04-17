@@ -14,6 +14,7 @@ struct SettingsScreen: View {
     @State private var showingDeleteAccountAlert = false
     @State private var deleteAccountInFlight = false
     @State private var deleteAccountConfirmationMessage: String?
+    @State private var deleteAccountSucceeded = false
     @State private var showFlash = false
     @State private var showAuthSheet = false
     @State private var showPaywall = false
@@ -178,7 +179,7 @@ struct SettingsScreen: View {
             } message: {
                 Text("This will permanently delete your account, cloud backups, community recordings, and all your local data (quotes, practice history, stats). This cannot be undone.")
             }
-            .alert("Request Received", isPresented: Binding(
+            .alert(deleteAccountSucceeded ? String(localized: "Account Deleted") : String(localized: "Delete Failed"), isPresented: Binding(
                 get: { deleteAccountConfirmationMessage != nil },
                 set: { if !$0 { deleteAccountConfirmationMessage = nil } }
             )) {
@@ -422,7 +423,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v75.3")
+                Text("v75.5")
                     .foregroundColor(.secondary)
             }
 
@@ -499,9 +500,10 @@ struct SettingsScreen: View {
                 localRecordingStore.replaceAll([])
                 authService.signOut()
                 deleteAccountInFlight = false
+                deleteAccountSucceeded = serverError == nil
                 deleteAccountConfirmationMessage = serverError == nil
                     ? String(localized: "Your account and all associated data have been deleted.")
-                    : String(localized: "Local data was cleared and you've been signed out, but the server-side delete didn't complete. Please contact support if you see your data again.")
+                    : "Local data cleared, but server delete failed:\n\n\(serverError ?? "unknown")"
             }
         }
     }
@@ -509,10 +511,6 @@ struct SettingsScreen: View {
     /// Calls the delete-user-account Edge Function with the user's JWT.
     /// Returns nil on success, an error string on failure.
     private func deleteUserAccountOnServer() async -> String? {
-        // Force a token refresh before the delete call — Supabase JWTs expire
-        // after 1 hour and the Edge Functions gateway rejects expired tokens
-        // with 401 (no function logs, just silent failure). The 50-min refresh
-        // timer can miss if the app was backgrounded.
         await authService.refreshTokenIfNeeded()
         guard let token = authService.accessToken else {
             return "Not signed in"
@@ -521,8 +519,13 @@ struct SettingsScreen: View {
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // Use anon key for Authorization — the Edge Functions gateway rejects
+        // ES256 JWTs (which newer Supabase projects issue) in the header. The
+        // user's real token goes in the body where the function verifies it
+        // via admin.auth.getUser() (which DOES support ES256).
+        req.setValue("Bearer \(SupabaseConfig.anonKey)", forHTTPHeaderField: "Authorization")
         req.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["access_token": token])
         req.timeoutInterval = 20
         do {
             let (data, response) = try await URLSession.shared.data(for: req)
