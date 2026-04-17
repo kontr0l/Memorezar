@@ -23,6 +23,10 @@ All text that is part of the app UI (buttons, labels, messages, section headers,
 
 3. **When resolving conflicts, read BOTH sides carefully before choosing.** Never blindly pick `--ours` or `--theirs` to move on. Use `git diff <commit>:<file>` to compare versions. If the conflict is large, the "other side" often contains teammates' work that would be silently erased.
 
+4. **After `git stash pop` or merge with conflicts, verify file integrity.** Run `wc -l` on every conflicted file before staging. A file that dropped to 0 lines or lost >50% of its content is almost certainly a botched resolution. Never use `sed` to strip conflict markers — it's too easy to over-delete. Resolve manually or with `git checkout --theirs/--ours <file>`.
+
+5. **After staging, run `git diff --cached --stat` and sanity-check the numbers.** Large unexpected deletions (e.g., 540 deletions in a commit about "pack navigation") mean something went wrong. STOP, investigate with `git diff --cached -- <file>`, and fix before committing.
+
 For major refactors or multi-device work, use feature branches + PRs so reviewers can catch regressions before they hit main.
 
 ---
@@ -150,6 +154,24 @@ Root cause: "Just" is sent immediately (T=0), but "Juxta" doesn't arrive until ~
 | Issue | Status | Description | Workaround |
 |-------|--------|-------------|------------|
 | GIT-001 | resolved | Stale local branch on second machine silently reverted Android SettingsScreen redesign + Spanish localization when a reading-mode commit was pushed | Restored file from `edd66ff`; safeguards added to Development Rules above |
+| GIT-002 | resolved | `git stash pop` conflict resolution emptied iOS SettingsScreen.swift (540 lines deleted) — pushed without catching the loss | Restored from parent commit `c83cce5`; added stash-pop guardrail to GIT WORKFLOW rules |
+
+#### GIT-002: Stash-Pop Conflict Emptied iOS SettingsScreen.swift
+
+**Severity:** High
+**Resolved:** 2026-04-17
+**File:** `ios/Memorezar/UI/Screens/SettingsScreen.swift`
+
+**What happened:**
+During a `git stash pop`, a version-number conflict arose in SettingsScreen.swift. The conflict was resolved with `sed` commands that removed the conflict markers — but a stale file path reference or misapplied sed silently deleted the entire file body, leaving it at 0 lines. The commit (`964d57a`) was pushed with `SettingsScreen.swift | 540 -` in the stat, which should have been caught by the "review before pushing" rule.
+
+**Resolution:**
+Restored the full file from parent commit `c83cce5` via `git show HEAD~1:<file>`.
+
+**Lessons (added to GIT WORKFLOW rule above):**
+1. Never use `sed` for conflict resolution — too easy to over-delete. Use `git checkout --theirs/--ours <file>` or manually edit in the editor.
+2. After `git stash pop` with conflicts, run `wc -l` on every conflicted file to verify it still has content.
+3. Existing rule #2 (review `git show HEAD --stat` before pushing) would have caught this — 540 deletions on a "pack navigation" commit is an obvious red flag. **Enforce this rule strictly.**
 
 #### GIT-001: Stale Branch Silently Reverted SettingsScreen.kt
 
