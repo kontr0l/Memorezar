@@ -50,20 +50,23 @@ class PackService @Inject constructor(
 
     /**
      * Fetch all browsable packs from Supabase.
-     * Returns empty list if offline or on error.
+     * Throws [PackFetchException] so callers can distinguish a network/decode
+     * failure from a legitimately empty server response (and retry accordingly).
      */
     suspend fun fetchPacks(): List<SuggestionPack> {
-        return try {
+        try {
             val response = httpClient.get(
                 "${SupabaseConfig.PACKS_URL}?select=*&order=sort_order.asc"
             ) {
                 for ((k, v) in authService.headers()) header(k, v)
             }
-            if (!response.status.isSuccess()) return emptyList()
+            if (!response.status.isSuccess()) {
+                throw PackFetchException("HTTP ${response.status.value}")
+            }
 
             val body: String = response.body()
             val rows = json.decodeFromString<List<RemotePackRow>>(body)
-            rows.map { row ->
+            return rows.map { row ->
                 SuggestionPack(
                     id = row.id,
                     name = row.name,
@@ -82,9 +85,12 @@ class PackService @Inject constructor(
                     }
                 )
             }
+        } catch (e: PackFetchException) {
+            Log.w(TAG, "Failed to fetch packs: ${e.message}")
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch packs: ${e.message}")
-            emptyList()
+            throw PackFetchException(e.message ?: "unknown", e)
         }
     }
 
@@ -99,7 +105,11 @@ class PackService @Inject constructor(
         forceAll: Boolean = false
     ) {
         if (installedVersions.isEmpty()) return
-        val remotePacks = fetchPacks()
+        val remotePacks = try {
+            fetchPacks()
+        } catch (_: PackFetchException) {
+            return  // offline — sync will retry on next launch
+        }
         for (pack in remotePacks) {
             val localVersion = installedVersions[pack.id] ?: continue
             val remoteVersion = pack.version
@@ -110,3 +120,5 @@ class PackService @Inject constructor(
         }
     }
 }
+
+class PackFetchException(message: String, cause: Throwable? = null) : Exception(message, cause)

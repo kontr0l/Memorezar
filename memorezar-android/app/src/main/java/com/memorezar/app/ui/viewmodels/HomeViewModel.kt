@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.memorezar.app.data.models.Quote
 import com.memorezar.app.data.models.SuggestionPack
+import com.memorezar.app.data.services.PackFetchException
 import com.memorezar.app.data.services.PackService
 import com.memorezar.app.data.storage.QuoteStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +27,12 @@ class HomeViewModel @Inject constructor(
 
     private val _remotePacks = MutableStateFlow<List<SuggestionPack>>(emptyList())
     val remotePacks: StateFlow<List<SuggestionPack>> = _remotePacks.asStateFlow()
+
+    private val _isLoadingPacks = MutableStateFlow(false)
+    val isLoadingPacks: StateFlow<Boolean> = _isLoadingPacks.asStateFlow()
+
+    private val _packsLoadFailed = MutableStateFlow(false)
+    val packsLoadFailed: StateFlow<Boolean> = _packsLoadFailed.asStateFlow()
 
     /** Packs filtered to exclude already-added ones — reactively updates when categories change */
     val availablePacks: StateFlow<List<SuggestionPack>> = combine(
@@ -49,11 +57,45 @@ class HomeViewModel @Inject constructor(
         syncInstalledPacks()
     }
 
+    /**
+     * Fetch packs with one automatic retry after 2s. On terminal failure,
+     * sets `packsLoadFailed` so the UI can show the Refresh button and the
+     * ON_RESUME / tab-retap observers know to retry later.
+     * Guards against overlapping calls via `_isLoadingPacks`.
+     */
     fun loadPacks() {
+        if (_isLoadingPacks.value) return
         viewModelScope.launch {
-            val packs = packService.fetchPacks()
-            _remotePacks.value = packs
+            _isLoadingPacks.value = true
+            try {
+                try {
+                    _remotePacks.value = packService.fetchPacks()
+                    _packsLoadFailed.value = false
+                    return@launch
+                } catch (_: PackFetchException) {
+                    // First attempt failed — wait and retry once. Handles
+                    // cold-launch races where the network hadn't settled
+                    // when the app opened.
+                }
+
+                delay(2000)
+
+                try {
+                    _remotePacks.value = packService.fetchPacks()
+                    _packsLoadFailed.value = false
+                } catch (_: PackFetchException) {
+                    _packsLoadFailed.value = true
+                }
+            } finally {
+                _isLoadingPacks.value = false
+            }
         }
+    }
+
+    /** Retry pack load only if the previous attempt failed. Used by ON_RESUME
+     *  and home-tab re-tap hooks to avoid hammering the server. */
+    fun retryPacksIfFailed() {
+        if (_packsLoadFailed.value) loadPacks()
     }
 
     /** Re-filter available packs (call after adding a pack) — now automatic via combine */

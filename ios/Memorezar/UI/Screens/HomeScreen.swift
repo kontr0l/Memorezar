@@ -4,14 +4,22 @@ struct HomeScreen: View {
     @EnvironmentObject var quoteStore: QuoteStore
     @EnvironmentObject var settingsStore: SettingsStore
     @EnvironmentObject var tutorialStore: TutorialStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedQuote: Quote?
     @State private var showingQuoteInput = false
     // Stat detail screens are pushed via HomeRoute (path-based) so that
     // clearing homePath from the tab bar reliably pops them — isPresented
     // bools would stay true independently (same issue PackSearch had).
     @State private var remotePacks: [SuggestionPack] = []
+    @State private var isLoadingPacks = false
+    @State private var packsLoadFailed = false
     @State private var showPackRequest = false
     @Binding var path: NavigationPath
+    // Incremented by ContentView every time the Home tab button is tapped
+    // (both re-taps while on Home and switches from other tabs). A change
+    // here is our signal to retry the pack fetch if it previously failed —
+    // covers the case where the user never backgrounds the app.
+    let homeActivationToken: Int
 
     /// Navigation routes pushed onto `path`. Using a path-based destination for
     /// PackSearch (instead of a `.navigationDestination(isPresented:)` driven by
@@ -26,8 +34,9 @@ struct HomeScreen: View {
         case accuracyDetail
     }
 
-    init(path: Binding<NavigationPath> = .constant(NavigationPath())) {
+    init(path: Binding<NavigationPath> = .constant(NavigationPath()), homeActivationToken: Int = 0) {
         self._path = path
+        self.homeActivationToken = homeActivationToken
     }
     /// Last 5 actually practiced quotes, most recent first
     private var continuePracticingQuotes: [Quote] {
@@ -91,11 +100,53 @@ struct HomeScreen: View {
                 RecitationScreen(quote: quote)
             }
             .task {
-                async let packsTask = PackService.shared.fetchPacks()
                 async let langsTask: () = LanguageService.shared.fetchLanguages()
-                remotePacks = await packsTask
+                await loadPacks()
                 await langsTask
             }
+            .onChange(of: scenePhase) { phase in
+                // Coming back from background — retry if the last load failed.
+                // Gated on packsLoadFailed so we don't hammer Supabase every
+                // time the user foregrounds the app with packs already loaded.
+                if phase == .active && packsLoadFailed {
+                    Task { await loadPacks() }
+                }
+            }
+            .onChange(of: homeActivationToken) { _ in
+                // User tapped the Home tab (re-tap or switch from another tab).
+                // Same gate — only retry if the previous load failed.
+                if packsLoadFailed {
+                    Task { await loadPacks() }
+                }
+            }
+        }
+    }
+
+    /// Fetch packs with one automatic retry after 2s. On terminal failure,
+    /// sets `packsLoadFailed` so the UI can show the Refresh button and the
+    /// scenePhase/tab-activation observers know to retry later.
+    private func loadPacks() async {
+        if isLoadingPacks { return }
+        isLoadingPacks = true
+        defer { isLoadingPacks = false }
+
+        do {
+            remotePacks = try await PackService.shared.fetchPacks()
+            packsLoadFailed = false
+            return
+        } catch {
+            // First attempt failed — wait briefly and try once more. Handles
+            // cold-launch races where wifi/cellular hadn't settled when the
+            // app opened.
+        }
+
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+        do {
+            remotePacks = try await PackService.shared.fetchPacks()
+            packsLoadFailed = false
+        } catch {
+            packsLoadFailed = true
         }
     }
 
@@ -301,7 +352,27 @@ struct HomeScreen: View {
 
                 Spacer()
 
-                if !availablePacks.isEmpty {
+                if packsLoadFailed {
+                    // Fetch failed — show Refresh in place of See All.
+                    // Tapping reruns loadPacks() (which handles its own
+                    // in-flight guard, so double-taps are harmless).
+                    Button {
+                        Task { await loadPacks() }
+                    } label: {
+                        if isLoadingPacks {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.clockwise")
+                                Text("Refresh")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.indigo)
+                        }
+                    }
+                    .disabled(isLoadingPacks)
+                } else if !availablePacks.isEmpty {
                     Button {
                         path.append(HomeRoute.packSearch)
                     } label: {

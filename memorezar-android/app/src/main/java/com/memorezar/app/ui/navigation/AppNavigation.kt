@@ -45,6 +45,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.memorezar.app.ui.viewmodels.HomeViewModel
 import android.content.Intent
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent
@@ -111,6 +113,11 @@ fun AppNavigation(
     var selectedPack by remember { mutableStateOf<SuggestionPack?>(null) }
     // Hold all remote packs for search screen
     var allRemotePacks by remember { mutableStateOf<List<SuggestionPack>>(emptyList()) }
+
+    // Captured from inside composable("home") { ... } so the Home tab's bottom
+    // nav click handler can call retryPacksIfFailed() without needing its own
+    // Hilt VM lookup (which would fail — click handlers aren't composables).
+    var homeViewModelRef by remember { mutableStateOf<HomeViewModel?>(null) }
 
     if (!hasCompletedOnboarding) {
         OnboardingFlow(
@@ -214,10 +221,18 @@ fun AppNavigation(
                                         //   - On another tab → navigate fresh (no restored state).
                                         when {
                                             currentRoute == item.route -> {
-                                                // No-op: already at this tab's root.
+                                                // Already at this tab's root. For Home, retry
+                                                // the pack fetch if the last load failed —
+                                                // covers users who never background the app.
+                                                if (item.route == "home") {
+                                                    homeViewModelRef?.retryPacksIfFailed()
+                                                }
                                             }
                                             selected -> {
                                                 navController.popBackStack(item.route, false)
+                                                if (item.route == "home") {
+                                                    homeViewModelRef?.retryPacksIfFailed()
+                                                }
                                             }
                                             else -> {
                                                 navController.navigate(item.route) {
@@ -289,6 +304,8 @@ fun AppNavigation(
             }
         ) {
             composable("home") {
+                val homeVm: HomeViewModel = hiltViewModel()
+                LaunchedEffect(homeVm) { homeViewModelRef = homeVm }
                 HomeScreen(
                     onNavigateToRecitation = { navController.navigate("recitation/$it") },
                     onNavigateToQuoteInput = { showQuoteInput = true },
@@ -306,7 +323,8 @@ fun AppNavigation(
                     },
                     authService = authService,
                     supportTicketService = supportTicketService,
-                    modifier = Modifier.padding(padding)
+                    modifier = Modifier.padding(padding),
+                    viewModel = homeVm
                 )
             }
             composable("library") {

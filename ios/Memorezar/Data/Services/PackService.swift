@@ -12,13 +12,15 @@ final class PackService {
 
     // MARK: - Fetch Packs for Browsing
 
-    /// Fetch available packs from the server. Returns empty if offline.
+    /// Fetch available packs from the server.
+    /// Throws `PackFetchError.failed` so callers can distinguish a network/decode
+    /// failure from a legitimately empty server response (and retry accordingly).
     /// Supabase is the single source of truth — no cache or bundled fallback.
-    func fetchPacks() async -> [SuggestionPack] {
-        if let remote = await fetchRemote() {
-            return remote
+    func fetchPacks() async throws -> [SuggestionPack] {
+        guard let remote = await fetchRemote() else {
+            throw PackFetchError.failed
         }
-        return []
+        return remote
     }
 
     // MARK: - Sync Installed Packs
@@ -85,6 +87,12 @@ final class PackService {
         }
     }
 
+}
+
+// MARK: - Errors
+
+enum PackFetchError: Error {
+    case failed
 }
 
 // MARK: - Remote Row Decoding

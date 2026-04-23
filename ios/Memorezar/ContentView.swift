@@ -6,6 +6,11 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var homePath = NavigationPath()
     @State private var libraryPath = NavigationPath()
+    // Incremented every time the Home tab button is tapped so HomeScreen
+    // can observe the change and retry its pack fetch if the previous
+    // load failed. Covers the case where the user never backgrounds the
+    // app (scenePhase wouldn't fire).
+    @State private var homeActivationToken = 0
 
     private static let iconHeight: CGFloat = 28
     private static let tabCount = 3
@@ -18,7 +23,7 @@ struct ContentView: View {
                 VStack(spacing: 0) {
                     GeometryReader { geo in
                         HStack(spacing: 0) {
-                            HomeScreen(path: $homePath)
+                            HomeScreen(path: $homePath, homeActivationToken: homeActivationToken)
                                 .frame(width: geo.size.width, height: geo.size.height)
                             QuoteLibraryScreen(path: $libraryPath)
                                 .frame(width: geo.size.width, height: geo.size.height)
@@ -82,7 +87,9 @@ struct ContentView: View {
     private func tabButton(icon: String, tag: Int) -> some View {
         Button {
             switch tag {
-            case 0: if !homePath.isEmpty { homePath = NavigationPath() }
+            case 0:
+                if !homePath.isEmpty { homePath = NavigationPath() }
+                homeActivationToken &+= 1
             case 1: if !libraryPath.isEmpty { libraryPath = NavigationPath() }
             default: break
             }
