@@ -11,13 +11,15 @@
 			</array>
 		</dict>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>Memorezar uses the camera to take cover photos for your quote categories.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
@@ -25,11 +27,5 @@
 		<key>UIImageName</key>
 		<string>LaunchIcon</string>
 	</dict>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
-	</array>
 </dict>
 </plist>

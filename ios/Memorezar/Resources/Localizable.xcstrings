@@ -459,6 +459,9 @@
         }
       }
     },
+    "Account Deleted" : {
+
+    },
     "Account Deletion" : {
 
     },
@@ -1272,6 +1275,9 @@
           }
         }
       }
+    },
+    "Delete Failed" : {
+
     },
     "Delete My Account" : {
 
@@ -2945,9 +2951,6 @@
           }
         }
       }
-    },
-    "Request Received" : {
-
     },
     "Required" : {
       "localizations" : {
