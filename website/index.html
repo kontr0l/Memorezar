@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Memorezar — Memorize with your voice</title>
-  <meta name="description" content="Memorezar helps you memorize through speaking, listening, and gentle correction. Practice prayers, poetry, speeches, schoolwork, and more." />
+  <title data-i18n="meta.title">Memorezar — Memorize with your voice</title>
+  <meta name="description" data-i18n-attr="content" data-i18n="meta.description" content="Memorezar helps you memorize through speaking, listening, and gentle correction. Practice prayers, poetry, speeches, schoolwork, and more." />
   <style>
     :root {
       --bg: #f7f8fa;
@@ -88,6 +88,38 @@
     }
 
     .nav-links a:hover { color: var(--blue); }
+
+    .lang-toggle {
+      display: inline-flex;
+      align-items: center;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: var(--muted);
+      overflow: hidden;
+    }
+    .lang-toggle button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: inherit;
+      line-height: 1;
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .lang-toggle button.active {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-2) 100%);
+      color: #fff;
+      box-shadow: 0 4px 10px rgba(0,82,204,0.25);
+    }
+    .lang-toggle button:not(.active):hover { color: var(--blue); }
 
     .btn {
       display: inline-flex;
@@ -581,16 +613,20 @@
 <body>
   <header class="site-header">
     <div class="container nav">
-      <a class="brand" href="#top" aria-label="Memorezar home">
-        <img class="icon" src="app.icon.png" alt="Memorezar app icon" />
+      <a class="brand" href="#top" data-i18n-attr="aria-label" data-i18n="aria.brandHome" aria-label="Memorezar home">
+        <img class="icon" src="app.icon.png" data-i18n-attr="alt" data-i18n="alt.appIcon" alt="Memorezar app icon" />
         <img class="wordmark" src="logo.png" alt="Memorezar" />
       </a>
-      <nav class="nav-links" aria-label="Primary navigation">
-        <a href="#features">Features</a>
-        <a href="#benefits">Benefits</a>
-        <a href="#how-it-works">How it works</a>
-        <a href="#privacy-policy">Privacy</a>
-        <a href="#download" class="btn btn-primary">Download</a>
+      <nav class="nav-links" data-i18n-attr="aria-label" data-i18n="aria.primaryNav" aria-label="Primary navigation">
+        <a href="#features" data-i18n="nav.features">Features</a>
+        <a href="#benefits" data-i18n="nav.benefits">Benefits</a>
+        <a href="#how-it-works" data-i18n="nav.howItWorks">How it works</a>
+        <a href="#privacy-policy" data-i18n="nav.privacy">Privacy</a>
+        <a href="#download" class="btn btn-primary" data-i18n="nav.download">Download</a>
+        <div class="lang-toggle" role="group" aria-label="Language">
+          <button type="button" data-lang="en" class="active">EN</button>
+          <button type="button" data-lang="es">ES</button>
+        </div>
       </nav>
     </div>
   </header>
@@ -599,20 +635,20 @@
     <section class="hero">
       <div class="container hero-grid">
         <div>
-          <div class="eyebrow">Voice-based memorization, made calm and simple</div>
-          <h1>Memorize with your voice. Practice with confidence.</h1>
-          <p class="lead">
+          <div class="eyebrow" data-i18n="hero.eyebrow">Voice-based memorization, made calm and simple</div>
+          <h1 data-i18n="hero.title">Memorize with your voice. Practice with confidence.</h1>
+          <p class="lead" data-i18n="hero.lead">
             Memorezar helps you learn and retain prayers, poems, speeches, vocabulary, class material, and meaningful texts by letting you speak them out loud, hear yourself, and get guided support when you miss a word.
           </p>
 
           <div class="cta-row" id="download">
-            <a class="download-badge" href="https://apps.apple.com/us/app/memorezar/id6758293690" aria-label="Download on the App Store">
+            <a class="download-badge" href="https://apps.apple.com/us/app/memorezar/id6758293690" data-i18n-attr="aria-label" data-i18n="aria.appStore" aria-label="Download on the App Store">
               <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                 <path d="M17.564 12.724c-.03-3.028 2.474-4.48 2.588-4.55-1.41-2.06-3.604-2.343-4.385-2.375-1.865-.189-3.644 1.098-4.59 1.098-.963 0-2.406-1.071-3.955-1.041-2.033.03-3.912 1.183-4.961 3.005-2.115 3.664-.541 9.072 1.51 12.044 1.004 1.453 2.201 3.086 3.77 3.028 1.517-.06 2.089-.983 3.919-.983 1.826 0 2.36.983 3.959.95 1.635-.027 2.67-1.478 3.668-2.94 1.155-1.686 1.632-3.318 1.661-3.404-.037-.014-3.183-1.22-3.214-4.832zM14.555 3.823c.832-1.012 1.394-2.413 1.24-3.823-1.2.049-2.655.8-3.515 1.811-.77.896-1.445 2.328-1.263 3.707 1.338.104 2.704-.68 3.538-1.695z"/>
               </svg>
-              <span><small>Download on the</small><strong>App Store</strong></span>
+              <span><small data-i18n="badge.appleSmall">Download on the</small><strong>App Store</strong></span>
             </a>
-            <a class="download-badge" href="https://play.google.com/store/apps/details?id=com.memorezar.app" aria-label="Get it on Google Play">
+            <a class="download-badge" href="https://play.google.com/store/apps/details?id=com.memorezar.app" data-i18n-attr="aria-label" data-i18n="aria.googlePlay" aria-label="Get it on Google Play">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <defs>
                   <linearGradient id="gp-a" x1="0" y1="0" x2="1" y2="1">
@@ -637,7 +673,7 @@
                 <path d="M16 14.9 3.5 22c.5.2 1 .2 1.6-.1L16 14.9z" fill="url(#gp-c)"/>
                 <path d="m12.9 12 3.1 2.9 4.3-2.5c1.2-.7 1.2-1.8 0-2.4l-4.2-2.4L12.9 12z" fill="url(#gp-b)"/>
               </svg>
-              <span><small>Get it on</small><strong>Google Play</strong></span>
+              <span><small data-i18n="badge.googleSmall">Get it on</small><strong>Google Play</strong></span>
             </a>
           </div>
         </div>
@@ -646,29 +682,29 @@
           <div class="app-preview">
             <div class="preview-top">
               <div class="mini-brand">
-                <img src="app.icon.png" alt="Memorezar icon" />
+                <img src="app.icon.png" data-i18n-attr="alt" data-i18n="alt.iconShort" alt="Memorezar icon" />
                 <div>
                   <strong style="display:block;font-size:1.1rem;color:var(--navy)">Memorezar</strong>
-                  <span style="color:var(--muted)">Memorization practice with listening and gentle feedback</span>
+                  <span style="color:var(--muted)" data-i18n="preview.tagline">Memorization practice with listening and gentle feedback</span>
                 </div>
               </div>
-              <span class="pill">Speak • Listen • Remember</span>
+              <span class="pill" data-i18n="preview.pill">Speak • Listen • Remember</span>
             </div>
 
             <div class="practice-panel">
               <div class="card">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                  <strong style="font-size:1.04rem;color:var(--navy)">Practice session</strong>
-                  <span class="pill">Live listening</span>
+                  <strong style="font-size:1.04rem;color:var(--navy)" data-i18n="preview.session">Practice session</strong>
+                  <span class="pill" data-i18n="preview.live">Live listening</span>
                 </div>
-                <div style="margin-top:14px;color:var(--muted);font-weight:600;">“Recite the passage out loud and we’ll follow along.”</div>
+                <div style="margin-top:14px;color:var(--muted);font-weight:600;" data-i18n="preview.instruction">“Recite the passage out loud and we’ll follow along.”</div>
                 <div class="speech-line"></div>
                 <div class="speech-line"></div>
                 <div class="speech-line"></div>
                 <div class="wave"></div>
               </div>
               <div class="sprite-box">
-                <img src="sprite.pray2.png" alt="Memorezar mascot in a calm prayer pose" />
+                <img src="sprite.pray2.png" data-i18n-attr="alt" data-i18n="alt.mascotPrayCalm" alt="Memorezar mascot in a calm prayer pose" />
               </div>
             </div>
           </div>
@@ -679,40 +715,40 @@
     <section class="section" id="features">
       <div class="container">
         <div class="section-head">
-          <h2>A memorization app that feels encouraging, not intimidating</h2>
-          <p>
+          <h2 data-i18n="features.headTitle">A memorization app that feels encouraging, not intimidating</h2>
+          <p data-i18n="features.headLead">
             Inspired by modern product sites with a clean, trustworthy feel, Memorezar is designed to make repeated practice calmer, clearer, and more effective.
           </p>
         </div>
 
         <div class="grid-3">
           <article class="card feature-card">
-            <h3>Practice out loud</h3>
-            <p>
+            <h3 data-i18n="features.card1.title">Practice out loud</h3>
+            <p data-i18n="features.card1.body">
               Use your own voice to work through material naturally. Speaking what you are learning helps strengthen recall and makes practice more active than silent rereading.
             </p>
             <div class="feature-media">
-              <img src="sprite.pray1.png" alt="Mascot meditating peacefully" />
+              <img src="sprite.pray1.png" data-i18n-attr="alt" data-i18n="alt.mascotMeditate" alt="Mascot meditating peacefully" />
             </div>
           </article>
 
           <article class="card feature-card">
-            <h3>We listen as you recite</h3>
-            <p>
+            <h3 data-i18n="features.card2.title">We listen as you recite</h3>
+            <p data-i18n="features.card2.body">
               As you speak, the app follows along and helps you stay on track. If you say a mistaken word, skip one, or swap the order, Memorezar can gently guide you back.
             </p>
             <div class="feature-media">
-              <img src="sprite.mistake4.png" alt="Mascot reacting to a mistake" />
+              <img src="sprite.mistake4.png" data-i18n-attr="alt" data-i18n="alt.mascotMistake" alt="Mascot reacting to a mistake" />
             </div>
           </article>
 
           <article class="card feature-card">
-            <h3>Designed for meaningful repetition</h3>
-            <p>
+            <h3 data-i18n="features.card3.title">Designed for meaningful repetition</h3>
+            <p data-i18n="features.card3.body">
               Whether you're practicing prayers, schoolwork, speeches, or poetry, the experience is built to help you return often and improve steadily without friction.
             </p>
             <div class="feature-media">
-              <img src="sprite.pray4.png" alt="Mascot kneeling in prayer" />
+              <img src="sprite.pray4.png" data-i18n-attr="alt" data-i18n="alt.mascotKneel" alt="Mascot kneeling in prayer" />
             </div>
           </article>
         </div>
@@ -723,8 +759,8 @@
       <div class="container benefits">
         <div class="card">
           <div class="section-head" style="margin-bottom:18px;">
-            <h2>Why memorization still matters</h2>
-            <p>
+            <h2 data-i18n="benefits.headTitle">Why memorization still matters</h2>
+            <p data-i18n="benefits.headLead">
               Good memorization is not about pressure. It is about familiarity, fluency, confidence, and having important words ready when you need them.
             </p>
           </div>
@@ -732,22 +768,22 @@
             <div class="check-item">
               <div class="check-icon">✓</div>
               <div>
-                <strong>Better recall for school and study</strong>
-                <div style="color:var(--muted)">Review vocabulary, facts, passages, formulas, and presentations in a more active way.</div>
+                <strong data-i18n="benefits.item1.title">Better recall for school and study</strong>
+                <div style="color:var(--muted)" data-i18n="benefits.item1.body">Review vocabulary, facts, passages, formulas, and presentations in a more active way.</div>
               </div>
             </div>
             <div class="check-item">
               <div class="check-icon">✓</div>
               <div>
-                <strong>More confidence when speaking</strong>
-                <div style="color:var(--muted)">Practice until the words feel natural, steady, and ready to share.</div>
+                <strong data-i18n="benefits.item2.title">More confidence when speaking</strong>
+                <div style="color:var(--muted)" data-i18n="benefits.item2.body">Practice until the words feel natural, steady, and ready to share.</div>
               </div>
             </div>
             <div class="check-item">
               <div class="check-icon">✓</div>
               <div>
-                <strong>Less passive rereading</strong>
-                <div style="color:var(--muted)">Use repetition with attention instead of reading the same lines without retaining them.</div>
+                <strong data-i18n="benefits.item3.title">Less passive rereading</strong>
+                <div style="color:var(--muted)" data-i18n="benefits.item3.body">Use repetition with attention instead of reading the same lines without retaining them.</div>
               </div>
             </div>
           </div>
@@ -755,13 +791,13 @@
 
         <div class="card" style="display:grid;grid-template-columns:1fr 190px;gap:18px;align-items:center;">
           <div>
-            <h3 style="margin:0 0 10px;font-size:1.35rem;color:var(--navy)">A helpful companion for classwork, speeches, and personal practice</h3>
-            <p style="margin:0;color:var(--muted)">
+            <h3 style="margin:0 0 10px;font-size:1.35rem;color:var(--navy)" data-i18n="benefits.companion.title">A helpful companion for classwork, speeches, and personal practice</h3>
+            <p style="margin:0;color:var(--muted)" data-i18n="benefits.companion.body">
               Memorezar supports the moments when repetition leads to growth: studying for exams, preparing a talk, learning a passage, or keeping treasured words close.
             </p>
           </div>
           <div style="display:flex;justify-content:center;">
-            <img src="sprite.work3.png" alt="Mascot reading productively" style="max-height:180px;" />
+            <img src="sprite.work3.png" data-i18n-attr="alt" data-i18n="alt.mascotRead" alt="Mascot reading productively" style="max-height:180px;" />
           </div>
         </div>
       </div>
@@ -770,8 +806,8 @@
     <section class="section" id="how-it-works">
       <div class="container">
         <div class="section-head">
-          <h2>How it works</h2>
-          <p>
+          <h2 data-i18n="how.headTitle">How it works</h2>
+          <p data-i18n="how.headLead">
             Keep the flow simple: choose your text, speak through it, and get support when you need it.
           </p>
         </div>
@@ -779,22 +815,22 @@
         <div class="grid-3">
           <article class="card">
             <div class="step-num">1</div>
-            <h3 style="margin:16px 0 10px;">Choose what to memorize</h3>
-            <p style="margin:0;color:var(--muted)">
+            <h3 style="margin:16px 0 10px;" data-i18n="how.step1.title">Choose what to memorize</h3>
+            <p style="margin:0;color:var(--muted)" data-i18n="how.step1.body">
               Load the text you want to practice, whether it is a prayer, lesson, poem, quotation, or speech.
             </p>
           </article>
           <article class="card">
             <div class="step-num">2</div>
-            <h3 style="margin:16px 0 10px;">Recite it out loud</h3>
-            <p style="margin:0;color:var(--muted)">
+            <h3 style="margin:16px 0 10px;" data-i18n="how.step2.title">Recite it out loud</h3>
+            <p style="margin:0;color:var(--muted)" data-i18n="how.step2.body">
               The app listens as you speak so your practice feels dynamic, focused, and closer to real recall.
             </p>
           </article>
           <article class="card">
             <div class="step-num">3</div>
-            <h3 style="margin:16px 0 10px;">Get gentle correction</h3>
-            <p style="margin:0;color:var(--muted)">
+            <h3 style="margin:16px 0 10px;" data-i18n="how.step3.title">Get gentle correction</h3>
+            <p style="margin:0;color:var(--muted)" data-i18n="how.step3.body">
               If you miss a word or make a mistake, Memorezar helps you notice it and continue improving without breaking momentum.
             </p>
           </article>
@@ -802,33 +838,33 @@
 
         <div class="card" style="margin-top:20px;display:grid;grid-template-columns:1.05fr 0.95fr;gap:20px;align-items:center;">
           <div>
-            <h3 style="margin:0 0 10px;font-size:1.35rem;">Gentle correction that keeps you moving</h3>
+            <h3 style="margin:0 0 10px;font-size:1.35rem;" data-i18n="how.gentle.title">Gentle correction that keeps you moving</h3>
             <div class="steps">
               <div class="step">
                 <div class="step-num">A</div>
                 <div>
-                  <strong>We follow along while you speak</strong>
-                  <div style="color:var(--muted)">No need to stop every few seconds and check where you are.</div>
+                  <strong data-i18n="how.gentle.a.title">We follow along while you speak</strong>
+                  <div style="color:var(--muted)" data-i18n="how.gentle.a.body">No need to stop every few seconds and check where you are.</div>
                 </div>
               </div>
               <div class="step">
                 <div class="step-num">B</div>
                 <div>
-                  <strong>We help catch mistaken words</strong>
-                  <div style="color:var(--muted)">A missed word or wrong phrase becomes a learning moment, not a frustrating reset.</div>
+                  <strong data-i18n="how.gentle.b.title">We help catch mistaken words</strong>
+                  <div style="color:var(--muted)" data-i18n="how.gentle.b.body">A missed word or wrong phrase becomes a learning moment, not a frustrating reset.</div>
                 </div>
               </div>
               <div class="step">
                 <div class="step-num">C</div>
                 <div>
-                  <strong>We help strengthen accuracy over time</strong>
-                  <div style="color:var(--muted)">Repeated guided practice helps the correct version feel more natural.</div>
+                  <strong data-i18n="how.gentle.c.title">We help strengthen accuracy over time</strong>
+                  <div style="color:var(--muted)" data-i18n="how.gentle.c.body">Repeated guided practice helps the correct version feel more natural.</div>
                 </div>
               </div>
             </div>
           </div>
           <div style="display:flex;justify-content:center;">
-            <img src="sprite.mistake1.png" alt="Mascot reacting to a spoken mistake" style="max-height:250px;" />
+            <img src="sprite.mistake1.png" data-i18n-attr="alt" data-i18n="alt.mascotSpokenMistake" alt="Mascot reacting to a spoken mistake" style="max-height:250px;" />
           </div>
         </div>
       </div>
@@ -838,16 +874,16 @@
       <div class="container">
         <div class="quote-banner">
           <div>
-            <h2>Memorization can be peaceful, personal, and powerful.</h2>
-            <p>
+            <h2 data-i18n="cta.title">Memorization can be peaceful, personal, and powerful.</h2>
+            <p data-i18n="cta.body">
               Built for repeated practice, spoken learning, and encouraging progress — Memorezar helps bring important words closer to heart and mind.
             </p>
             <div class="cta-row" style="margin-top:22px;">
-              <a class="btn btn-secondary" href="#privacy-policy">Read privacy policy</a>
-              <a class="btn btn-primary" href="#download">Get the app</a>
+              <a class="btn btn-secondary" href="#privacy-policy" data-i18n="cta.read">Read privacy policy</a>
+              <a class="btn btn-primary" href="#download" data-i18n="cta.get">Get the app</a>
             </div>
           </div>
-          <img src="sprite.pray3.png" alt="Memorezar mascot in a peaceful pose" />
+          <img src="sprite.pray3.png" data-i18n-attr="alt" data-i18n="alt.mascotPeaceful" alt="Memorezar mascot in a peaceful pose" />
         </div>
       </div>
     </section>
@@ -855,93 +891,93 @@
     <section class="section" id="privacy-policy">
       <div class="container">
         <div class="privacy">
-          <h2>Privacy Policy</h2>
-          <p><strong>Last updated:</strong> April 16, 2026</p>
-          <p>
+          <h2 data-i18n="privacy.title">Privacy Policy</h2>
+          <p data-i18n-html="privacy.lastUpdated"><strong>Last updated:</strong> April 16, 2026</p>
+          <p data-i18n="privacy.intro">
             Memorezar respects your privacy. This Privacy Policy explains what information may be collected when you use the Memorezar website and mobile application, how that information may be used, and the choices available to you.
           </p>
 
-          <h3>1. Information we may collect</h3>
-          <p>Depending on the features you use, Memorezar may collect the following categories of information:</p>
+          <h3 data-i18n="privacy.s1.title">1. Information we may collect</h3>
+          <p data-i18n="privacy.s1.intro">Depending on the features you use, Memorezar may collect the following categories of information:</p>
           <ul>
-            <li>Account information, such as your name, email address, login credentials, or profile details.</li>
-            <li>Practice content you choose to upload, enter, or save inside the app, such as passages, prayers, quotations, study material, or notes.</li>
-            <li>Voice-related interaction data necessary to provide memorization and listening features.</li>
-            <li>Usage information, such as session activity, device type, operating system, app version, crash data, and general analytics.</li>
-            <li>Communications you send to us, including support requests and feedback.</li>
+            <li data-i18n="privacy.s1.li1">Account information, such as your name, email address, login credentials, or profile details.</li>
+            <li data-i18n="privacy.s1.li2">Practice content you choose to upload, enter, or save inside the app, such as passages, prayers, quotations, study material, or notes.</li>
+            <li data-i18n="privacy.s1.li3">Voice-related interaction data necessary to provide memorization and listening features.</li>
+            <li data-i18n="privacy.s1.li4">Usage information, such as session activity, device type, operating system, app version, crash data, and general analytics.</li>
+            <li data-i18n="privacy.s1.li5">Communications you send to us, including support requests and feedback.</li>
           </ul>
 
-          <h3>2. How we use information</h3>
-          <p>We may use information to:</p>
+          <h3 data-i18n="privacy.s2.title">2. How we use information</h3>
+          <p data-i18n="privacy.s2.intro">We may use information to:</p>
           <ul>
-            <li>Provide, maintain, and improve the Memorezar app and website.</li>
-            <li>Enable memorization, listening, review, correction, and progress-related features.</li>
-            <li>Personalize your experience and save your preferences.</li>
-            <li>Respond to support inquiries and communicate important updates.</li>
-            <li>Monitor performance, troubleshoot bugs, and protect the security of the service.</li>
-            <li>Comply with legal obligations and enforce our terms.</li>
+            <li data-i18n="privacy.s2.li1">Provide, maintain, and improve the Memorezar app and website.</li>
+            <li data-i18n="privacy.s2.li2">Enable memorization, listening, review, correction, and progress-related features.</li>
+            <li data-i18n="privacy.s2.li3">Personalize your experience and save your preferences.</li>
+            <li data-i18n="privacy.s2.li4">Respond to support inquiries and communicate important updates.</li>
+            <li data-i18n="privacy.s2.li5">Monitor performance, troubleshoot bugs, and protect the security of the service.</li>
+            <li data-i18n="privacy.s2.li6">Comply with legal obligations and enforce our terms.</li>
           </ul>
 
-          <h3>3. Voice data and spoken practice</h3>
-          <p>
+          <h3 data-i18n="privacy.s3.title">3. Voice data and spoken practice</h3>
+          <p data-i18n="privacy.s3.body">
             Because Memorezar is built around spoken memorization, certain voice-related data may be processed to deliver listening, alignment, and correction features. Where applicable, voice input may be processed by Memorezar and/or trusted service providers strictly for app functionality, improvement, safety, and support. You should adjust this section to match your actual technical implementation.
           </p>
 
-          <h3>4. Sharing of information</h3>
-          <p>We do not sell your personal information. We may share information only in limited cases, such as:</p>
+          <h3 data-i18n="privacy.s4.title">4. Sharing of information</h3>
+          <p data-i18n="privacy.s4.intro">We do not sell your personal information. We may share information only in limited cases, such as:</p>
           <ul>
-            <li>With service providers who help us operate the app, such as hosting, analytics, authentication, storage, customer support, or speech-processing providers.</li>
-            <li>When required by law, legal process, or governmental request.</li>
-            <li>To protect rights, safety, security, users, or the public.</li>
-            <li>As part of a merger, acquisition, financing, or sale of business assets.</li>
+            <li data-i18n="privacy.s4.li1">With service providers who help us operate the app, such as hosting, analytics, authentication, storage, customer support, or speech-processing providers.</li>
+            <li data-i18n="privacy.s4.li2">When required by law, legal process, or governmental request.</li>
+            <li data-i18n="privacy.s4.li3">To protect rights, safety, security, users, or the public.</li>
+            <li data-i18n="privacy.s4.li4">As part of a merger, acquisition, financing, or sale of business assets.</li>
           </ul>
 
-          <h3>5. Data retention</h3>
-          <p>
+          <h3 data-i18n="privacy.s5.title">5. Data retention</h3>
+          <p data-i18n="privacy.s5.body">
             We retain information only for as long as necessary to provide the service, fulfill the purposes described in this Privacy Policy, resolve disputes, enforce agreements, and comply with legal obligations.
           </p>
 
-          <h3>6. Your choices</h3>
+          <h3 data-i18n="privacy.s6.title">6. Your choices</h3>
           <ul>
-            <li>You may be able to access, update, or delete certain account information from within the app.</li>
-            <li>You may request permanent deletion of your account and associated data — see Section&nbsp;7 below.</li>
-            <li>You can control certain device permissions, including microphone access, through your device settings.</li>
-            <li>You may opt out of certain non-essential communications.</li>
+            <li data-i18n="privacy.s6.li1">You may be able to access, update, or delete certain account information from within the app.</li>
+            <li data-i18n="privacy.s6.li2">You may request permanent deletion of your account and associated data — see Section&nbsp;7 below.</li>
+            <li data-i18n="privacy.s6.li3">You can control certain device permissions, including microphone access, through your device settings.</li>
+            <li data-i18n="privacy.s6.li4">You may opt out of certain non-essential communications.</li>
           </ul>
 
-          <h3 id="delete-account">7. Account deletion</h3>
-          <p>
+          <h3 id="delete-account" data-i18n="privacy.s7.title">7. Account deletion</h3>
+          <p data-i18n="privacy.s7.intro">
             You can request permanent deletion of your Memorezar account and all associated data at any time, through either of the following channels:
           </p>
           <ul>
-            <li><strong>In the app:</strong> Open Memorezar → Settings → Account → <em>Delete My Account</em>. You'll be signed out immediately, and your deletion request is queued.</li>
-            <li><strong>By email:</strong> If you no longer have access to the app, email <a href="mailto:support@memorezar.com?subject=Delete%20my%20account" style="color:var(--blue);font-weight:700;">support@memorezar.com</a> with the subject <em>"Delete my account"</em> and include the email address associated with your Memorezar account. Where possible, please send from that same email address so we can verify the request.</li>
+            <li data-i18n-html="privacy.s7.li1"><strong>In the app:</strong> Open Memorezar → Settings → Account → <em>Delete My Account</em>. You'll be signed out immediately, and your deletion request is queued.</li>
+            <li data-i18n-html="privacy.s7.li2"><strong>By email:</strong> If you no longer have access to the app, email <a href="mailto:support@memorezar.com?subject=Delete%20my%20account" style="color:var(--blue);font-weight:700;">support@memorezar.com</a> with the subject <em>"Delete my account"</em> and include the email address associated with your Memorezar account. Where possible, please send from that same email address so we can verify the request.</li>
           </ul>
-          <p>
+          <p data-i18n="privacy.s7.final">
             Once we receive a deletion request through either channel, we will permanently delete your Memorezar account, cloud backups, and any community recordings you've shared within 30 days. Deletion is irreversible. After deletion, signing in with the same email through any provider will create a new, empty account.
           </p>
 
-          <h3>8. Security</h3>
-          <p>
+          <h3 data-i18n="privacy.s8.title">8. Security</h3>
+          <p data-i18n="privacy.s8.body">
             We use reasonable administrative, technical, and organizational safeguards intended to protect information. However, no method of transmission or storage is completely secure, and we cannot guarantee absolute security.
           </p>
 
-          <h3>9. International users</h3>
-          <p>
+          <h3 data-i18n="privacy.s9.title">9. International users</h3>
+          <p data-i18n="privacy.s9.body">
             Your information may be processed in countries other than your own, where privacy laws may differ. By using the service, you understand that information may be transferred to and processed in such locations, subject to applicable safeguards where required.
           </p>
 
-          <h3>10. Changes to this Privacy Policy</h3>
-          <p>
+          <h3 data-i18n="privacy.s10.title">10. Changes to this Privacy Policy</h3>
+          <p data-i18n="privacy.s10.body">
             We may update this Privacy Policy from time to time. If we make material changes, we may notify users by updating the date above, posting a notice in the app or website, or by other appropriate means.
           </p>
 
-          <h3>11. Contact us</h3>
-          <p>
+          <h3 data-i18n="privacy.s11.title">11. Contact us</h3>
+          <p data-i18n-html="privacy.s11.body">
             If you have questions about this Privacy Policy or would like to request access, correction, or deletion of your information, contact us at <a href="mailto:privacy@memorezar.com" style="color:var(--blue);font-weight:700;">privacy@memorezar.com</a>.
           </p>
 
-          <p class="small-note">
+          <p class="small-note" data-i18n="privacy.disclaimer">
             Important: this privacy policy is a polished starter template, not legal advice. You should replace placeholders and confirm the final language with your real data flows, jurisdictions, and legal requirements before publishing.
           </p>
         </div>
@@ -952,15 +988,318 @@
   <footer class="site-footer">
     <div class="container footer-shell">
       <div class="footer-left">
-        <img src="app.icon.png" alt="Memorezar icon" style="width:34px;height:34px;border-radius:10px;" />
-        <span>© 2026 Memorezar. All rights reserved.</span>
+        <img src="app.icon.png" data-i18n-attr="alt" data-i18n="alt.iconShort" alt="Memorezar icon" style="width:34px;height:34px;border-radius:10px;" />
+        <span data-i18n="footer.copyright">© 2026 Memorezar. All rights reserved.</span>
       </div>
       <div class="footer-links">
         <a href="https://apps.apple.com/us/app/memorezar/id6758293690">App Store</a>
         <a href="https://play.google.com/store/apps/details?id=com.memorezar.app">Google Play</a>
-        <a href="#privacy-policy">Privacy Policy</a>
+        <a href="#privacy-policy" data-i18n="footer.privacy">Privacy Policy</a>
       </div>
     </div>
   </footer>
+
+  <script>
+    (function () {
+      const translations = {
+        en: {
+          "meta.title": "Memorezar — Memorize with your voice",
+          "meta.description": "Memorezar helps you memorize through speaking, listening, and gentle correction. Practice prayers, poetry, speeches, schoolwork, and more.",
+          "aria.brandHome": "Memorezar home",
+          "aria.primaryNav": "Primary navigation",
+          "aria.appStore": "Download on the App Store",
+          "aria.googlePlay": "Get it on Google Play",
+          "alt.appIcon": "Memorezar app icon",
+          "alt.iconShort": "Memorezar icon",
+          "alt.mascotPrayCalm": "Memorezar mascot in a calm prayer pose",
+          "alt.mascotMeditate": "Mascot meditating peacefully",
+          "alt.mascotMistake": "Mascot reacting to a mistake",
+          "alt.mascotKneel": "Mascot kneeling in prayer",
+          "alt.mascotRead": "Mascot reading productively",
+          "alt.mascotSpokenMistake": "Mascot reacting to a spoken mistake",
+          "alt.mascotPeaceful": "Memorezar mascot in a peaceful pose",
+          "nav.features": "Features",
+          "nav.benefits": "Benefits",
+          "nav.howItWorks": "How it works",
+          "nav.privacy": "Privacy",
+          "nav.download": "Download",
+          "hero.eyebrow": "Voice-based memorization, made calm and simple",
+          "hero.title": "Memorize with your voice. Practice with confidence.",
+          "hero.lead": "Memorezar helps you learn and retain prayers, poems, speeches, vocabulary, class material, and meaningful texts by letting you speak them out loud, hear yourself, and get guided support when you miss a word.",
+          "badge.appleSmall": "Download on the",
+          "badge.googleSmall": "Get it on",
+          "preview.tagline": "Memorization practice with listening and gentle feedback",
+          "preview.pill": "Speak • Listen • Remember",
+          "preview.session": "Practice session",
+          "preview.live": "Live listening",
+          "preview.instruction": "“Recite the passage out loud and we’ll follow along.”",
+          "features.headTitle": "A memorization app that feels encouraging, not intimidating",
+          "features.headLead": "Inspired by modern product sites with a clean, trustworthy feel, Memorezar is designed to make repeated practice calmer, clearer, and more effective.",
+          "features.card1.title": "Practice out loud",
+          "features.card1.body": "Use your own voice to work through material naturally. Speaking what you are learning helps strengthen recall and makes practice more active than silent rereading.",
+          "features.card2.title": "We listen as you recite",
+          "features.card2.body": "As you speak, the app follows along and helps you stay on track. If you say a mistaken word, skip one, or swap the order, Memorezar can gently guide you back.",
+          "features.card3.title": "Designed for meaningful repetition",
+          "features.card3.body": "Whether you're practicing prayers, schoolwork, speeches, or poetry, the experience is built to help you return often and improve steadily without friction.",
+          "benefits.headTitle": "Why memorization still matters",
+          "benefits.headLead": "Good memorization is not about pressure. It is about familiarity, fluency, confidence, and having important words ready when you need them.",
+          "benefits.item1.title": "Better recall for school and study",
+          "benefits.item1.body": "Review vocabulary, facts, passages, formulas, and presentations in a more active way.",
+          "benefits.item2.title": "More confidence when speaking",
+          "benefits.item2.body": "Practice until the words feel natural, steady, and ready to share.",
+          "benefits.item3.title": "Less passive rereading",
+          "benefits.item3.body": "Use repetition with attention instead of reading the same lines without retaining them.",
+          "benefits.companion.title": "A helpful companion for classwork, speeches, and personal practice",
+          "benefits.companion.body": "Memorezar supports the moments when repetition leads to growth: studying for exams, preparing a talk, learning a passage, or keeping treasured words close.",
+          "how.headTitle": "How it works",
+          "how.headLead": "Keep the flow simple: choose your text, speak through it, and get support when you need it.",
+          "how.step1.title": "Choose what to memorize",
+          "how.step1.body": "Load the text you want to practice, whether it is a prayer, lesson, poem, quotation, or speech.",
+          "how.step2.title": "Recite it out loud",
+          "how.step2.body": "The app listens as you speak so your practice feels dynamic, focused, and closer to real recall.",
+          "how.step3.title": "Get gentle correction",
+          "how.step3.body": "If you miss a word or make a mistake, Memorezar helps you notice it and continue improving without breaking momentum.",
+          "how.gentle.title": "Gentle correction that keeps you moving",
+          "how.gentle.a.title": "We follow along while you speak",
+          "how.gentle.a.body": "No need to stop every few seconds and check where you are.",
+          "how.gentle.b.title": "We help catch mistaken words",
+          "how.gentle.b.body": "A missed word or wrong phrase becomes a learning moment, not a frustrating reset.",
+          "how.gentle.c.title": "We help strengthen accuracy over time",
+          "how.gentle.c.body": "Repeated guided practice helps the correct version feel more natural.",
+          "cta.title": "Memorization can be peaceful, personal, and powerful.",
+          "cta.body": "Built for repeated practice, spoken learning, and encouraging progress — Memorezar helps bring important words closer to heart and mind.",
+          "cta.read": "Read privacy policy",
+          "cta.get": "Get the app",
+          "privacy.title": "Privacy Policy",
+          "privacy.lastUpdated": "<strong>Last updated:</strong> April 16, 2026",
+          "privacy.intro": "Memorezar respects your privacy. This Privacy Policy explains what information may be collected when you use the Memorezar website and mobile application, how that information may be used, and the choices available to you.",
+          "privacy.s1.title": "1. Information we may collect",
+          "privacy.s1.intro": "Depending on the features you use, Memorezar may collect the following categories of information:",
+          "privacy.s1.li1": "Account information, such as your name, email address, login credentials, or profile details.",
+          "privacy.s1.li2": "Practice content you choose to upload, enter, or save inside the app, such as passages, prayers, quotations, study material, or notes.",
+          "privacy.s1.li3": "Voice-related interaction data necessary to provide memorization and listening features.",
+          "privacy.s1.li4": "Usage information, such as session activity, device type, operating system, app version, crash data, and general analytics.",
+          "privacy.s1.li5": "Communications you send to us, including support requests and feedback.",
+          "privacy.s2.title": "2. How we use information",
+          "privacy.s2.intro": "We may use information to:",
+          "privacy.s2.li1": "Provide, maintain, and improve the Memorezar app and website.",
+          "privacy.s2.li2": "Enable memorization, listening, review, correction, and progress-related features.",
+          "privacy.s2.li3": "Personalize your experience and save your preferences.",
+          "privacy.s2.li4": "Respond to support inquiries and communicate important updates.",
+          "privacy.s2.li5": "Monitor performance, troubleshoot bugs, and protect the security of the service.",
+          "privacy.s2.li6": "Comply with legal obligations and enforce our terms.",
+          "privacy.s3.title": "3. Voice data and spoken practice",
+          "privacy.s3.body": "Because Memorezar is built around spoken memorization, certain voice-related data may be processed to deliver listening, alignment, and correction features. Where applicable, voice input may be processed by Memorezar and/or trusted service providers strictly for app functionality, improvement, safety, and support. You should adjust this section to match your actual technical implementation.",
+          "privacy.s4.title": "4. Sharing of information",
+          "privacy.s4.intro": "We do not sell your personal information. We may share information only in limited cases, such as:",
+          "privacy.s4.li1": "With service providers who help us operate the app, such as hosting, analytics, authentication, storage, customer support, or speech-processing providers.",
+          "privacy.s4.li2": "When required by law, legal process, or governmental request.",
+          "privacy.s4.li3": "To protect rights, safety, security, users, or the public.",
+          "privacy.s4.li4": "As part of a merger, acquisition, financing, or sale of business assets.",
+          "privacy.s5.title": "5. Data retention",
+          "privacy.s5.body": "We retain information only for as long as necessary to provide the service, fulfill the purposes described in this Privacy Policy, resolve disputes, enforce agreements, and comply with legal obligations.",
+          "privacy.s6.title": "6. Your choices",
+          "privacy.s6.li1": "You may be able to access, update, or delete certain account information from within the app.",
+          "privacy.s6.li2": "You may request permanent deletion of your account and associated data — see Section 7 below.",
+          "privacy.s6.li3": "You can control certain device permissions, including microphone access, through your device settings.",
+          "privacy.s6.li4": "You may opt out of certain non-essential communications.",
+          "privacy.s7.title": "7. Account deletion",
+          "privacy.s7.intro": "You can request permanent deletion of your Memorezar account and all associated data at any time, through either of the following channels:",
+          "privacy.s7.li1": "<strong>In the app:</strong> Open Memorezar → Settings → Account → <em>Delete My Account</em>. You'll be signed out immediately, and your deletion request is queued.",
+          "privacy.s7.li2": "<strong>By email:</strong> If you no longer have access to the app, email <a href=\"mailto:support@memorezar.com?subject=Delete%20my%20account\" style=\"color:var(--blue);font-weight:700;\">support@memorezar.com</a> with the subject <em>\"Delete my account\"</em> and include the email address associated with your Memorezar account. Where possible, please send from that same email address so we can verify the request.",
+          "privacy.s7.final": "Once we receive a deletion request through either channel, we will permanently delete your Memorezar account, cloud backups, and any community recordings you've shared within 30 days. Deletion is irreversible. After deletion, signing in with the same email through any provider will create a new, empty account.",
+          "privacy.s8.title": "8. Security",
+          "privacy.s8.body": "We use reasonable administrative, technical, and organizational safeguards intended to protect information. However, no method of transmission or storage is completely secure, and we cannot guarantee absolute security.",
+          "privacy.s9.title": "9. International users",
+          "privacy.s9.body": "Your information may be processed in countries other than your own, where privacy laws may differ. By using the service, you understand that information may be transferred to and processed in such locations, subject to applicable safeguards where required.",
+          "privacy.s10.title": "10. Changes to this Privacy Policy",
+          "privacy.s10.body": "We may update this Privacy Policy from time to time. If we make material changes, we may notify users by updating the date above, posting a notice in the app or website, or by other appropriate means.",
+          "privacy.s11.title": "11. Contact us",
+          "privacy.s11.body": "If you have questions about this Privacy Policy or would like to request access, correction, or deletion of your information, contact us at <a href=\"mailto:privacy@memorezar.com\" style=\"color:var(--blue);font-weight:700;\">privacy@memorezar.com</a>.",
+          "privacy.disclaimer": "Important: this privacy policy is a polished starter template, not legal advice. You should replace placeholders and confirm the final language with your real data flows, jurisdictions, and legal requirements before publishing.",
+          "footer.copyright": "© 2026 Memorezar. All rights reserved.",
+          "footer.privacy": "Privacy Policy"
+        },
+        es: {
+          "meta.title": "Memorezar — Memoriza con tu voz",
+          "meta.description": "Memorezar te ayuda a memorizar hablando, escuchando y con correcciones suaves. Practica oraciones, poesía, discursos, tareas y más.",
+          "aria.brandHome": "Inicio de Memorezar",
+          "aria.primaryNav": "Navegación principal",
+          "aria.appStore": "Descargar en el App Store",
+          "aria.googlePlay": "Disponible en Google Play",
+          "alt.appIcon": "Icono de la app Memorezar",
+          "alt.iconShort": "Icono de Memorezar",
+          "alt.mascotPrayCalm": "Mascota de Memorezar en pose de oración tranquila",
+          "alt.mascotMeditate": "Mascota meditando con calma",
+          "alt.mascotMistake": "Mascota reaccionando a un error",
+          "alt.mascotKneel": "Mascota arrodillada en oración",
+          "alt.mascotRead": "Mascota leyendo con concentración",
+          "alt.mascotSpokenMistake": "Mascota reaccionando a un error hablado",
+          "alt.mascotPeaceful": "Mascota de Memorezar en pose tranquila",
+          "nav.features": "Características",
+          "nav.benefits": "Beneficios",
+          "nav.howItWorks": "Cómo funciona",
+          "nav.privacy": "Privacidad",
+          "nav.download": "Descargar",
+          "hero.eyebrow": "Memorización por voz, calmada y sencilla",
+          "hero.title": "Memoriza con tu voz. Practica con confianza.",
+          "hero.lead": "Memorezar te ayuda a aprender y retener oraciones, poemas, discursos, vocabulario, material de clase y textos significativos dejándote decirlos en voz alta, escucharte y recibir apoyo guiado cuando olvidas una palabra.",
+          "badge.appleSmall": "Descárgalo en el",
+          "badge.googleSmall": "Disponible en",
+          "preview.tagline": "Práctica de memorización con escucha y retroalimentación amable",
+          "preview.pill": "Habla • Escucha • Recuerda",
+          "preview.session": "Sesión de práctica",
+          "preview.live": "Escucha activa",
+          "preview.instruction": "“Recita el pasaje en voz alta y te acompañaremos.”",
+          "features.headTitle": "Una app de memorización que te anima, no te intimida",
+          "features.headLead": "Inspirada en sitios modernos con un aire limpio y confiable, Memorezar está diseñada para que la práctica repetida sea más tranquila, clara y efectiva.",
+          "features.card1.title": "Practica en voz alta",
+          "features.card1.body": "Usa tu propia voz para repasar el material de forma natural. Decir en voz alta lo que estás aprendiendo refuerza la memoria y hace que la práctica sea más activa que releer en silencio.",
+          "features.card2.title": "Te escuchamos mientras recitas",
+          "features.card2.body": "Mientras hablas, la app te sigue y te ayuda a mantener el rumbo. Si te equivocas de palabra, te saltas una o cambias el orden, Memorezar te guía suavemente de vuelta.",
+          "features.card3.title": "Diseñada para la repetición con propósito",
+          "features.card3.body": "Ya sea que practiques oraciones, tareas, discursos o poesía, la experiencia está pensada para que vuelvas a menudo y mejores poco a poco sin fricciones.",
+          "benefits.headTitle": "Por qué la memorización sigue importando",
+          "benefits.headLead": "Memorizar bien no tiene que ver con la presión. Tiene que ver con la familiaridad, la fluidez, la confianza y tener las palabras importantes listas cuando las necesitas.",
+          "benefits.item1.title": "Mejor recuerdo para la escuela y el estudio",
+          "benefits.item1.body": "Repasa vocabulario, datos, pasajes, fórmulas y presentaciones de forma más activa.",
+          "benefits.item2.title": "Más confianza al hablar",
+          "benefits.item2.body": "Practica hasta que las palabras se sientan naturales, firmes y listas para compartir.",
+          "benefits.item3.title": "Menos relectura pasiva",
+          "benefits.item3.body": "Usa la repetición con atención en vez de leer las mismas líneas sin retenerlas.",
+          "benefits.companion.title": "Un compañero útil para tareas, discursos y práctica personal",
+          "benefits.companion.body": "Memorezar acompaña esos momentos en que la repetición lleva al crecimiento: estudiar para un examen, preparar una charla, aprender un pasaje o mantener cerca palabras que atesoras.",
+          "how.headTitle": "Cómo funciona",
+          "how.headLead": "Mantén el flujo simple: elige tu texto, recítalo y recibe apoyo cuando lo necesites.",
+          "how.step1.title": "Elige qué memorizar",
+          "how.step1.body": "Carga el texto que quieres practicar, ya sea una oración, lección, poema, cita o discurso.",
+          "how.step2.title": "Recítalo en voz alta",
+          "how.step2.body": "La app escucha mientras hablas para que tu práctica sea dinámica, enfocada y más cercana al recuerdo real.",
+          "how.step3.title": "Recibe correcciones suaves",
+          "how.step3.body": "Si te saltas una palabra o te equivocas, Memorezar te ayuda a notarlo y a seguir mejorando sin perder el ritmo.",
+          "how.gentle.title": "Correcciones suaves que no te detienen",
+          "how.gentle.a.title": "Te seguimos mientras hablas",
+          "how.gentle.a.body": "No hace falta parar cada pocos segundos para ver por dónde vas.",
+          "how.gentle.b.title": "Ayudamos a detectar palabras equivocadas",
+          "how.gentle.b.body": "Una palabra olvidada o una frase errónea se convierte en un momento de aprendizaje, no en un reinicio frustrante.",
+          "how.gentle.c.title": "Ayudamos a reforzar la precisión con el tiempo",
+          "how.gentle.c.body": "La práctica guiada y repetida hace que la versión correcta se sienta más natural.",
+          "cta.title": "La memorización puede ser tranquila, personal y poderosa.",
+          "cta.body": "Creada para la práctica repetida, el aprendizaje hablado y el progreso alentador — Memorezar ayuda a acercar las palabras importantes al corazón y a la mente.",
+          "cta.read": "Leer política de privacidad",
+          "cta.get": "Obtén la app",
+          "privacy.title": "Política de Privacidad",
+          "privacy.lastUpdated": "<strong>Última actualización:</strong> 16 de abril de 2026",
+          "privacy.intro": "Memorezar respeta tu privacidad. Esta Política de Privacidad explica qué información se puede recopilar cuando usas el sitio web y la aplicación móvil de Memorezar, cómo puede utilizarse esa información y qué opciones tienes a tu disposición.",
+          "privacy.s1.title": "1. Información que podemos recopilar",
+          "privacy.s1.intro": "Según las funciones que uses, Memorezar puede recopilar las siguientes categorías de información:",
+          "privacy.s1.li1": "Información de cuenta, como tu nombre, dirección de correo electrónico, credenciales de inicio de sesión o detalles de perfil.",
+          "privacy.s1.li2": "Contenido de práctica que decides subir, ingresar o guardar en la app, como pasajes, oraciones, citas, material de estudio o notas.",
+          "privacy.s1.li3": "Datos de interacción por voz necesarios para ofrecer las funciones de memorización y escucha.",
+          "privacy.s1.li4": "Información de uso, como actividad de sesión, tipo de dispositivo, sistema operativo, versión de la app, datos de errores y analíticas generales.",
+          "privacy.s1.li5": "Comunicaciones que nos envías, incluyendo solicitudes de soporte y comentarios.",
+          "privacy.s2.title": "2. Cómo usamos la información",
+          "privacy.s2.intro": "Podemos usar la información para:",
+          "privacy.s2.li1": "Proveer, mantener y mejorar la app y el sitio web de Memorezar.",
+          "privacy.s2.li2": "Habilitar las funciones de memorización, escucha, repaso, corrección y seguimiento del progreso.",
+          "privacy.s2.li3": "Personalizar tu experiencia y guardar tus preferencias.",
+          "privacy.s2.li4": "Responder a consultas de soporte y comunicar actualizaciones importantes.",
+          "privacy.s2.li5": "Supervisar el rendimiento, resolver errores y proteger la seguridad del servicio.",
+          "privacy.s2.li6": "Cumplir con obligaciones legales y hacer cumplir nuestros términos.",
+          "privacy.s3.title": "3. Datos de voz y práctica hablada",
+          "privacy.s3.body": "Como Memorezar se basa en la memorización hablada, ciertos datos relacionados con la voz pueden procesarse para ofrecer funciones de escucha, alineación y corrección. Cuando corresponda, la entrada de voz puede ser procesada por Memorezar y/o proveedores de servicios de confianza estrictamente con fines de funcionalidad, mejora, seguridad y soporte de la app. Deberías ajustar esta sección para que coincida con tu implementación técnica real.",
+          "privacy.s4.title": "4. Compartir información",
+          "privacy.s4.intro": "No vendemos tu información personal. Podemos compartir información solo en casos limitados, como:",
+          "privacy.s4.li1": "Con proveedores de servicios que nos ayudan a operar la app, como hospedaje, analíticas, autenticación, almacenamiento, atención al cliente o procesamiento de voz.",
+          "privacy.s4.li2": "Cuando lo exija la ley, un proceso legal o una solicitud gubernamental.",
+          "privacy.s4.li3": "Para proteger derechos, seguridad, usuarios o el público.",
+          "privacy.s4.li4": "Como parte de una fusión, adquisición, financiamiento o venta de activos del negocio.",
+          "privacy.s5.title": "5. Conservación de datos",
+          "privacy.s5.body": "Conservamos la información solo durante el tiempo necesario para proveer el servicio, cumplir los fines descritos en esta Política de Privacidad, resolver disputas, hacer cumplir acuerdos y cumplir con obligaciones legales.",
+          "privacy.s6.title": "6. Tus opciones",
+          "privacy.s6.li1": "Es posible que puedas acceder, actualizar o eliminar cierta información de cuenta desde la app.",
+          "privacy.s6.li2": "Puedes solicitar la eliminación permanente de tu cuenta y los datos asociados — consulta la Sección 7 más abajo.",
+          "privacy.s6.li3": "Puedes controlar ciertos permisos del dispositivo, incluido el acceso al micrófono, desde los ajustes de tu dispositivo.",
+          "privacy.s6.li4": "Puedes darte de baja de ciertas comunicaciones no esenciales.",
+          "privacy.s7.title": "7. Eliminación de cuenta",
+          "privacy.s7.intro": "Puedes solicitar la eliminación permanente de tu cuenta Memorezar y de todos los datos asociados en cualquier momento, a través de uno de los siguientes canales:",
+          "privacy.s7.li1": "<strong>En la app:</strong> Abre Memorezar → Ajustes → Cuenta → <em>Eliminar mi cuenta</em>. Cerraremos tu sesión de inmediato y tu solicitud de eliminación quedará en cola.",
+          "privacy.s7.li2": "<strong>Por correo:</strong> Si ya no tienes acceso a la app, escribe a <a href=\"mailto:support@memorezar.com?subject=Eliminar%20mi%20cuenta\" style=\"color:var(--blue);font-weight:700;\">support@memorezar.com</a> con el asunto <em>\"Eliminar mi cuenta\"</em> e incluye el correo asociado a tu cuenta Memorezar. En lo posible, envíalo desde ese mismo correo para que podamos verificar la solicitud.",
+          "privacy.s7.final": "Una vez recibida la solicitud por cualquiera de los dos canales, eliminaremos permanentemente tu cuenta Memorezar, las copias de seguridad en la nube y cualquier grabación comunitaria que hayas compartido en un plazo de 30 días. La eliminación es irreversible. Tras la eliminación, iniciar sesión con el mismo correo desde cualquier proveedor creará una cuenta nueva y vacía.",
+          "privacy.s8.title": "8. Seguridad",
+          "privacy.s8.body": "Usamos salvaguardas administrativas, técnicas y organizativas razonables para proteger la información. Sin embargo, ningún método de transmisión o almacenamiento es totalmente seguro y no podemos garantizar una seguridad absoluta.",
+          "privacy.s9.title": "9. Usuarios internacionales",
+          "privacy.s9.body": "Tu información puede procesarse en países distintos al tuyo, donde las leyes de privacidad pueden diferir. Al usar el servicio, entiendes que la información puede transferirse y procesarse en dichos lugares, sujeta a las salvaguardas aplicables cuando corresponda.",
+          "privacy.s10.title": "10. Cambios a esta Política de Privacidad",
+          "privacy.s10.body": "Podemos actualizar esta Política de Privacidad ocasionalmente. Si hacemos cambios importantes, podemos notificar a los usuarios actualizando la fecha de arriba, publicando un aviso en la app o el sitio web, u otros medios apropiados.",
+          "privacy.s11.title": "11. Contáctanos",
+          "privacy.s11.body": "Si tienes preguntas sobre esta Política de Privacidad o quieres solicitar acceso, corrección o eliminación de tu información, contáctanos en <a href=\"mailto:privacy@memorezar.com\" style=\"color:var(--blue);font-weight:700;\">privacy@memorezar.com</a>.",
+          "privacy.disclaimer": "Importante: esta política de privacidad es una plantilla inicial refinada, no asesoría legal. Deberías reemplazar los marcadores y confirmar el texto final según tus flujos de datos reales, jurisdicciones y requisitos legales antes de publicarla.",
+          "footer.copyright": "© 2026 Memorezar. Todos los derechos reservados.",
+          "footer.privacy": "Política de Privacidad"
+        }
+      };
+
+      const STORAGE_KEY = "memorezar.lang";
+      const supported = ["en", "es"];
+
+      function detectLang() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved && supported.includes(saved)) return saved;
+        return "es";
+      }
+
+      function applyLang(lang) {
+        const dict = translations[lang] || translations.en;
+        document.documentElement.lang = lang;
+
+        // Text content (data-i18n)
+        document.querySelectorAll("[data-i18n]").forEach((el) => {
+          const key = el.getAttribute("data-i18n");
+          if (!(key in dict)) return;
+          const value = dict[key];
+          if (el.hasAttribute("data-i18n-attr")) {
+            const attrs = el.getAttribute("data-i18n-attr").split(",").map((s) => s.trim());
+            attrs.forEach((a) => el.setAttribute(a, value));
+          } else if (el.hasAttribute("data-i18n-html")) {
+            el.innerHTML = value;
+          } else {
+            el.textContent = value;
+          }
+        });
+
+        // innerHTML entries (data-i18n-html used alone, no data-i18n)
+        document.querySelectorAll("[data-i18n-html]:not([data-i18n])").forEach((el) => {
+          const key = el.getAttribute("data-i18n-html");
+          if (key in dict) el.innerHTML = dict[key];
+        });
+
+        // Toggle button active state
+        document.querySelectorAll(".lang-toggle button[data-lang]").forEach((btn) => {
+          btn.classList.toggle("active", btn.getAttribute("data-lang") === lang);
+          btn.setAttribute("aria-pressed", btn.getAttribute("data-lang") === lang ? "true" : "false");
+        });
+      }
+
+      function init() {
+        const initial = detectLang();
+        applyLang(initial);
+
+        document.querySelectorAll(".lang-toggle button[data-lang]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const lang = btn.getAttribute("data-lang");
+            localStorage.setItem(STORAGE_KEY, lang);
+            applyLang(lang);
+          });
+        });
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+      } else {
+        init();
+      }
+    })();
+  </script>
 </body>
 </html>
