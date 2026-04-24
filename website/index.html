@@ -78,6 +78,12 @@
       width: auto;
     }
 
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
     .nav-links {
       display: flex;
       align-items: center;
@@ -617,17 +623,19 @@
         <img class="icon" src="app.icon.png" data-i18n-attr="alt" data-i18n="alt.appIcon" alt="Memorezar app icon" />
         <img class="wordmark" src="logo.png" alt="Memorezar" />
       </a>
-      <nav class="nav-links" data-i18n-attr="aria-label" data-i18n="aria.primaryNav" aria-label="Primary navigation">
-        <a href="#features" data-i18n="nav.features">Features</a>
-        <a href="#benefits" data-i18n="nav.benefits">Benefits</a>
-        <a href="#how-it-works" data-i18n="nav.howItWorks">How it works</a>
-        <a href="#privacy-policy" data-i18n="nav.privacy">Privacy</a>
-        <a href="#download" class="btn btn-primary" data-i18n="nav.download">Download</a>
+      <div class="nav-right">
+        <nav class="nav-links" data-i18n-attr="aria-label" data-i18n="aria.primaryNav" aria-label="Primary navigation">
+          <a href="#features" data-i18n="nav.features">Features</a>
+          <a href="#benefits" data-i18n="nav.benefits">Benefits</a>
+          <a href="#how-it-works" data-i18n="nav.howItWorks">How it works</a>
+          <a href="#privacy-policy" data-i18n="nav.privacy">Privacy</a>
+          <a href="#download" class="btn btn-primary" data-i18n="nav.download">Download</a>
+        </nav>
         <div class="lang-toggle" role="group" aria-label="Language">
           <button type="button" data-lang="en" class="active">EN</button>
           <button type="button" data-lang="es">ES</button>
         </div>
-      </nav>
+      </div>
     </div>
   </header>
 
