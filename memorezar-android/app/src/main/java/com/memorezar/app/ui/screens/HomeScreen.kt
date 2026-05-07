@@ -107,7 +107,6 @@ fun HomeScreen(
     var showPackRequest by remember { mutableStateOf(false) }
     val continuePracticing by viewModel.continuePracticingQuotes.collectAsState()
     val availablePacks by viewModel.availablePacks.collectAsState()
-    val remotePacks by viewModel.remotePacks.collectAsState()
     val packsLoadFailed by viewModel.packsLoadFailed.collectAsState()
     val isLoadingPacks by viewModel.isLoadingPacks.collectAsState()
 
@@ -472,7 +471,10 @@ fun HomeScreen(
                                     color = IndigoColor,
                                     modifier = Modifier.clickable {
                                         tutorialStore?.completeTip(TipDefinition.browsePacks.id)
-                                        onNavigateToPackSearch(remotePacks)
+                                        // Pass the *filtered* list (already-added packs
+                                        // excluded) — passing remotePacks let users add
+                                        // duplicates from the See All grid.
+                                        onNavigateToPackSearch(availablePacks)
                                     }
                                 )
                             }
