@@ -206,7 +206,8 @@ class RecitationViewModel @Inject constructor(
     val localRecordingStore: LocalRecordingStore,
     private val equivalenceService: EquivalenceService,
     private val userEquivalencesStore: UserEquivalencesStore,
-    private val authService: AuthService
+    private val authService: AuthService,
+    private val seenCommunityStore: com.memorezar.app.data.storage.SeenCommunityRecordingsStore
 ) : ViewModel(), SpeechRecognitionDelegate {
 
     private val _uiState = MutableStateFlow(RecitationUiState())
@@ -369,6 +370,11 @@ class RecitationViewModel @Inject constructor(
 
         // If this quote was previously split, rebuild the split and jump to the saved chunk.
         restoreSavedSplit()
+
+        // Prefetch community recordings so the "NEW" badge on the music-note
+        // icon can appear from the moment the quote opens — without waiting
+        // for the user to enter audio mode.
+        loadRecordingsForCurrentQuote()
     }
 
     // ---------------------------------------------------------------------------
@@ -515,6 +521,19 @@ class RecitationViewModel @Inject constructor(
         }
     }
 
+    /** Set of community recording IDs the user has already viewed — drives the
+     *  "NEW" badges shown on the audio mode icon, the Community tab, and each
+     *  community recording row. Marked seen the moment the user opens the
+     *  Community tab. */
+    val seenCommunityRecordingIds: StateFlow<Set<String>> = seenCommunityStore.seenIds
+
+    /** Mark every currently loaded community recording as seen. Called when the
+     *  user switches to the Community tab so all NEW badges clear at once. */
+    fun markCurrentCommunityRecordingsSeen() {
+        val ids = _audioState.value.communityRecordings.map { it.id }
+        if (ids.isNotEmpty()) seenCommunityStore.markSeen(ids)
+    }
+
     fun saveCommunityRecording(recording: Recording) {
         viewModelScope.launch(Dispatchers.IO) {
             _audioState.update { it.copy(downloadingId = recording.id) }
@@ -655,10 +674,15 @@ class RecitationViewModel @Inject constructor(
             isRecordingMode = false
         )}
         // Use the currently-active language (set via the language badge picker),
-        // falling back to the quote's primary language.
-        val text = getActiveText()
+        // falling back to the quote's primary language. When the quote is split,
+        // only read aloud the active chunk — not the full quote.
+        val text = getCurrentChunkText()
         if (text.isEmpty()) return
         val lang = getActiveLanguageCode()
+
+        // Listening to read-aloud counts as practice — surfaces the quote in
+        // Continue Practicing and unlocks the mastery badge.
+        quote?.let { quoteStore.markListenedToReadAloud(it.id) }
 
         ttsService.onFinish = {
             if (_audioState.value.playbackRepeat && _audioState.value.isTTSActive) {
@@ -1094,9 +1118,23 @@ class RecitationViewModel @Inject constructor(
     fun getPrimaryLanguageCode(): String = quote?.primaryLanguage ?: "en"
 
     /** The text for the currently active language */
-    private fun getActiveText(): String {
+    fun getActiveText(): String {
         val lang = activeLanguage ?: return quote?.text ?: ""
         return quote?.translations?.get(lang)?.text ?: quote?.text ?: ""
+    }
+
+    /**
+     * Text representing what the user is currently practicing — when the
+     * quote is split, that's the active chunk; otherwise the full active-
+     * language text. Use this for read-aloud / TTS so the listener only
+     * hears the part they're working on.
+     */
+    fun getCurrentChunkText(): String {
+        val chunks = internalSplitChunks
+        if (chunks != null && activeChunkIndexInternal in chunks.indices) {
+            return chunks[activeChunkIndexInternal].chunkText
+        }
+        return getActiveText()
     }
 
     /** The title for the currently active language */
@@ -1252,13 +1290,22 @@ class RecitationViewModel @Inject constructor(
         if (wasReadingMode) {
             val pct = revealPercentageForLevel(clamped)
             val step = letterStepForLevel(clamped)
-            _uiState.update { it.copy(displayLevel = clamped, isReadingMode = false, revealPercentage = pct, letterRevealStep = step) }
-            resetSession(recalculateReveal = false)
-            // Re-apply after reset since reset uses saved values
-            val pct2 = revealPercentageForLevel(clamped)
-            val step2 = letterStepForLevel(clamped)
-            _uiState.update { it.copy(displayLevel = clamped, revealPercentage = pct2, letterRevealStep = step2) }
-            applyRevealPercentage()
+            if (internalSplitChunks != null) {
+                // Chunks active — reload the active chunk's saved words.
+                // resetSession() would rebuild from getActiveText() (full quote),
+                // replacing the chunk's word grid with the full quote text.
+                loadChunk(activeChunkIndexInternal)
+                _uiState.update { it.copy(displayLevel = clamped, isReadingMode = false, revealPercentage = pct, letterRevealStep = step) }
+                applyRevealPercentage()
+            } else {
+                _uiState.update { it.copy(displayLevel = clamped, isReadingMode = false, revealPercentage = pct, letterRevealStep = step) }
+                resetSession(recalculateReveal = false)
+                // Re-apply after reset since reset uses saved values
+                val pct2 = revealPercentageForLevel(clamped)
+                val step2 = letterStepForLevel(clamped)
+                _uiState.update { it.copy(displayLevel = clamped, revealPercentage = pct2, letterRevealStep = step2) }
+                applyRevealPercentage()
+            }
             return
         }
 
@@ -1318,6 +1365,12 @@ class RecitationViewModel @Inject constructor(
 
         // Already spoken words: always show full
         if (word.state == WordState.CORRECT || word.state == WordState.INCORRECT) return WordDisplayMode.FULL
+
+        // Reading mode (full-quote view) overrides every other mode — including
+        // voice + first-letter, which would otherwise short-circuit below and
+        // keep rendering only the first letter even when the slider is at 100.
+        // Mirrors iOS's `if showAllWords { return .full }` short-circuit.
+        if (state.isReadingMode) return WordDisplayMode.FULL
 
         // Flashing hint: show full
         if (state.flashingWordIndex == index) return WordDisplayMode.FULL
@@ -1547,6 +1600,26 @@ class RecitationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Reset triggered by the user's RESET button. When chunks are active,
+     * resets only the active chunk (preserving the other chunks' progress);
+     * otherwise resets the whole session.
+     */
+    fun resetByUser() {
+        val chunks = internalSplitChunks
+        if (chunks != null && activeChunkIndexInternal in chunks.indices) {
+            stopRecitation()
+            val active = chunks[activeChunkIndexInternal]
+            chunks[activeChunkIndexInternal] = buildChunkState(active.chunkText, active.revealPercentage)
+            mistakes.clear()
+            previousWordWasMistake = false
+            sessionStartTime = null
+            loadChunk(activeChunkIndexInternal)
+        } else {
+            resetSession(recalculateReveal = false)
+        }
+    }
+
     /** Hide the completion overlay without resetting the session. */
     fun dismissCompletion() {
         alertManager.stopResultSound()
@@ -1610,7 +1683,10 @@ class RecitationViewModel @Inject constructor(
                 if (_uiState.value.isComplete) return
             }
 
-            val nextPos = pos + 1
+            // First-letter typing only tests hidden words — skip past revealed
+            // words like normal typing does. (Voice + first-letter still tests
+            // every word; that's handled inside findNextHiddenWord.)
+            val nextPos = findNextHiddenWord(pos + 1)
             Log.d(TAG, "FL typing: pos=$pos nextPos=$nextPos totalWords=$totalWords")
             if (nextPos < totalWords) {
                 markWordState(nextPos, WordState.CURRENT)
@@ -1708,8 +1784,11 @@ class RecitationViewModel @Inject constructor(
      *  In normal typing/MC, skip revealed words. */
     private fun findNextHiddenWord(fromIndex: Int): Int {
         val state = _uiState.value
-        // In first-letter mode or master mode, test ALL words sequentially
-        if (state.isFirstLetterToggle || state.isMasterMode) return fromIndex
+        // Voice mode tests every word (the user recites all of them) — including
+        // voice + first-letter. Master mode also runs sequentially. Other modes
+        // (typing — both normal and first-letter — and MC) skip revealed words.
+        if (state.currentMode == MemorizationMode.VOICE) return fromIndex
+        if (state.isMasterMode) return fromIndex
 
         var i = fromIndex
         while (i < state.words.size) {
@@ -2046,17 +2125,65 @@ class RecitationViewModel @Inject constructor(
             }
         }
 
+        // Split mode: persist progress + try to advance to the next unfinished
+        // chunk. We do this BEFORE recording a session or playing the result
+        // sound so that intermediate chunk completions don't pop those off —
+        // only the final chunk's completion records one aggregate session and
+        // plays one result sound.
+        if (isSplit) {
+            saveSplitState()
+            if (advanceToNextChunk()) return
+        }
+
+        // Compute final stats. For split mode, aggregate across every chunk so
+        // the results sheet shows totals (words / correct / mistakes), not just
+        // the last chunk's numbers.
         val state = _uiState.value
-        val tested = state.words.count { it.state == WordState.CORRECT || it.state == WordState.INCORRECT }
-        val correct = computeCorrectCount()
-        val accuracy = if (tested > 0) correct.toDouble() / tested.toDouble() else 0.0
+        val finalTested: Int
+        val finalCorrect: Int
+        val finalMistakes: List<com.memorezar.app.data.models.PracticeMistake>
+        val finalTotalWords: Int
+        val finalAccuracy: Double
+
+        if (isSplit) {
+            val chunks = internalSplitChunks ?: emptyList()
+            finalTotalWords = chunks.sumOf { it.words.size }
+            finalTested = chunks.sumOf { c ->
+                c.words.count { it.state == WordState.CORRECT || it.state == WordState.INCORRECT }
+            }
+            finalCorrect = chunks.sumOf { c -> c.words.count { it.state == WordState.CORRECT } }
+            finalMistakes = chunks.flatMap { c ->
+                c.mistakes.map { m ->
+                    com.memorezar.app.data.models.PracticeMistake(
+                        position = m.position,
+                        expectedWord = m.expectedWord,
+                        spokenWord = m.spokenWord,
+                        confidence = m.confidence
+                    )
+                }
+            }
+            finalAccuracy = if (finalTested > 0) finalCorrect.toDouble() / finalTested.toDouble() else 0.0
+        } else {
+            finalTotalWords = state.totalWords
+            finalTested = state.words.count { it.state == WordState.CORRECT || it.state == WordState.INCORRECT }
+            finalCorrect = computeCorrectCount()
+            finalMistakes = mistakes.map { m ->
+                com.memorezar.app.data.models.PracticeMistake(
+                    position = m.position,
+                    expectedWord = m.expectedWord,
+                    spokenWord = m.spokenWord,
+                    confidence = m.confidence
+                )
+            }
+            finalAccuracy = if (finalTested > 0) finalCorrect.toDouble() / finalTested.toDouble() else 0.0
+        }
 
         // In master mode, only play win sound if passed (95%+), otherwise fail
         if (_uiState.value.isMasterMode) {
-            if (accuracy >= 0.95) alertManager.triggerResultSound(accuracy)
+            if (finalAccuracy >= 0.95) alertManager.triggerResultSound(finalAccuracy)
             else alertManager.triggerResultFailSound()
         } else {
-            alertManager.triggerResultSound(accuracy)
+            alertManager.triggerResultSound(finalAccuracy)
         }
 
         // Record session to QuoteStore for stats tracking
@@ -2066,17 +2193,10 @@ class RecitationViewModel @Inject constructor(
                 quoteId = q.id,
                 startedAt = sessionStartTime!!.time,
                 completedAt = System.currentTimeMillis(),
-                totalWords = state.totalWords,
-                testedWords = tested,
-                correctWords = correct,
-                mistakes = mistakes.map { m ->
-                    com.memorezar.app.data.models.PracticeMistake(
-                        position = m.position,
-                        expectedWord = m.expectedWord,
-                        spokenWord = m.spokenWord,
-                        confidence = m.confidence
-                    )
-                },
+                totalWords = finalTotalWords,
+                testedWords = finalTested,
+                correctWords = finalCorrect,
+                mistakes = finalMistakes,
                 revealPercentage = q.revealPercentageForLevel
             )
             quoteStore.recordSession(session)
@@ -2094,24 +2214,19 @@ class RecitationViewModel @Inject constructor(
             }
 
             // Promote / demote the reveal level based on this session's accuracy.
-            // Skip in master mode and while split (per-chunk accuracy isn't representative).
-            if (!_uiState.value.isMasterMode && !isSplit) {
-                checkLevelAdvancement(accuracy)
+            // Skip in master mode (its own pass/fail handles progression).
+            if (!_uiState.value.isMasterMode) {
+                checkLevelAdvancement(finalAccuracy)
             }
-        }
-
-        // Split mode: persist progress + try to advance to the next unfinished chunk.
-        if (isSplit) {
-            saveSplitState()
-            if (advanceToNextChunk()) return
         }
 
         _uiState.update {
             it.copy(
                 isComplete = true,
-                accuracy = accuracy,
-                correctCount = correct,
-                testedWordCount = tested,
+                accuracy = finalAccuracy,
+                correctCount = finalCorrect,
+                mistakeCount = finalMistakes.size,
+                testedWordCount = finalTested,
                 isListening = false
             )
         }
@@ -2382,6 +2497,11 @@ class RecitationViewModel @Inject constructor(
         _uiState.update { it.copy(showSplitOverlay = false) }
     }
 
+    fun confirmSplitByParagraphs() {
+        splitActiveChunkByParagraphs()
+        _uiState.update { it.copy(showSplitOverlay = false) }
+    }
+
     fun unsplitAndDismissOverlay() {
         unsplit()
         _uiState.update { it.copy(showSplitOverlay = false) }
@@ -2458,10 +2578,19 @@ class RecitationViewModel @Inject constructor(
         val chunks = internalSplitChunks ?: return emptyList()
         return chunks.map { c ->
             val total = c.words.size
-            val completed = c.words.count { it.state == WordState.CORRECT || it.state == WordState.INCORRECT }
-            val isComplete = total > 0 && completed >= total
-            val accuracy = if (isComplete) {
-                (total - c.mistakes.size).coerceAtLeast(0).toDouble() / total.toDouble()
+            // A chunk is "complete" once every word is either tested OR pre-revealed
+            // by the slider — revealed words stay UPCOMING but don't represent
+            // outstanding work for the user.
+            val outstanding = c.words.any { w ->
+                w.state != WordState.CORRECT && w.state != WordState.INCORRECT && !w.isRevealed
+            }
+            val isComplete = total > 0 && !outstanding
+            // Score only the words the user actually attempted — pre-revealed
+            // words are skipped over, so counting them as "correct" would
+            // inflate the chunk %.
+            val tested = c.words.count { it.state == WordState.CORRECT || it.state == WordState.INCORRECT }
+            val accuracy = if (isComplete && tested > 0) {
+                (tested - c.mistakes.size).coerceAtLeast(0).toDouble() / tested.toDouble()
             } else null
             ChunkInfo(text = c.chunkText, wordCount = total, accuracy = accuracy, isComplete = isComplete)
         }
@@ -2502,10 +2631,38 @@ class RecitationViewModel @Inject constructor(
     }
 
     private fun split(count: Int) {
-        stopRecitation()
         val q = quote ?: return
         val activeText = getActiveText().ifEmpty { q.text }
-        val chunkTexts = com.memorezar.app.core.chunking.TextChunker.split(activeText, count)
+        applyWholeQuoteSplit(com.memorezar.app.core.chunking.TextChunker.split(activeText, count))
+    }
+
+    /**
+     * Split the whole quote (or sub-split the active chunk if already split)
+     * by paragraph boundaries. No-op if the target text only has one paragraph.
+     */
+    fun splitActiveChunkByParagraphs() {
+        if (internalSplitChunks == null) {
+            val q = quote ?: return
+            val activeText = getActiveText().ifEmpty { q.text }
+            val chunkTexts = com.memorezar.app.core.chunking.TextChunker.splitByParagraphs(activeText)
+            if (chunkTexts.size <= 1) return
+            applyWholeQuoteSplit(chunkTexts)
+            return
+        }
+        applySubSplit { com.memorezar.app.core.chunking.TextChunker.splitByParagraphs(it) }
+    }
+
+    fun splitActiveChunk(count: Int) {
+        if (internalSplitChunks == null) {
+            split(count)
+            return
+        }
+        applySubSplit { com.memorezar.app.core.chunking.TextChunker.split(it, count) }
+    }
+
+    private fun applyWholeQuoteSplit(chunkTexts: List<String>) {
+        stopRecitation()
+        val q = quote ?: return
         val chunks = chunkTexts.map { buildChunkState(it, q.revealPercentageForLevel) }.toMutableList()
         internalSplitChunks = chunks
         activeChunkIndexInternal = 0
@@ -2514,17 +2671,14 @@ class RecitationViewModel @Inject constructor(
         saveSplitState()
     }
 
-    fun splitActiveChunk(count: Int) {
-        if (internalSplitChunks == null) {
-            split(count)
-            return
-        }
+    private fun applySubSplit(chunker: (String) -> List<String>) {
         stopRecitation()
         saveCurrentChunkState()
         val chunks = internalSplitChunks ?: return
         if (activeChunkIndexInternal !in chunks.indices) return
         val active = chunks[activeChunkIndexInternal]
-        val subTexts = com.memorezar.app.core.chunking.TextChunker.split(active.chunkText, count)
+        val subTexts = chunker(active.chunkText)
+        if (subTexts.size <= 1) return
         val newChunks = subTexts.map { buildChunkState(it, active.revealPercentage) }
         chunks.removeAt(activeChunkIndexInternal)
         chunks.addAll(activeChunkIndexInternal, newChunks)
@@ -2556,6 +2710,7 @@ class RecitationViewModel @Inject constructor(
         if (index !in chunks.indices || index == activeChunkIndexInternal) return
         stopRecitation()
         saveCurrentChunkState()
+        val wasTTSActive = _audioState.value.isTTSActive
         activeChunkIndexInternal = index
         loadChunk(index)
         publishSplitState()
@@ -2567,6 +2722,14 @@ class RecitationViewModel @Inject constructor(
                 val revealedWords = state.words.map { it.copy(state = WordState.UPCOMING, isRevealed = true) }
                 state.copy(words = revealedWords, currentPosition = 0)
             }
+        }
+
+        // Read-aloud follows the active chunk: tear down the old player and
+        // restart TTS on the new chunk text so resume/play picks it up.
+        if (wasTTSActive) {
+            ttsService.stop()
+            ttsService.onFinish = null
+            startTTS()
         }
     }
 
@@ -2601,6 +2764,13 @@ class RecitationViewModel @Inject constructor(
         consecutiveMismatchesAtPosition = 0
         lastMismatchPosition = -1
 
+        // The slider position is the source of truth for reveal pct across
+        // all chunks — using the chunk's saved pct would let an earlier chunk
+        // keep its old reveal level after the slider moved.
+        val currentLevel = _uiState.value.displayLevel
+        val currentPct = revealPercentageForLevel(currentLevel)
+        val currentStep = letterStepForLevel(currentLevel)
+
         _uiState.update { state ->
             state.copy(
                 words = chunk.words,
@@ -2612,7 +2782,8 @@ class RecitationViewModel @Inject constructor(
                 hintCount = chunk.hintCount,
                 totalWords = chunk.words.size,
                 testedWordCount = 0,
-                revealPercentage = chunk.revealPercentage,
+                revealPercentage = currentPct,
+                letterRevealStep = currentStep,
                 tappedMistakeIndex = null,
                 tappedMistakeSpoken = null,
                 flashingWordIndex = null,
@@ -2660,9 +2831,15 @@ class RecitationViewModel @Inject constructor(
     private fun advanceToNextChunk(): Boolean {
         val chunks = internalSplitChunks ?: return false
         saveCurrentChunkState()
+        // A chunk is "complete" once every word is either tested or pre-revealed
+        // by the slider. Revealed words stay UPCOMING after findNextHiddenWord
+        // skips past them, so a pure CORRECT/INCORRECT-only check would treat
+        // revealed words as still outstanding — and the wrap-around below would
+        // bounce the user back to a "previously finished" chunk forever.
         fun isIncomplete(c: ChunkState): Boolean {
-            val completed = c.words.count { it.state == WordState.CORRECT || it.state == WordState.INCORRECT }
-            return completed < c.words.size
+            return c.words.any { w ->
+                w.state != WordState.CORRECT && w.state != WordState.INCORRECT && !w.isRevealed
+            }
         }
         for (i in (activeChunkIndexInternal + 1) until chunks.size) {
             if (isIncomplete(chunks[i])) {

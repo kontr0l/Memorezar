@@ -280,6 +280,17 @@ final class QuoteStore: ObservableObject {
         }
     }
 
+    /// Mark a quote as touched via Read Aloud (TTS). Updates lastPracticedAt so
+    /// it surfaces in Continue Practicing, and bumps practiceCount from 0→1 so
+    /// the mastery badge stops being .none. Doesn't keep inflating practiceCount
+    /// on subsequent plays.
+    func markListenedToReadAloud(quoteId: UUID) {
+        guard var quote = getQuote(byId: quoteId) else { return }
+        if quote.practiceCount == 0 { quote.practiceCount = 1 }
+        quote.lastPracticedAt = Date()
+        updateQuote(quote)
+    }
+
     func getSessions(for quoteId: UUID) -> [PracticeSession] {
         sessions.filter { $0.quoteId == quoteId }
             .sorted { $0.startedAt > $1.startedAt }

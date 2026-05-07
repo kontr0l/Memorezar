@@ -7,6 +7,7 @@ struct MemorezerApp: App {
     @StateObject private var userEquivalencesStore = UserEquivalencesStore()
     @StateObject private var localRecordingStore = LocalRecordingStore()
     @StateObject private var tutorialStore = TutorialStore()
+    @StateObject private var seenCommunityRecordingsStore = SeenCommunityRecordingsStore()
     @StateObject private var authService = AuthService.shared
     @StateObject private var purchaseService = PurchaseService.shared
     @StateObject private var cloudBackupService = CloudBackupService.shared
@@ -19,6 +20,7 @@ struct MemorezerApp: App {
                 .environmentObject(userEquivalencesStore)
                 .environmentObject(localRecordingStore)
                 .environmentObject(tutorialStore)
+                .environmentObject(seenCommunityRecordingsStore)
                 .environmentObject(authService)
                 .environmentObject(purchaseService)
                 .environmentObject(cloudBackupService)

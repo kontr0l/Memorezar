@@ -305,6 +305,21 @@ class QuoteStore @Inject constructor(
         updateQuote(updated)
     }
 
+    /**
+     * Mark a quote as touched via Read Aloud (TTS). Updates lastPracticedAt so it
+     * surfaces in Continue Practicing, and bumps practiceCount from 0→1 so the
+     * mastery badge stops being NONE. Doesn't keep inflating practiceCount on
+     * subsequent plays.
+     */
+    fun markListenedToReadAloud(quoteId: String) {
+        val quote = getQuote(quoteId) ?: return
+        val updated = quote.copy(
+            practiceCount = if (quote.practiceCount == 0) 1 else quote.practiceCount,
+            lastPracticedAt = System.currentTimeMillis()
+        )
+        updateQuote(updated)
+    }
+
     fun getSessions(quoteId: String): List<PracticeSession> {
         return _sessions.value
             .filter { it.quoteId == quoteId }

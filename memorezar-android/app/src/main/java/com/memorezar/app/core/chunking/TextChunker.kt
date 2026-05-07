@@ -11,18 +11,57 @@ object TextChunker {
 
     private val PUNCTUATION = setOf('.', ',', ';', ':', '!', '?', '\u2014')
 
+    /**
+     * Split text into one chunk per paragraph (separated by blank lines, or by
+     * single newlines if the text has no blank-line separators). Returns the
+     * trimmed paragraphs; empty paragraphs are skipped.
+     */
+    fun splitByParagraphs(text: String): List<String> {
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return emptyList()
+
+        val blankLineSeparated = trimmed.split(Regex("\\n\\s*\\n"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        if (blankLineSeparated.size > 1) return blankLineSeparated
+
+        val lineSeparated = trimmed.split(Regex("\\r?\\n"))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        return if (lineSeparated.isEmpty()) listOf(trimmed) else lineSeparated
+    }
+
+    /** Number of paragraph-style chunks `splitByParagraphs` would produce. */
+    fun paragraphCount(text: String): Int = splitByParagraphs(text).size
+
     fun split(text: String, count: Int): List<String> {
         val trimmed = text.trim()
         if (count <= 1 || trimmed.isEmpty()) return listOf(trimmed)
 
         val breakPoints = findBreakPoints(trimmed)
 
-        return when {
+        val punctuationChunks: List<String>? = when {
             breakPoints.size >= count - 1 -> splitAtBreakPoints(trimmed, breakPoints, count)
             breakPoints.isNotEmpty() -> splitAtAllBreakPoints(trimmed, breakPoints)
-            else -> splitAtWordBoundaries(trimmed, count)
+            else -> null
         }
+
+        // Validate: punctuation-based result must have the requested chunk count
+        // and every chunk must have ≥3 words. Otherwise the user ends up with a
+        // 1-word chunk like "Beware," because punctuation clusters at one end.
+        // Fall back to even word-boundary splitting in that case.
+        if (punctuationChunks != null
+            && punctuationChunks.size == count
+            && punctuationChunks.all { wordCount(it) >= 3 }
+        ) {
+            return punctuationChunks
+        }
+
+        return splitAtWordBoundaries(trimmed, count)
     }
+
+    private fun wordCount(text: String): Int =
+        text.split(Regex("\\s+")).count { it.isNotEmpty() }
 
     private fun findBreakPoints(text: String): List<Int> {
         val points = mutableListOf<Int>()

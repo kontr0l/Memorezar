@@ -107,6 +107,7 @@ fun HomeScreen(
     var showPackRequest by remember { mutableStateOf(false) }
     val continuePracticing by viewModel.continuePracticingQuotes.collectAsState()
     val availablePacks by viewModel.availablePacks.collectAsState()
+    val remotePacks by viewModel.remotePacks.collectAsState()
     val packsLoadFailed by viewModel.packsLoadFailed.collectAsState()
     val isLoadingPacks by viewModel.isLoadingPacks.collectAsState()
 
@@ -471,7 +472,7 @@ fun HomeScreen(
                                     color = IndigoColor,
                                     modifier = Modifier.clickable {
                                         tutorialStore?.completeTip(TipDefinition.browsePacks.id)
-                                        onNavigateToPackSearch(availablePacks)
+                                        onNavigateToPackSearch(remotePacks)
                                     }
                                 )
                             }
@@ -479,7 +480,10 @@ fun HomeScreen(
                     }
                 )
             }
-            val displayPacks = availablePacks.take(5) // 5 packs + 1 request card = 6 slots
+            // Show all available packs (matches iOS, which uses ForEach(availablePacks)
+            // with no cap). Grid height grows with the count so userScrollEnabled
+            // can stay false and the page scrolls as a single ScrollView.
+            val displayPacks = availablePacks
             val totalItems = displayPacks.size + 1 // +1 for request card
             val rows = (totalItems + 1) / 2 // ceil division for 2 columns
             val gridHeight = (rows * 200 + (rows - 1).coerceAtLeast(0) * 12).dp

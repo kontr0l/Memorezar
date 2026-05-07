@@ -133,6 +133,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -225,6 +226,8 @@ fun RecitationScreen(
     val isTutorialMode = tutorialQuote != null
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val audioState by viewModel.audioState.collectAsStateWithLifecycle()
+    val seenCommunityIds by viewModel.seenCommunityRecordingIds.collectAsStateWithLifecycle()
+    val hasUnseenCommunity = audioState.communityRecordings.any { it.id !in seenCommunityIds }
     val scope = rememberCoroutineScope()
     val ttsPlaying by viewModel.ttsService.isPlaying.collectAsStateWithLifecycle()
     val isRecording by viewModel.recorderService.isRecording.collectAsStateWithLifecycle()
@@ -377,6 +380,7 @@ fun RecitationScreen(
                         audioState = if (uiState.currentMode == MemorizationMode.AUDIO) audioState else null,
                         ttsPlaying = ttsPlaying,
                         isRecording = isRecording,
+                        showAudioBadge = hasUnseenCommunity,
                         onModeChange = { viewModel.switchMode(it) },
                         onSeek = { viewModel.seekPlayback(it) },
                         onExit = {
@@ -451,9 +455,11 @@ fun RecitationScreen(
                             )
                         }
 
-                        // Chunk navigation header (only when split)
+                        // Chunk navigation header (only when split, and not in
+                        // reading mode — reading mode shows the whole quote so
+                        // the per-chunk navigator would be misleading there).
                         uiState.splitChunks?.let { chunks ->
-                            if (chunks.size > 1) {
+                            if (chunks.size > 1 && !uiState.isReadingMode) {
                                 ChunkNavigationHeader(
                                     activeIndex = uiState.activeChunkIndex,
                                     total = chunks.size,
@@ -489,8 +495,10 @@ fun RecitationScreen(
                         } else {
                             val infos = uiState.splitChunkInfos
                             val active = uiState.activeChunkIndex
-                            // Peeks above (up to 2)
-                            if (infos.isNotEmpty()) {
+                            // Peeks above (up to 2). Reading mode shows the
+                            // whole quote, so chunk peeks would just duplicate
+                            // text — hide them in that mode.
+                            if (infos.isNotEmpty() && !uiState.isReadingMode) {
                                 val startAbove = (active - 2).coerceAtLeast(0)
                                 for (i in startAbove until active) {
                                     ChunkPeekContainer(
@@ -502,27 +510,51 @@ fun RecitationScreen(
                                 }
                             }
                             var wordGridOffsetY by remember { mutableFloatStateOf(0f) }
-                            Box(
-                                modifier = Modifier
-                                    .padding(top = 4.dp)
-                                    .padding(horizontal = 16.dp)
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                    .onGloballyPositioned { coords ->
-                                        wordGridOffsetY = coords.positionInParent().y
-                                    }
-                            ) {
-                                WordGrid(
-                                    uiState = uiState,
-                                    viewModel = viewModel,
-                                    wordFontSize = wordFontSize,
-                                    wordYPositions = wordYPositions,
-                                    wordGridOffsetY = wordGridOffsetY,
-                                    modifier = Modifier.padding(12.dp)
-                                )
+                            if (uiState.isReadingMode) {
+                                // Reading mode: render the quote as flowing prose with a
+                                // drop-cap-styled first letter, no surrounding grey box,
+                                // matching the iOS reading mode look.
+                                val langCode = viewModel.getActiveLanguageCode().lowercase()
+                                val isRTL = langCode in setOf("fa", "ar", "he", "ur", "yi", "ps", "sd", "dv")
+                                Box(
+                                    modifier = Modifier
+                                        .padding(top = 4.dp)
+                                        .padding(horizontal = 16.dp)
+                                        .onGloballyPositioned { coords ->
+                                            wordGridOffsetY = coords.positionInParent().y
+                                        }
+                                ) {
+                                    ReadingModeProseText(
+                                        text = viewModel.getActiveText(),
+                                        fontSize = wordFontSize,
+                                        isRTL = isRTL,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .padding(top = 4.dp)
+                                        .padding(horizontal = 16.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                                        .onGloballyPositioned { coords ->
+                                            wordGridOffsetY = coords.positionInParent().y
+                                        }
+                                ) {
+                                    WordGrid(
+                                        uiState = uiState,
+                                        viewModel = viewModel,
+                                        wordFontSize = wordFontSize,
+                                        wordYPositions = wordYPositions,
+                                        wordGridOffsetY = wordGridOffsetY,
+                                        modifier = Modifier.padding(12.dp)
+                                    )
+                                }
                             }
-                            // Peeks below (up to 2)
-                            if (infos.isNotEmpty()) {
+                            // Peeks below (up to 2) — hidden in reading mode
+                            // for the same reason as the peeks above.
+                            if (infos.isNotEmpty() && !uiState.isReadingMode) {
                                 val endBelow = (active + 2).coerceAtMost(infos.size - 1)
                                 for (i in (active + 1)..endBelow) {
                                     ChunkPeekContainer(
@@ -671,7 +703,7 @@ fun RecitationScreen(
                         } else {
                             ControlPill(
                                 uiState = uiState,
-                                onReset = { viewModel.resetSession(recalculateReveal = false) },
+                                onReset = { viewModel.resetByUser() },
                                 onInfo = { viewModel.showQuoteInfo() },
                                 isTutorialMode = isTutorialMode,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -717,13 +749,23 @@ fun RecitationScreen(
 
         // Split / merge overlay
         if (uiState.showSplitOverlay) {
+            // Paragraph count of the *target* text — when already split, that's
+            // the active chunk; otherwise the whole quote.
+            val splitTargetText = if (uiState.splitChunks != null) {
+                uiState.splitChunks!!.getOrNull(uiState.activeChunkIndex).orEmpty()
+            } else {
+                viewModel.getActiveText()
+            }
+            val paragraphCount = com.memorezar.app.core.chunking.TextChunker.paragraphCount(splitTargetText)
             SplitMergeOverlay(
                 isSplit = uiState.splitChunks != null,
                 splitCount = uiState.splitCount,
                 wordCount = (viewModel.getQuoteForInfo()?.wordCount ?: 0),
                 activeChunkIndex = uiState.activeChunkIndex,
+                paragraphCount = paragraphCount,
                 onSetCount = { viewModel.setSplitCount(it) },
                 onConfirmSplit = { viewModel.confirmSplit() },
+                onConfirmSplitByParagraphs = { viewModel.confirmSplitByParagraphs() },
                 onUnsplit = { viewModel.unsplitAndDismissOverlay() },
                 onMergePrevious = { viewModel.mergeWithPreviousAndDismissOverlay() },
                 onDismiss = { viewModel.dismissSplitOverlay() }
@@ -862,6 +904,8 @@ fun RecitationScreen(
     if (audioState.showRecordingPicker) {
         RecordingPickerSheet(
             audioState = audioState,
+            seenCommunityIds = seenCommunityIds,
+            onCommunityTabOpened = { viewModel.markCurrentCommunityRecordingsSeen() },
             onDismiss = { viewModel.dismissRecordingPicker() },
             onPlayLocal = { viewModel.playLocalRecording(it) },
             onPlayCommunity = { viewModel.playCommunityRecording(it) },
@@ -946,6 +990,7 @@ private fun TopBarWithModePicker(
     audioState: AudioPlaybackState? = null,
     ttsPlaying: Boolean = false,
     isRecording: Boolean = false,
+    showAudioBadge: Boolean = false,
     onModeChange: (MemorizationMode) -> Unit,
     onSeek: (Float) -> Unit = {},
     onExit: () -> Unit
@@ -961,7 +1006,8 @@ private fun TopBarWithModePicker(
             ModePicker(
                 currentMode = currentMode,
                 onModeChange = onModeChange,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                showAudioBadge = showAudioBadge
             )
             Spacer(Modifier.width(4.dp))
             IconButton(onClick = onExit) {
@@ -1095,7 +1141,8 @@ private fun ScrollableTitleRow(
 private fun ModePicker(
     currentMode: MemorizationMode,
     onModeChange: (MemorizationMode) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showAudioBadge: Boolean = false
 ) {
     val modes = listOf(
         MemorizationMode.VOICE to Icons.Default.Mic,
@@ -1160,15 +1207,26 @@ private fun ModePicker(
                         ) { onModeChange(mode) },
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = mode.displayName,
-                        modifier = Modifier.size(20.dp),
-                        tint = if (mode == currentMode)
-                            MaterialTheme.colorScheme.primary
-                        else
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = mode.displayName,
+                            modifier = Modifier.size(20.dp),
+                            tint = if (mode == currentMode)
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (mode == MemorizationMode.AUDIO && showAudioBadge) {
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = 4.dp, y = (-2).dp)
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFF3B30))
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1194,6 +1252,117 @@ private fun ProgressBar(progress: Float, modifier: Modifier = Modifier) {
                 .background(CorrectGreen)
         )
     }
+}
+
+// ---------------------------------------------------------------------------
+// ReadingModeProseText — flowing prose with a drop cap (mirrors iOS)
+// ---------------------------------------------------------------------------
+
+/// Renders a quote as flowing prose with a drop-capped first letter that
+/// spans roughly two body lines. Uses a TextView under the hood so it can
+/// apply a `LeadingMarginSpan2` to indent the first 2 lines next to the cap;
+/// subsequent lines flow back to the left margin. RTL languages skip the
+/// drop cap entirely (not a typographic convention there) and render plain
+/// prose. Spanish opens (¡, ¿) fold the next character into the cap so the
+/// punctuation stays attached to its letter.
+@Composable
+private fun ReadingModeProseText(
+    text: String,
+    fontSize: androidx.compose.ui.unit.TextUnit,
+    isRTL: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val density = LocalDensity.current
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val fontSizePx = with(density) { fontSize.toPx() }
+    val lineSpacingPx = with(density) { 8.dp.toPx() }
+    val capFontSizePx = fontSizePx * 3.2f
+    val capGapPx = with(density) { (fontSize.value * 0.5f).dp.toPx() }
+
+    val trimmed = text.trim()
+    val (dropCap, rest) = when {
+        isRTL -> "" to trimmed
+        trimmed.isNotEmpty() && (trimmed[0] == '¡' || trimmed[0] == '¿') && trimmed.length > 1 ->
+            trimmed.substring(0, 2) to trimmed.substring(2)
+        trimmed.isNotEmpty() -> trimmed.substring(0, 1) to trimmed.substring(1)
+        else -> "" to ""
+    }
+
+    androidx.compose.ui.viewinterop.AndroidView(
+        modifier = modifier.fillMaxWidth(),
+        factory = { ctx ->
+            android.widget.FrameLayout(ctx).apply {
+                addView(android.widget.TextView(ctx).apply {
+                    includeFontPadding = false
+                })
+                addView(
+                    android.widget.TextView(ctx).apply {
+                        includeFontPadding = false
+                    },
+                    android.widget.FrameLayout.LayoutParams(
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                    )
+                )
+            }
+        },
+        update = { frame ->
+            val bodyTv = frame.getChildAt(0) as android.widget.TextView
+            val capTv = frame.getChildAt(1) as android.widget.TextView
+
+            bodyTv.setTextColor(onSurface.toArgb())
+            bodyTv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, fontSizePx)
+            bodyTv.setLineSpacing(lineSpacingPx, 1f)
+            bodyTv.textDirection =
+                if (isRTL) android.view.View.TEXT_DIRECTION_RTL
+                else android.view.View.TEXT_DIRECTION_LTR
+
+            if (dropCap.isEmpty()) {
+                capTv.visibility = android.view.View.GONE
+                bodyTv.text = rest
+            } else {
+                capTv.visibility = android.view.View.VISIBLE
+                capTv.setTextColor(onSurface.toArgb())
+                capTv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, capFontSizePx)
+                capTv.text = dropCap
+
+                // Measure cap glyph width so the body indent matches.
+                val capPaint = android.graphics.Paint().apply { textSize = capFontSizePx }
+                val capWidth = capPaint.measureText(dropCap)
+                val indentPx = (capWidth + capGapPx).toInt()
+
+                // First 2 lines indent next to the cap; line 3+ go back to margin.
+                val span = object : android.text.style.LeadingMarginSpan.LeadingMarginSpan2 {
+                    override fun getLeadingMargin(first: Boolean): Int = if (first) indentPx else 0
+                    override fun drawLeadingMargin(
+                        c: android.graphics.Canvas, p: android.graphics.Paint,
+                        x: Int, dir: Int, top: Int, baseline: Int, bottom: Int,
+                        text: CharSequence, start: Int, end: Int, first: Boolean,
+                        layout: android.text.Layout?
+                    ) {}
+                    override fun getLeadingMarginLineCount(): Int = 2
+                }
+                val ss = android.text.SpannableString(rest)
+                ss.setSpan(span, 0, rest.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                bodyTv.text = ss
+
+                // The cap font has more "headroom" above its glyph than the body font
+                // (top of glyph vs. font ascender). Pull the cap up by the headroom
+                // delta so its visual top aligns with the body's first-line top.
+                val bodyPaint = android.graphics.Paint().apply { textSize = fontSizePx }
+                val bodyBounds = android.graphics.Rect()
+                bodyPaint.getTextBounds("T", 0, 1, bodyBounds)
+                val bodyHeadroom = (-bodyPaint.fontMetrics.ascent) - (-bodyBounds.top.toFloat())
+                val capBounds = android.graphics.Rect()
+                capPaint.getTextBounds(dropCap, 0, dropCap.length, capBounds)
+                val capHeadroom = (-capPaint.fontMetrics.ascent) - (-capBounds.top.toFloat())
+                capTv.translationY = -(capHeadroom - bodyHeadroom)
+
+                (capTv.layoutParams as android.widget.FrameLayout.LayoutParams).gravity =
+                    android.view.Gravity.TOP or android.view.Gravity.START
+            }
+        }
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -2861,12 +3030,21 @@ private fun SplitMergeOverlay(
     splitCount: Int,
     wordCount: Int,
     activeChunkIndex: Int,
+    paragraphCount: Int,
     onSetCount: (Int) -> Unit,
     onConfirmSplit: () -> Unit,
+    onConfirmSplitByParagraphs: () -> Unit,
     onUnsplit: () -> Unit,
     onMergePrevious: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    var splitByParagraphs by remember { mutableStateOf(false) }
+    val canSplitByParagraph = paragraphCount > 1
+    // Reset toggle if paragraph splitting becomes unavailable for the new
+    // active chunk (e.g. after a sub-split).
+    LaunchedEffect(canSplitByParagraph) {
+        if (!canSplitByParagraph) splitByParagraphs = false
+    }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
@@ -2921,7 +3099,17 @@ private fun SplitMergeOverlay(
                     Icon(Icons.Default.FormatQuote, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                 }
             } else {
+                // Cap split count so every chunk has at least 3 words —
+                // splits that would leave 1 or 2 words per chunk aren't
+                // useful for memorization.
+                val maxSplitCount = minOf(10, maxOf(2, wordCount / 3))
+                val canSplit = wordCount >= 6
                 val perSection = if (splitCount > 0) maxOf(1, wordCount / splitCount) else wordCount
+
+                LaunchedEffect(maxSplitCount) {
+                    if (splitCount > maxSplitCount) onSetCount(maxSplitCount)
+                }
+
                 Text(
                     text = "How many parts?",
                     style = MaterialTheme.typography.bodyMedium,
@@ -2933,7 +3121,7 @@ private fun SplitMergeOverlay(
                 ) {
                     IconButton(
                         onClick = { if (splitCount > 2) onSetCount(splitCount - 1) },
-                        enabled = splitCount > 2,
+                        enabled = splitCount > 2 && !splitByParagraphs,
                         modifier = Modifier
                             .size(44.dp)
                             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
@@ -2941,13 +3129,13 @@ private fun SplitMergeOverlay(
                         Text("−", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     }
                     Text(
-                        text = "$splitCount",
+                        text = "${if (splitByParagraphs) paragraphCount else splitCount}",
                         fontSize = 42.sp,
                         fontWeight = FontWeight.Bold
                     )
                     IconButton(
-                        onClick = { if (splitCount < 10) onSetCount(splitCount + 1) },
-                        enabled = splitCount < 10,
+                        onClick = { if (splitCount < maxSplitCount) onSetCount(splitCount + 1) },
+                        enabled = splitCount < maxSplitCount && !splitByParagraphs,
                         modifier = Modifier
                             .size(44.dp)
                             .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(10.dp))
@@ -2956,12 +3144,46 @@ private fun SplitMergeOverlay(
                     }
                 }
                 Text(
-                    text = "~$perSection words each",
+                    text = if (splitByParagraphs) "$paragraphCount paragraphs"
+                           else "~$perSection words each",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (!canSplit) {
+                    Text(
+                        text = "Quote is too short to split (needs at least 6 words).",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFFF9800),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // Paragraph-split toggle — only enabled when the source text
+                // actually has more than one paragraph.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .alpha(if (canSplitByParagraph) 1f else 0.4f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Split by paragraphs",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Switch(
+                        checked = splitByParagraphs,
+                        onCheckedChange = { if (canSplitByParagraph) splitByParagraphs = it },
+                        enabled = canSplitByParagraph
+                    )
+                }
+
                 Button(
-                    onClick = onConfirmSplit,
+                    onClick = {
+                        if (splitByParagraphs) onConfirmSplitByParagraphs() else onConfirmSplit()
+                    },
+                    enabled = canSplit || splitByParagraphs,
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3F51B5))
                 ) {
@@ -4046,6 +4268,8 @@ private fun SaveRecordingSheet(
 @Composable
 private fun RecordingPickerSheet(
     audioState: AudioPlaybackState,
+    seenCommunityIds: Set<String>,
+    onCommunityTabOpened: () -> Unit,
     onDismiss: () -> Unit,
     onPlayLocal: (LocalRecording) -> Unit,
     onPlayCommunity: (Recording) -> Unit,
@@ -4056,6 +4280,7 @@ private fun RecordingPickerSheet(
 ) {
     var selectedTab by remember { mutableStateOf(0) }
     var recordingToDelete by remember { mutableStateOf<LocalRecording?>(null) }
+    val hasUnseenCommunity = audioState.communityRecordings.any { it.id !in seenCommunityIds }
 
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
     ModalBottomSheet(
@@ -4075,18 +4300,34 @@ private fun RecordingPickerSheet(
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable { selectedTab = index }
+                            .clickable {
+                                selectedTab = index
+                                if (index == 1) onCommunityTabOpened()
+                            }
                             .padding(top = 2.dp, bottom = 0.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            label,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
-                            color = if (selectedTab == index) MaterialTheme.colorScheme.onSurface
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(vertical = 12.dp)
-                        )
+                        ) {
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal,
+                                color = if (selectedTab == index) MaterialTheme.colorScheme.onSurface
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (index == 1 && hasUnseenCommunity) {
+                                Spacer(Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFF3B30))
+                                )
+                            }
+                        }
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -4155,6 +4396,7 @@ private fun RecordingPickerSheet(
                             CommunityRecordingRow(
                                 recording = rec,
                                 isDownloading = audioState.downloadingId == rec.id,
+                                isNew = rec.id !in seenCommunityIds,
                                 onClick = { onPlayCommunity(rec) },
                                 onSave = { onSaveCommunity(rec) }
                             )
@@ -4350,6 +4592,7 @@ private fun RecordingRow(
 private fun CommunityRecordingRow(
     recording: Recording,
     isDownloading: Boolean,
+    isNew: Boolean,
     onClick: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -4361,7 +4604,21 @@ private fun CommunityRecordingRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(recording.uploaderName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(recording.uploaderName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                if (isNew) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "NEW",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier
+                            .background(Color(0xFFFF3B30), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
         // Language badge
         if (recording.language.isNotBlank()) {

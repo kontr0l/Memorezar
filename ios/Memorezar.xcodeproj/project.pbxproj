@@ -44,6 +44,7 @@
 		1100000000000025 /* PackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000025 /* PackService.swift */; };
 		1100000000000026 /* TipDefinition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000026 /* TipDefinition.swift */; };
 		1100000000000027 /* TutorialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000027 /* TutorialStore.swift */; };
+		1100000000000090 /* SeenCommunityRecordingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000090 /* SeenCommunityRecordingsStore.swift */; };
 		1100000000000028 /* SpotlightOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000028 /* SpotlightOverlay.swift */; };
 		1100000000000029 /* SpotlightCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200000000000029 /* SpotlightCoordinator.swift */; };
 		110000000000002A /* SpotlightModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220000000000002A /* SpotlightModifier.swift */; };
@@ -106,6 +107,7 @@
 		2200000000000025 /* PackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackService.swift; sourceTree = "<group>"; };
 		2200000000000026 /* TipDefinition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TipDefinition.swift; sourceTree = "<group>"; };
 		2200000000000027 /* TutorialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TutorialStore.swift; sourceTree = "<group>"; };
+		2200000000000090 /* SeenCommunityRecordingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeenCommunityRecordingsStore.swift; sourceTree = "<group>"; };
 		2200000000000028 /* SpotlightOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightOverlay.swift; sourceTree = "<group>"; };
 		2200000000000029 /* SpotlightCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightCoordinator.swift; sourceTree = "<group>"; };
 		220000000000002A /* SpotlightModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpotlightModifier.swift; sourceTree = "<group>"; };
@@ -242,6 +244,7 @@
 				2200000000000015 /* UserEquivalencesStore.swift */,
 				2200000000000014 /* LocalRecordingStore.swift */,
 				2200000000000027 /* TutorialStore.swift */,
+				2200000000000090 /* SeenCommunityRecordingsStore.swift */,
 			);
 			path = Storage;
 			sourceTree = "<group>";
@@ -454,6 +457,7 @@
 				1100000000000023 /* DoubleMetaphone.swift in Sources */,
 				1100000000000026 /* TipDefinition.swift in Sources */,
 				1100000000000027 /* TutorialStore.swift in Sources */,
+				1100000000000090 /* SeenCommunityRecordingsStore.swift in Sources */,
 				1100000000000028 /* SpotlightOverlay.swift in Sources */,
 				1100000000000029 /* SpotlightCoordinator.swift in Sources */,
 				110000000000002A /* SpotlightModifier.swift in Sources */,

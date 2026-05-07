@@ -12,6 +12,7 @@ struct RecitationScreen: View {
     @EnvironmentObject var authService: AuthService
     @EnvironmentObject var purchaseService: PurchaseService
     @EnvironmentObject var tutorialStore: TutorialStore
+    @EnvironmentObject var seenCommunityRecordingsStore: SeenCommunityRecordingsStore
 
     let quote: Quote
     var isTutorialMode: Bool = false
@@ -46,6 +47,7 @@ struct RecitationScreen: View {
     @State private var showQuoteAccuracy = false
     @State private var showSplitOverlay = false
     @State private var splitCount: Int = 3
+    @State private var splitByParagraphs: Bool = false
     @State private var showLiquidFill = false
     @State private var liquidFillProgress: CGFloat = 0
     @State private var liquidWavePhase: CGFloat = 0
@@ -174,15 +176,28 @@ struct RecitationScreen: View {
                                 VStack(spacing: 12) {
                                     // Title (dropdown in playback, chunk nav when split, plain otherwise)
                                     if isPlaybackMode {
-                                        recordingDropdownButton
-                                            .padding(.top, 7)
-                                            .frame(maxWidth: .infinity)
-                                            .overlay(alignment: .top) {
-                                                playbackTimeLabelRow
-                                                    .padding(.horizontal, 4)
-                                                    .offset(y: -13)
+                                        VStack(spacing: 4) {
+                                            recordingDropdownButton
+                                                .frame(maxWidth: .infinity)
+                                                .overlay(alignment: .top) {
+                                                    playbackTimeLabelRow
+                                                        .padding(.horizontal, 4)
+                                                        .offset(y: -13)
+                                                }
+
+                                            // When the quote is split, keep the
+                                            // chunk-of-N navigator visible so the
+                                            // user can still see/switch chunks
+                                            // while in voice-recording or read-
+                                            // aloud mode. Reading mode shows the
+                                            // *whole* quote, so the per-chunk
+                                            // navigator is irrelevant there.
+                                            if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
+                                                chunkNavRow(chunks: chunks)
                                             }
-                                    } else if let chunks = viewModel.splitChunks {
+                                        }
+                                        .padding(.top, 7)
+                                    } else if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
                                         VStack(spacing: 4) {
                                             HStack(spacing: 4) {
                                                 Text("\(viewModel.activeTitle)")
@@ -239,8 +254,13 @@ struct RecitationScreen: View {
                                     // Reveal slider
                                     revealSlider
 
-                                    // Word display (always visible — full quote in playback, split/normal otherwise)
-                                    if !isPlaybackMode, let chunks = viewModel.splitChunks {
+                                    // Word display — when the quote is split, render
+                                    // the active chunk plus peeks above/below in
+                                    // every mode *except* reading mode. Reading
+                                    // mode shows the whole quote as flowing prose
+                                    // (rendered by wordDisplay), so the chunk peeks
+                                    // would just be confusing duplicates.
+                                    if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
                                         splitWordDisplay(chunks: chunks, proxy: proxy)
                                     } else {
                                         wordDisplay(proxy: proxy)
@@ -315,6 +335,24 @@ struct RecitationScreen: View {
                     // SHELVED: spotlight walkthrough — re-enable when ready (see KNOWN_ISSUES.md TUTORIAL-001)
                     // showRecitationTutorial = true
                     // showSpotlightTutorial = true
+                }
+
+                // Prefetch community recordings the moment the quote opens so
+                // the "NEW" badge on the music-note icon appears immediately,
+                // without waiting for the user to enter the voice-recording
+                // area. (The .task(id:) below also fetches on appear; this
+                // mirrors the Android setQuote-triggered prefetch and makes
+                // the eager-load intent explicit.)
+                if communityRecordings.isEmpty {
+                    Task {
+                        let hash = RecordingService.shared.hashQuoteText(viewModel.activeText)
+                        let recs = await RecordingService.shared.fetchRecordings(forHash: hash)
+                        await MainActor.run {
+                            if communityRecordings.isEmpty {
+                                communityRecordings = recs
+                            }
+                        }
+                    }
                 }
             }
             .onDisappear {
@@ -432,6 +470,15 @@ struct RecitationScreen: View {
                     // Coming out of master mode via mode switch — drain already handled
                     wasMasterMode = false
                     micFillProgress = 0
+                }
+            }
+            .onChange(of: viewModel.activeChunkIndex) { _, _ in
+                // Read-aloud follows the active chunk: when the user switches
+                // chunks while TTS is playing, restart it on the new chunk text.
+                if isTTSActive && purchaseService.canUseTTS {
+                    let lang = viewModel.activeLanguage ?? viewModel.primaryLanguageCode
+                    tts.stop()
+                    tts.speak(viewModel.currentChunkText, language: lang)
                 }
             }
             .sheet(isPresented: $viewModel.showResults, onDismiss: {
@@ -824,7 +871,7 @@ struct RecitationScreen: View {
                     tts.stop()
                 } else {
                     guard purchaseService.canUseTTS else { showPaywall = true; return }
-                    tts.speak(viewModel.activeText, language: lang)
+                    tts.speak(viewModel.currentChunkText, language: lang)
                 }
             } label: {
                 Group {
@@ -854,7 +901,7 @@ struct RecitationScreen: View {
             tts.onFinish = { [self] in
                 if playbackRepeat && isTTSActive && purchaseService.canUseTTS {
                     let lang = viewModel.activeLanguage ?? viewModel.primaryLanguageCode
-                    tts.speak(viewModel.activeText, language: lang)
+                    tts.speak(viewModel.currentChunkText, language: lang)
                 }
             }
         }
@@ -1417,16 +1464,26 @@ struct RecitationScreen: View {
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { pickerTab = .community }
+                    // Opening the Community tab clears all NEW badges.
+                    let ids = communityRecordings.map { $0.id.uuidString }
+                    seenCommunityRecordingsStore.markSeen(ids)
                 } label: {
-                    Text("Community")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 50)
-                        .foregroundColor(pickerTab == .community ? .primary : Color(.systemGray))
-                        .overlay(alignment: .bottom) {
-                            if pickerTab == .community {
-                                Rectangle().frame(height: 2).foregroundColor(.primary)
-                            }
+                    HStack(spacing: 6) {
+                        Text("Community")
+                            .font(.headline)
+                            .foregroundColor(pickerTab == .community ? .primary : Color(.systemGray))
+                        if hasUnseenCommunityRecordings {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 8, height: 8)
                         }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .overlay(alignment: .bottom) {
+                        if pickerTab == .community {
+                            Rectangle().frame(height: 2).foregroundColor(.primary)
+                        }
+                    }
                 }
             }
 
@@ -1461,8 +1518,12 @@ struct RecitationScreen: View {
                 isPlaybackMode = true
                 showRecordingPicker = false
 
+                // Listening to read-aloud counts as practice — surfaces the
+                // quote in Continue Practicing and unlocks the mastery badge.
+                quoteStore.markListenedToReadAloud(quoteId: viewModel.quote.id)
+
                 let lang = viewModel.activeLanguage ?? viewModel.primaryLanguageCode
-                tts.speak(viewModel.activeText, language: lang)
+                tts.speak(viewModel.currentChunkText, language: lang)
             } label: {
                 HStack {
                     Text("Read Aloud")
@@ -1682,6 +1743,7 @@ struct RecitationScreen: View {
         let isDownloading = downloadingId == recording.id
         let activeLang = viewModel.activeLanguage ?? viewModel.primaryLanguageCode
         let showLang = recording.language != activeLang
+        let isNew = !seenCommunityRecordingsStore.seenIds.contains(recording.id.uuidString)
 
         return VStack(spacing: 0) {
             Button {
@@ -1698,6 +1760,15 @@ struct RecitationScreen: View {
                                 Text("(\(recording.language.uppercased()))")
                                     .font(.caption.weight(.medium))
                                     .foregroundColor(.secondary)
+                            }
+                            if isNew {
+                                Text("NEW")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(Color.red)
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
                             }
                         }
                         Text(recording.createdAt, style: .date)
@@ -2281,27 +2352,41 @@ struct RecitationScreen: View {
         let isRTL = Self.rtlLanguageCodes.contains((effectiveLang ?? "").lowercased())
 
         return VStack(spacing: 12) {
-            FlowLayout(spacing: 8, isRTL: isRTL) {
-                ForEach(Array(viewModel.words.enumerated()), id: \.offset) { index, wordState in
-                    WordView(
-                        word: wordState.word,
-                        state: wordState.state,
-                        isCurrentWord: !viewModel.isReadingMode && index == viewModel.currentPosition,
+            Group {
+                if viewModel.isReadingMode {
+                    // Reading mode: render the quote as flowing prose with a
+                    // drop-cap-styled first letter, instead of the per-word
+                    // FlowLayout grid (which gives unnaturally wide spacing).
+                    ReadingModeProseText(
+                        text: viewModel.activeText,
                         fontSize: settingsStore.fontSize.pointSize,
-                        isVisible: viewModel.shouldShowWord(at: index),
-                        displayMode: viewModel.wordDisplayMode(at: index),
-                        hideProgress: false,
-                        isFlashing: index == viewModel.flashingWordIndex,
-                        isRTL: isRTL,
-                        onTap: viewModel.isWordTappable(at: index)
-                            ? { viewModel.tapWord(at: index, countAsHint: !isPlaybackMode) }
-                            : nil
+                        isRTL: isRTL
                     )
-                    .id(index)
+                } else {
+                    FlowLayout(spacing: 8, isRTL: isRTL) {
+                        ForEach(Array(viewModel.words.enumerated()), id: \.offset) { index, wordState in
+                            WordView(
+                                word: wordState.word,
+                                state: wordState.state,
+                                isCurrentWord: !viewModel.isReadingMode && index == viewModel.currentPosition,
+                                fontSize: settingsStore.fontSize.pointSize,
+                                isVisible: viewModel.shouldShowWord(at: index),
+                                displayMode: viewModel.wordDisplayMode(at: index),
+                                hideProgress: false,
+                                isFlashing: index == viewModel.flashingWordIndex,
+                                isRTL: isRTL,
+                                onTap: viewModel.isWordTappable(at: index)
+                                    ? { viewModel.tapWord(at: index, countAsHint: !isPlaybackMode) }
+                                    : nil
+                            )
+                            .id(index)
+                        }
+                    }
                 }
             }
-            .padding()
-            .background(Color(.secondarySystemBackground))
+            .padding(.vertical, 16)
+            .padding(.horizontal, viewModel.isReadingMode ? 0 : 16)
+            .background(viewModel.isReadingMode ? Color.clear : Color(.secondarySystemBackground))
             .clipShape(cornerShape)
             .spotlightAnchor("wordGrid")
 
@@ -2331,6 +2416,14 @@ struct RecitationScreen: View {
             (.mode(.multipleChoice), MemorizationMode.multipleChoice.icon),
             (.music, "music.note"),
         ]
+    }
+
+    /// True iff at least one currently-loaded community recording hasn't been
+    /// viewed by the user. Drives the "NEW" badges on the music-note icon, the
+    /// Community tab, and per-row in the recording picker.
+    private var hasUnseenCommunityRecordings: Bool {
+        let seen = seenCommunityRecordingsStore.seenIds
+        return communityRecordings.contains { !seen.contains($0.id.uuidString) }
     }
 
     private var modePickerSelectedIndex: Int {
@@ -2376,6 +2469,19 @@ struct RecitationScreen: View {
                             Image(systemName: icon)
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(index == modePickerSelectedIndex ? .primary : .secondary)
+                                // Overlay BEFORE .frame so the badge anchors to
+                                // the icon's intrinsic top-right corner, not the
+                                // expanded segment frame (which would push the
+                                // dot to the picker's edge / behind the rounded
+                                // clip).
+                                .overlay(alignment: .topTrailing) {
+                                    if case .music = segment, hasUnseenCommunityRecordings {
+                                        Circle()
+                                            .fill(Color.red)
+                                            .frame(width: 7, height: 7)
+                                            .offset(x: 7, y: -2)
+                                    }
+                                }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                         .buttonStyle(.plain)
@@ -2490,7 +2596,7 @@ struct RecitationScreen: View {
                 viewModel.switchLanguage(nil)
                 let lang = viewModel.primaryLanguageCode
                 tts.stop()
-                tts.speak(viewModel.activeText, language: lang)
+                tts.speak(viewModel.currentChunkText, language: lang)
             } label: {
                 Label(Self.languageDisplayName(primary), systemImage: viewModel.activeLanguage == nil ? "checkmark.circle.fill" : "circle")
             }
@@ -2499,7 +2605,7 @@ struct RecitationScreen: View {
                     guard purchaseService.canUseTTS else { showPaywall = true; return }
                     viewModel.switchLanguage(lang)
                     tts.stop()
-                    tts.speak(viewModel.activeText, language: lang)
+                    tts.speak(viewModel.currentChunkText, language: lang)
                 } label: {
                     Label(Self.languageDisplayName(lang), systemImage: viewModel.activeLanguage == lang ? "checkmark.circle.fill" : "circle")
                 }
@@ -2839,7 +2945,15 @@ struct RecitationScreen: View {
                         .tint(.blue)
                     }
                 } else {
-                    let wordsPerSection = max(1, viewModel.quote.wordCount / splitCount)
+                    // Cap split count so every chunk has at least 3 words —
+                    // splits that would leave 1 or 2 words per chunk aren't
+                    // useful for memorization.
+                    let sourceWordCount = viewModel.quote.wordCount
+                    let maxSplitCount = min(10, max(2, sourceWordCount / 3))
+                    let canSplit = sourceWordCount >= 6
+                    let wordsPerSection = max(1, sourceWordCount / max(1, splitCount))
+                    let paragraphCount = TextChunker.paragraphCount(viewModel.activeText)
+                    let canSplitByParagraph = paragraphCount > 1
 
                     VStack(spacing: 16) {
                         Text("How many parts?")
@@ -2852,34 +2966,58 @@ struct RecitationScreen: View {
                             } label: {
                                 Image(systemName: "minus")
                                     .font(.title2.bold())
-                                    .foregroundColor(splitCount > 2 ? .primary : .secondary)
+                                    .foregroundColor(splitCount > 2 && !splitByParagraphs ? .primary : .secondary)
                                     .frame(width: 44, height: 44)
                                     .background(Color(.systemGray5))
                                     .cornerRadius(10)
                             }
+                            .disabled(splitByParagraphs)
 
-                            Text("\(splitCount)")
+                            Text("\(splitByParagraphs ? paragraphCount : splitCount)")
                                 .font(.system(size: 42, weight: .bold))
                                 .monospacedDigit()
 
                             Button {
-                                if splitCount < 10 { splitCount += 1 }
+                                if splitCount < maxSplitCount { splitCount += 1 }
                             } label: {
                                 Image(systemName: "plus")
                                     .font(.title2.bold())
-                                    .foregroundColor(splitCount < 10 ? .primary : .secondary)
+                                    .foregroundColor(splitCount < maxSplitCount && !splitByParagraphs ? .primary : .secondary)
                                     .frame(width: 44, height: 44)
                                     .background(Color(.systemGray5))
                                     .cornerRadius(10)
                             }
+                            .disabled(splitByParagraphs)
                         }
 
-                        Text(String(localized: "~\(wordsPerSection) words each", comment: "Approximate words per section"))
+                        Text(splitByParagraphs
+                             ? String(localized: "\(paragraphCount) paragraphs", comment: "Paragraph chunk count")
+                             : String(localized: "~\(wordsPerSection) words each", comment: "Approximate words per section"))
                             .font(.caption)
                             .foregroundColor(.secondary)
+                        if !canSplit {
+                            Text("Quote is too short to split (needs at least 6 words).")
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                                .multilineTextAlignment(.center)
+                        }
+
+                        // Paragraph-split toggle — only enabled when the source
+                        // text actually has more than one paragraph.
+                        Toggle(isOn: $splitByParagraphs) {
+                            Text("Split by paragraphs")
+                                .font(.subheadline)
+                        }
+                        .toggleStyle(.switch)
+                        .disabled(!canSplitByParagraph)
+                        .opacity(canSplitByParagraph ? 1 : 0.4)
 
                         Button {
-                            viewModel.splitActiveChunk(into: splitCount)
+                            if splitByParagraphs {
+                                viewModel.splitActiveChunkByParagraphs()
+                            } else {
+                                viewModel.splitActiveChunk(into: splitCount)
+                            }
                             withAnimation(.easeInOut(duration: 0.2)) { showSplitOverlay = false }
                         } label: {
                             HStack {
@@ -2891,6 +3029,12 @@ struct RecitationScreen: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.indigo)
+                        .disabled(!canSplit && !splitByParagraphs)
+                    }
+                    .onAppear {
+                        // Clamp the picker to the new cap if the previously-saved
+                        // count would now produce sub-3-word chunks.
+                        if splitCount > maxSplitCount { splitCount = maxSplitCount }
                     }
                 }
             }
@@ -2958,8 +3102,11 @@ struct RecitationScreen: View {
     @State private var mistakeCharacters: [Int: BrainCharacter] = [:]
 
     private var resultsSheet: some View {
-        // In master mode with split, show aggregate stats across all chunks
-        let session = (viewModel.isSplit && !viewModel.isMasterMode) ? viewModel.createChunkSession() : viewModel.createSession()
+        // The split flow now auto-advances chunks and only opens this sheet
+        // once every chunk is finished — so always use the aggregate session
+        // (which sums words/correct/mistakes across all chunks). The previous
+        // per-chunk fallback would show only the last chunk's stats here.
+        let session = viewModel.createSession()
         let usedChars = Set(mistakeCharacters.values)
         return ResultsView(
             session: session,
@@ -3502,7 +3649,11 @@ struct RecitationScreen: View {
 
     private var initialSplitView: some View {
         let sourceWordCount = viewModel.quote.wordCount
-        let wordsPerSection = max(1, sourceWordCount / viewModel.splitCount)
+        // Cap so every chunk has ≥3 words. Splits that would leave 1–2 words
+        // per chunk aren't useful for memorization.
+        let maxSplitCount = min(10, max(2, sourceWordCount / 3))
+        let canSplit = sourceWordCount >= 6
+        let wordsPerSection = max(1, sourceWordCount / max(1, viewModel.splitCount))
 
         return VStack(spacing: 16) {
             Text("How many parts?")
@@ -3525,11 +3676,11 @@ struct RecitationScreen: View {
                     .monospacedDigit()
 
                 Button {
-                    if viewModel.splitCount < 10 { viewModel.splitCount += 1 }
+                    if viewModel.splitCount < maxSplitCount { viewModel.splitCount += 1 }
                 } label: {
                     Image(systemName: "plus")
                         .font(.title2.bold())
-                        .foregroundColor(viewModel.splitCount < 10 ? .primary : .secondary)
+                        .foregroundColor(viewModel.splitCount < maxSplitCount ? .primary : .secondary)
                         .frame(width: 44, height: 44)
                         .background(Color(.systemGray5))
                         .cornerRadius(10)
@@ -3539,6 +3690,12 @@ struct RecitationScreen: View {
             Text(String(localized: "~\(wordsPerSection) words each", comment: "Approximate words per section"))
                 .font(.caption)
                 .foregroundColor(.secondary)
+            if !canSplit {
+                Text("Quote is too short to split (needs at least 6 words).")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .multilineTextAlignment(.center)
+            }
 
             Button {
                 viewModel.splitActiveChunk(into: viewModel.splitCount)
@@ -3552,8 +3709,12 @@ struct RecitationScreen: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.indigo)
+            .disabled(!canSplit)
         }
         .padding(24)
+        .onAppear {
+            if viewModel.splitCount > maxSplitCount { viewModel.splitCount = maxSplitCount }
+        }
     }
 
     private var mergeModalView: some View {
@@ -3601,6 +3762,38 @@ struct RecitationScreen: View {
 
     // MARK: - Split Word Display
 
+    /// Compact chunk-of-N navigation row (prev / "X of Y" / next). Used inline
+    /// under the title in normal modes, and under the playback dropdown so the
+    /// nav stays visible while voice-recording or reading aloud.
+    private func chunkNavRow(chunks: [ChunkState]) -> some View {
+        HStack(spacing: 4) {
+            Button {
+                if viewModel.activeChunkIndex > 0 {
+                    viewModel.switchToChunk(viewModel.activeChunkIndex - 1)
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline)
+                    .foregroundColor(viewModel.activeChunkIndex > 0 ? .blue : Color(.systemGray4))
+            }
+            .disabled(viewModel.activeChunkIndex <= 0)
+
+            Text(String(localized: "\(viewModel.activeChunkIndex + 1) of \(chunks.count)", comment: "Chunk X of Y navigation"))
+                .font(.headline)
+
+            Button {
+                if viewModel.activeChunkIndex < chunks.count - 1 {
+                    viewModel.switchToChunk(viewModel.activeChunkIndex + 1)
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.headline)
+                    .foregroundColor(viewModel.activeChunkIndex < chunks.count - 1 ? .blue : Color(.systemGray4))
+            }
+            .disabled(viewModel.activeChunkIndex >= chunks.count - 1)
+        }
+    }
+
     private func splitWordDisplay(chunks: [ChunkState], proxy: ScrollViewProxy) -> some View {
         let active = viewModel.activeChunkIndex
         let maxVisible = 2
@@ -3629,17 +3822,28 @@ struct RecitationScreen: View {
 
     /// Get the accuracy for a chunk — checks persisted data first, then in-session completion
     private func chunkAccuracy(chunk: ChunkState, index: Int) -> Double? {
-        // Persisted accuracy
+        let totalWords = chunk.words.count
+        // Prefer the in-session computation when the chunk's words have any
+        // completion data this session — viewModel.quote is a snapshot from
+        // screen open, so its persisted chunkAccuracies can lag behind the
+        // store after saveSplitState. Falling back to persisted only when
+        // the in-memory chunk has no completion (e.g. post-relaunch).
+        let outstanding = chunk.words.contains { word in
+            word.state != .correct && word.state != .incorrect && !word.isRevealed
+        }
+        let tested = chunk.words.filter { $0.state == .correct || $0.state == .incorrect }.count
+        if !outstanding && totalWords > 0 && tested > 0 {
+            // Score only the words the user actually attempted — pre-revealed
+            // words are skipped over, so counting them as "correct" inflates %.
+            return Double(max(0, tested - chunk.mistakes.count)) / Double(tested)
+        }
+
+        // Fallback: persisted accuracy (used after a restart when chunk word
+        // state has been rebuilt from text and no longer carries completion).
         if let accuracies = viewModel.quote.chunkAccuracies,
            index < accuracies.count,
            accuracies[index] > 0 {
             return accuracies[index]
-        }
-        // In-session completion
-        let totalWords = chunk.words.count
-        let completedWords = chunk.words.filter { $0.state == .correct || $0.state == .incorrect }.count
-        if completedWords >= totalWords && totalWords > 0 {
-            return Double(max(0, totalWords - chunk.mistakes.count)) / Double(totalWords)
         }
         return nil
     }
@@ -4119,6 +4323,144 @@ struct WordView: View {
         case .incorrect: return .red.opacity(0.2)
         case .current: return .blue.opacity(0.2)
         }
+    }
+}
+
+/// Reading-mode quote view: flowing prose with the first letter rendered as a
+/// true drop-cap. The body wraps next to the cap for the first two lines and
+/// then continues at the left margin — implemented via UITextView's
+/// `textContainer.exclusionPaths` so the line spacing stays uniform across
+/// every line (a plain `Text(big) + Text(small)` would make the first line
+/// taller than the rest, which is what the user wanted to fix).
+private struct ReadingModeProseText: View {
+    let text: String
+    let fontSize: CGFloat
+    let isRTL: Bool
+
+    var body: some View {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // RTL scripts (Persian/Arabic/Hebrew/Urdu) don't use drop caps as a
+        // typographic convention — render as plain prose instead.
+        // For LTR: Spanish opens with ¡ or ¿ before the first letter; folding
+        // the next character into the cap keeps the mark attached to its
+        // letter as one drop-cap unit.
+        let dropCapText: String
+        let rest: String
+        if isRTL {
+            dropCapText = ""
+            rest = trimmed
+        } else if let first = trimmed.first, (first == "¡" || first == "¿"), trimmed.count > 1 {
+            dropCapText = String(trimmed.prefix(2))
+            rest = String(trimmed.dropFirst(2))
+        } else {
+            dropCapText = String(trimmed.prefix(1))
+            rest = String(trimmed.dropFirst())
+        }
+        // Body line spacing pushed up a touch so prose breathes like a printed
+        // page rather than a tight UI label.
+        let lineSpacing: CGFloat = 8
+        let capFontSize = fontSize * 3.2
+
+        // Use the actual body line height so the exclusion path lines up with
+        // text rows. Line N top = (N-1) * (lineHeight + lineSpacing). Setting
+        // exclusion height to cover lines 1+2 only (i.e. < line-3 top) makes
+        // exactly two lines wrap next to the cap.
+        let bodyFont = UIFont.systemFont(ofSize: fontSize)
+        let capFont = UIFont.systemFont(ofSize: capFontSize)
+        let capHeight = bodyFont.lineHeight * 2 + lineSpacing
+
+        // Measure the actual cap glyph width so the exclusion path adapts
+        // when the cap is two characters (e.g. ¡O) instead of one.
+        let capWidth = (dropCapText as NSString)
+            .size(withAttributes: [.font: capFont])
+            .width
+
+        // Horizontal gap between the cap glyph and the body text so the words
+        // don't crowd the cap.
+        let capGap: CGFloat = fontSize * 0.5
+        let exclusionRect = dropCapText.isEmpty
+            ? CGRect.zero
+            : CGRect(x: 0, y: 0, width: capWidth + capGap, height: capHeight)
+
+        // The cap font has more "headroom" above its glyph than the body font
+        // (ascender - capHeight scales with size). Without correction the cap's
+        // visual top sits below the body's first-line top. Pulling the cap up
+        // by the *difference* in headroom aligns the two visual tops.
+        let capTopOffset = (capFont.ascender - capFont.capHeight)
+            - (bodyFont.ascender - bodyFont.capHeight)
+
+        return ZStack(alignment: isRTL ? .topTrailing : .topLeading) {
+            DropCapBodyText(
+                text: rest,
+                fontSize: fontSize,
+                lineSpacing: lineSpacing,
+                exclusionRect: exclusionRect,
+                isRTL: isRTL
+            )
+
+            if !dropCapText.isEmpty {
+                Text(dropCapText)
+                    .font(.system(size: capFontSize).leading(.tight))
+                    .fixedSize()
+                    .frame(width: capWidth, height: capHeight, alignment: isRTL ? .topTrailing : .topLeading)
+                    .offset(y: -capTopOffset)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: isRTL ? .trailing : .leading)
+        .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
+    }
+}
+
+/// UITextView-backed body for `ReadingModeProseText`. Uses the text container's
+/// exclusion path to reserve a top-corner rectangle for the drop cap so the
+/// first two lines wrap next to it and subsequent lines flow back to the
+/// margin. `isScrollEnabled = false` lets SwiftUI size the view to its content.
+private struct DropCapBodyText: UIViewRepresentable {
+    let text: String
+    let fontSize: CGFloat
+    let lineSpacing: CGFloat
+    let exclusionRect: CGRect
+    let isRTL: Bool
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.isEditable = false
+        textView.isSelectable = false
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = isRTL ? .right : .left
+        paragraph.lineSpacing = lineSpacing
+        paragraph.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+
+        textView.attributedText = NSAttributedString(
+            string: text,
+            attributes: [
+                .font: UIFont.systemFont(ofSize: fontSize),
+                .paragraphStyle: paragraph,
+                .foregroundColor: UIColor.label,
+            ]
+        )
+        textView.textContainer.exclusionPaths = exclusionRect.isEmpty
+            ? []
+            : [UIBezierPath(rect: exclusionRect)]
+    }
+
+    /// Without this, SwiftUI gives the UITextView no width constraint and it
+    /// lays the entire string on a single overflow line. Returning the proposed
+    /// width and the wrapped intrinsic height fixes that.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        guard let width = proposal.width, width.isFinite, width > 0 else { return nil }
+        let fitted = uiView.sizeThatFits(
+            CGSize(width: width, height: .greatestFiniteMagnitude)
+        )
+        return CGSize(width: width, height: fitted.height)
     }
 }
 

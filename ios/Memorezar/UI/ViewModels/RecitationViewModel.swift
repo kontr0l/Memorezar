@@ -98,6 +98,18 @@ final class RecitationViewModel: NSObject, ObservableObject {
         return translated.text
     }
 
+    /// Text representing what the user is *currently practicing* — when the
+    /// quote is split, that's just the active chunk; otherwise the full
+    /// active-language text. Use this for read-aloud / TTS so the listener
+    /// hears only the part they're working on.
+    var currentChunkText: String {
+        if let chunks = splitChunks,
+           activeChunkIndex >= 0, activeChunkIndex < chunks.count {
+            return chunks[activeChunkIndex].chunkText
+        }
+        return activeText
+    }
+
     /// The title for the currently active language
     var activeTitle: String {
         guard let lang = activeLanguage,
@@ -137,11 +149,11 @@ final class RecitationViewModel: NSObject, ObservableObject {
     }
 
     /// Whether the current mode tests every word (including visible ones).
-    /// Case 1: voice (normal + first letter), typing with first letter — all words tested
-    /// Case 2: normal typing, multiple choice — only hidden words tested
+    /// Voice mode tests every word regardless of reveal state. Typing (both
+    /// normal and first-letter) and multiple choice only test hidden words —
+    /// visible/revealed words are skipped past.
     var testsAllWords: Bool {
         if currentMode == .voice { return true }
-        if currentMode == .typing && isFirstLetterToggle { return true }
         return false
     }
 
@@ -496,24 +508,18 @@ final class RecitationViewModel: NSObject, ObservableObject {
         if mode == .multipleChoice {
             sessionStartTime = sessionStartTime ?? Date()
         }
-        // Apply first letter mode setting for voice/typing (no animation)
-        if settings.firstLetterModeEnabled && (mode == .voice || mode == .typing) {
-            if !isFirstLetterToggle {
-                isFirstLetterToggle = true
-                applyLevelRevealForLevel(displayLevel)
-            }
-        }
+        // Always start a quote with first-letter mode OFF — the user toggles it
+        // per-session via the A-square button. Matches Android's behavior.
         return false
     }
 
     /// Switch to a new memorization mode
-    /// Toggle first-letter mode, converting the slider value proportionally so the
-    /// thumb stays in roughly the same position.
-    /// - revealPercentage 0-100 ↔ letterRevealStep 0-5
+    /// Toggle first-letter mode. Only the *display style* of hidden words
+    /// changes (blank vs first-letter hint) — the set of hidden words stays
+    /// the same so the user doesn't get a reshuffled blank pattern just for
+    /// flipping the toggle.
     func toggleFirstLetterMode() {
         isFirstLetterToggle.toggle()
-        // Re-apply using the current display level (not the saved level)
-        applyLevelRevealForLevel(displayLevel)
     }
 
     func switchMode(to newMode: MemorizationMode) {
@@ -604,10 +610,9 @@ final class RecitationViewModel: NSObject, ObservableObject {
                 currentPosition += 1
                 comparator.setPosition(currentPosition)
 
-                // In first-letter typing mode, advance through ALL words (don't skip visible ones)
-                if currentPosition < words.count {
-                    words[currentPosition].state = .current
-                }
+                // Skip past revealed/visible words to the next hidden word —
+                // first-letter typing only tests words the user must recall.
+                skipToNextHiddenWord()
 
                 if currentPosition >= words.count {
                     handleCompletion()
@@ -632,12 +637,10 @@ final class RecitationViewModel: NSObject, ObservableObject {
                     return
                 }
 
-                // Advance past the wrong word
+                // Advance past the wrong word, then skip revealed words.
                 currentPosition += 1
                 comparator.setPosition(currentPosition)
-                if currentPosition < words.count {
-                    words[currentPosition].state = .current
-                }
+                skipToNextHiddenWord()
                 if currentPosition >= words.count {
                     handleCompletion()
                     return
@@ -1022,6 +1025,14 @@ final class RecitationViewModel: NSObject, ObservableObject {
             return .full
         }
 
+        // Reading mode (slider at 100, full-quote view) overrides every other
+        // mode — including voice + first-letter, which would otherwise short-
+        // circuit below and keep rendering only the first letters even when the
+        // user has explicitly asked to see the full quote.
+        if isReadingMode {
+            return .full
+        }
+
         // First letter toggle in typing mode — use normal reveal slider for word visibility
         if isFirstLetterToggle && currentMode == .typing {
             if (showHint && index == currentPosition) || flashingWordIndex == index {
@@ -1262,43 +1273,23 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
     /// Split the quote into N chunks for section-by-section practice
     func split(into count: Int) {
+        applySplit(chunkTexts: TextChunker.split(activeText, into: count))
+    }
+
+    /// Split the whole quote into one chunk per paragraph (blank-line or
+    /// newline separated). No-op if the text only has one paragraph.
+    func splitByParagraphs() {
+        let chunkTexts = TextChunker.splitByParagraphs(activeText)
+        guard chunkTexts.count > 1 else { return }
+        applySplit(chunkTexts: chunkTexts)
+    }
+
+    private func applySplit(chunkTexts: [String]) {
         stop()
 
-        let chunkTexts = TextChunker.split(activeText, into: count)
-        var chunks: [ChunkState] = []
-
-        for (i, text) in chunkTexts.enumerated() {
-            let chunkReveal = quote.revealPercentageForLevel
-            let chunkWords = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-            var wordStates = chunkWords.map { WordDisplayState(word: $0, state: .pending) }
-            if !wordStates.isEmpty { wordStates[0].state = .current }
-
-            // Apply per-chunk reveal percentage
-            if chunkReveal > 0 {
-                let pendingIndices = wordStates.enumerated()
-                    .filter { $0.offset > 0 && $0.element.state == .pending }
-                    .map { $0.offset }
-                let revealCount = Int(Double(pendingIndices.count) * (chunkReveal / 100.0))
-                if revealCount > 0 {
-                    let shuffled = pendingIndices.shuffled()
-                    for idx in shuffled.prefix(revealCount) {
-                        wordStates[idx].isRevealed = true
-                    }
-                }
-            }
-
-            chunks.append(ChunkState(
-                chunkText: text,
-                words: wordStates,
-                currentPosition: 0,
-                mistakes: [],
-                hintCount: 0,
-                mcChoices: [],
-                mcCorrectIndex: 0,
-                showHint: false,
-                revealPercentage: chunkReveal,
-                previousWordWasMistake: false
-            ))
+        let chunkReveal = quote.revealPercentageForLevel
+        let chunks: [ChunkState] = chunkTexts.map { text in
+            makeChunkState(text: text, revealPercentage: chunkReveal)
         }
 
         splitChunks = chunks
@@ -1310,6 +1301,38 @@ final class RecitationViewModel: NSObject, ObservableObject {
         saveSplitState()
     }
 
+    private func makeChunkState(text: String, revealPercentage: Double) -> ChunkState {
+        let chunkWords = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        var wordStates = chunkWords.map { WordDisplayState(word: $0, state: .pending) }
+        if !wordStates.isEmpty { wordStates[0].state = .current }
+
+        if revealPercentage > 0 {
+            let pendingIndices = wordStates.enumerated()
+                .filter { $0.offset > 0 && $0.element.state == .pending }
+                .map { $0.offset }
+            let revealCount = Int(Double(pendingIndices.count) * (revealPercentage / 100.0))
+            if revealCount > 0 {
+                let shuffled = pendingIndices.shuffled()
+                for idx in shuffled.prefix(revealCount) {
+                    wordStates[idx].isRevealed = true
+                }
+            }
+        }
+
+        return ChunkState(
+            chunkText: text,
+            words: wordStates,
+            currentPosition: 0,
+            mistakes: [],
+            hintCount: 0,
+            mcChoices: [],
+            mcCorrectIndex: 0,
+            showHint: false,
+            revealPercentage: revealPercentage,
+            previousWordWasMistake: false
+        )
+    }
+
     /// Split the active chunk (or the whole quote if not yet split) into N sub-chunks.
     /// Supports recursive splitting — each section can be split further.
     func splitActiveChunk(into count: Int) {
@@ -1318,56 +1341,38 @@ final class RecitationViewModel: NSObject, ObservableObject {
             split(into: count)
             return
         }
+        applySubSplit { TextChunker.split($0, into: count) }
+    }
 
-        // Already split — sub-split the active chunk
+    /// Sub-split the active chunk (or first-split the whole quote) by
+    /// paragraph boundaries. No-op if the target text only has one paragraph.
+    func splitActiveChunkByParagraphs() {
+        if !isSplit {
+            splitByParagraphs()
+            return
+        }
+        applySubSplit { TextChunker.splitByParagraphs($0) }
+    }
+
+    private func applySubSplit(_ chunker: (String) -> [String]) {
         stop()
         saveCurrentChunkState()
         guard var chunks = splitChunks,
               activeChunkIndex >= 0, activeChunkIndex < chunks.count else { return }
 
         let activeChunk = chunks[activeChunkIndex]
-        let subTexts = TextChunker.split(activeChunk.chunkText, into: count)
+        let subTexts = chunker(activeChunk.chunkText)
+        guard subTexts.count > 1 else { return }
         let currentReveal = activeChunk.revealPercentage
 
-        var newSubChunks: [ChunkState] = []
-        for text in subTexts {
-            let chunkWords = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
-            var wordStates = chunkWords.map { WordDisplayState(word: $0, state: .pending) }
-            if !wordStates.isEmpty { wordStates[0].state = .current }
-
-            if currentReveal > 0 {
-                let pendingIndices = wordStates.enumerated()
-                    .filter { $0.offset > 0 && $0.element.state == .pending }
-                    .map { $0.offset }
-                let revealCount = Int(Double(pendingIndices.count) * (currentReveal / 100.0))
-                if revealCount > 0 {
-                    let shuffled = pendingIndices.shuffled()
-                    for idx in shuffled.prefix(revealCount) {
-                        wordStates[idx].isRevealed = true
-                    }
-                }
-            }
-
-            newSubChunks.append(ChunkState(
-                chunkText: text,
-                words: wordStates,
-                currentPosition: 0,
-                mistakes: [],
-                hintCount: 0,
-                mcChoices: [],
-                mcCorrectIndex: 0,
-                showHint: false,
-                revealPercentage: currentReveal,
-                previousWordWasMistake: false
-            ))
+        let newSubChunks: [ChunkState] = subTexts.map { text in
+            makeChunkState(text: text, revealPercentage: currentReveal)
         }
 
-        // Replace the active chunk with the new sub-chunks
         chunks.remove(at: activeChunkIndex)
         chunks.insert(contentsOf: newSubChunks, at: activeChunkIndex)
         splitChunks = chunks
 
-        // Load the first new sub-chunk
         loadChunk(at: activeChunkIndex)
         showSplitPopup = false
         saveSplitState()
@@ -1571,21 +1576,28 @@ final class RecitationViewModel: NSObject, ObservableObject {
         if isSplit {
             saveCurrentChunkState()
 
-            // In master mode with split: auto-advance to next chunk without showing results
             if isMasterMode {
-                // Check if master mode already failed (can't pass 95%)
+                // Master mode: auto-advance only if still passing (>=95% accuracy
+                // overall). If failed, fall through to show the failure result.
                 let totalTested = masterModeTotalTested
                 let totalMistakes = masterModeTotalMistakes
                 let canStillPass = totalMistakes <= Int(Double(totalTested) * 0.05)
 
                 if canStillPass {
-                    // Try advancing to next chunk
                     if advanceToNextChunk() {
-                        // More chunks to go — continue without showing results
                         return
                     }
                 }
                 // All chunks done (or failed) — show results with aggregate stats
+            } else {
+                // Non-master split: auto-advance to the next unfinished chunk
+                // instead of popping the completion sheet on every chunk. The
+                // results sheet only shows once every chunk is done. (Mirrors
+                // Android's RecitationViewModel.handleCompletion behavior.)
+                saveSplitState()
+                if advanceToNextChunk() {
+                    return
+                }
             }
         }
 
@@ -1708,10 +1720,21 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
             for (i, chunk) in chunks.enumerated() {
                 let total = chunk.words.count
-                let completedWords = chunk.words.filter { $0.state == .correct || $0.state == .incorrect }.count
-                // Only update accuracy/reveal for chunks that have been fully completed
-                if completedWords >= total && total > 0 {
-                    accuracies[i] = Double(max(0, total - chunk.mistakes.count)) / Double(total)
+                // A chunk is "fully completed" when every word is either tested
+                // or pre-revealed by the slider — revealed words stay .pending
+                // so a pure tested-only check would skip otherwise-finished
+                // chunks in typing/MC modes with the reveal slider on.
+                let outstanding = chunk.words.contains { word in
+                    word.state != .correct && word.state != .incorrect && !word.isRevealed
+                }
+                if !outstanding && total > 0 {
+                    // Score only the words the user actually attempted — pre-revealed
+                    // words are skipped over, so counting them as "correct" would
+                    // inflate the chunk's stored %.
+                    let tested = chunk.words.filter { $0.state == .correct || $0.state == .incorrect }.count
+                    if tested > 0 {
+                        accuracies[i] = Double(max(0, tested - chunk.mistakes.count)) / Double(tested)
+                    }
                     reveals[i] = chunk.revealPercentage
                 }
             }
@@ -1863,12 +1886,21 @@ final class RecitationViewModel: NSObject, ObservableObject {
     func advanceToNextChunk() -> Bool {
         guard let chunks = splitChunks else { return false }
 
+        // A chunk is "complete" once every word is either tested or pre-revealed
+        // by the slider. Revealed words stay .pending after skipToNextHiddenWord
+        // skips past them, so a pure state == .correct/.incorrect check would
+        // see revealed words as still needing work — and the wrap-around below
+        // would bounce the user back to a "previously finished" chunk forever.
+        func isIncomplete(_ chunk: ChunkState) -> Bool {
+            chunk.words.contains { word in
+                word.state != .correct && word.state != .incorrect && !word.isRevealed
+            }
+        }
+
         // Look for the next chunk after the current one that isn't fully completed
         let startSearch = activeChunkIndex + 1
         for i in startSearch..<chunks.count {
-            let chunk = chunks[i]
-            let completedWords = chunk.words.filter { $0.state == .correct || $0.state == .incorrect }.count
-            if completedWords < chunk.words.count {
+            if isIncomplete(chunks[i]) {
                 switchToChunk(i)
                 return true
             }
@@ -1876,9 +1908,7 @@ final class RecitationViewModel: NSObject, ObservableObject {
 
         // Wrap around and check chunks before the current one
         for i in 0..<activeChunkIndex {
-            let chunk = chunks[i]
-            let completedWords = chunk.words.filter { $0.state == .correct || $0.state == .incorrect }.count
-            if completedWords < chunk.words.count {
+            if isIncomplete(chunks[i]) {
                 switchToChunk(i)
                 return true
             }
