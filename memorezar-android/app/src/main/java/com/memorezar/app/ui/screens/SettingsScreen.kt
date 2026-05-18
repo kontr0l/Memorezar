@@ -201,7 +201,7 @@ fun SettingsScreen(
                     icon = ImageVector.vectorResource(R.drawable.ic_view_module),
                     label = stringResource(R.string.default_mode),
                     value = settings.defaultMemorizationMode.displayName,
-                    options = MemorizationMode.entries.filter { it != MemorizationMode.AUDIO }.map { it.displayName },
+                    options = MemorizationMode.entries.filter { it != MemorizationMode.FIRST_LETTER }.map { it.displayName },
                     onSelect = { selected ->
                         val mode = MemorizationMode.entries.first { it.displayName == selected }
                         settingsStore.updateSettings(settings.copy(defaultMemorizationMode = mode))

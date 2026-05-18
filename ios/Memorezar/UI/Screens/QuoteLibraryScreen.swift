@@ -376,7 +376,6 @@ struct CategoryDetailView: View {
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(height: 32)
-                            .offset(x: -10, y: 4)
                     }
                 }
             }

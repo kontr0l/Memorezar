@@ -330,7 +330,13 @@ struct RecitationScreen: View {
                         }
                     }
                 }
-                viewModel.requestPermissions()
+                // Only ask for the mic when the quote actually opens in voice
+                // mode. Otherwise typing/MC/audio users (including anyone who
+                // just denied mic and got flipped to typing) would still see
+                // the "Microphone Access Required" alert on every quote open.
+                if viewModel.currentMode == .voice {
+                    viewModel.requestPermissions()
+                }
                 if !isTutorialMode {
                     // SHELVED: spotlight walkthrough — re-enable when ready (see KNOWN_ISSUES.md TUTORIAL-001)
                     // showRecitationTutorial = true
@@ -367,7 +373,15 @@ struct RecitationScreen: View {
                     }
                 }
                 Button("Cancel", role: .cancel) {
-                    dismiss()
+                    // Mic denied → drop the user into typing mode (mic-less
+                    // alternative) instead of dismissing the quote. If their
+                    // saved default was Voice, flip it to Typing too so the
+                    // next quote doesn't re-trigger the same prompt-and-deny
+                    // loop.
+                    if settingsStore.settings.defaultMemorizationMode == .voice {
+                        settingsStore.settings.defaultMemorizationMode = .typing
+                    }
+                    viewModel.switchMode(to: .typing)
                 }
             } message: {
                 Text(String(localized: "Memorezar needs microphone access to hear your recitation. Please enable it in Settings."))
@@ -2460,6 +2474,13 @@ struct RecitationScreen: View {
                             case .mode(let mode):
                                 exitPlaybackMode()
                                 viewModel.switchMode(to: mode)
+                                // Switching INTO voice triggers the mic prompt
+                                // (or our custom "denied" alert) so the user
+                                // sees the same flow as opening a quote with
+                                // voice as their default mode.
+                                if mode == .voice {
+                                    viewModel.requestPermissions()
+                                }
                             case .music:
                                 viewModel.pause()
                                 isPlaybackMode = true
@@ -3462,7 +3483,9 @@ struct RecitationScreen: View {
             }
             .frame(height: 80, alignment: .bottom)
 
-            // Dark pill (shrinks to info-only in reading mode, left-aligned)
+            // Dark pill — hidden entirely in reading mode (the user is focused
+            // on reading the quote, not on practice feedback).
+            if !viewModel.isReadingMode {
             HStack(spacing: 0) {
                 HStack(spacing: 0) {
                     // Info button
@@ -3571,6 +3594,7 @@ struct RecitationScreen: View {
             .offset(y: viewModel.isMasterMode ? 60 : 0)
             .animation(.easeInOut(duration: 0.4), value: viewModel.isMasterMode)
             .animation(.easeInOut(duration: 0.3), value: viewModel.isReadingMode)
+            }
 
             Spacer().frame(height: 0)
         }
@@ -4338,7 +4362,12 @@ private struct ReadingModeProseText: View {
     let isRTL: Bool
 
     var body: some View {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Strip leading whitespace after newlines so paragraphs flush to the
+        // left margin (some source texts encode paragraph breaks as "\n\n\t"
+        // or with leading spaces; the indent looked broken in reading mode).
+        let trimmed = text
+            .replacingOccurrences(of: "\\n[ \\t]+", with: "\n", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         // RTL scripts (Persian/Arabic/Hebrew/Urdu) don't use drop caps as a
         // typographic convention — render as plain prose instead.
         // For LTR: Spanish opens with ¡ or ¿ before the first letter; folding

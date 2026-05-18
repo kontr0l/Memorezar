@@ -59,8 +59,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.AddPhotoAlternate
@@ -82,8 +86,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -92,7 +94,9 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.material3.rememberSwipeToDismissBoxState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -106,11 +110,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -118,6 +124,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.memorezar.app.R
 import com.memorezar.app.data.models.Quote
@@ -473,7 +480,6 @@ fun CategoryDetailScreen(
     }
     val quotes = allQuotes.filter { it.categoryId == categoryId }.sortedBy { it.sortOrder }
     val isPack = category.sourcePackId != null
-    var quoteToDelete by remember { mutableStateOf<Quote?>(null) }
     var searchText by remember { mutableStateOf("") }
     var editedName by remember(category.name) { mutableStateOf(category.name) }
     var showCategorySettings by remember { mutableStateOf(false) }
@@ -593,7 +599,7 @@ fun CategoryDetailScreen(
                         )
                     } else {
                         SwipeableQuoteRow(
-                            onDelete = { quoteToDelete = quote },
+                            onDelete = { viewModel.deleteQuote(quote) },
                             onEdit = { onEditQuote(quote) }
                         ) {
                             QuoteListRow(
@@ -718,23 +724,6 @@ fun CategoryDetailScreen(
             }
         }
     } // Box
-
-    quoteToDelete?.let { q ->
-        AlertDialog(
-            onDismissRequest = { quoteToDelete = null },
-            title = { Text(stringResource(R.string.delete_quote)) },
-            text = { Text(stringResource(R.string.delete_quote_name, q.title)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deleteQuote(q)
-                    quoteToDelete = null
-                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { quoteToDelete = null }) { Text(stringResource(R.string.cancel)) }
-            }
-        )
-    }
 
     // Category Settings bottom sheet
     if (showCategorySettings) {
@@ -1233,73 +1222,158 @@ private fun CategorySettingsSheet(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * iOS-style partial swipe-to-reveal row. Dragging the content to the left
+ * exposes circular Edit (orange) and Delete (red) buttons sitting behind
+ * it. Buttons fire their action immediately on tap — no confirmation
+ * dialog. Releasing the drag snaps to either fully open or fully closed
+ * based on whether the drag passed the halfway threshold.
+ *
+ * Replaces the Material 3 `SwipeToDismissBox`-based pattern that fired a
+ * confirmation popup on full swipe and only exposed `Edit` accidentally
+ * (no visible button); this version matches the iOS swipe-actions
+ * behavior the user sees on the same screen on the iPhone.
+ */
 @Composable
 private fun SwipeableQuoteRow(
     onDelete: () -> Unit,
     onEdit: () -> Unit,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { value ->
-            when (value) {
-                SwipeToDismissBoxValue.EndToStart -> {
-                    onDelete()
-                    false
-                }
-                SwipeToDismissBoxValue.StartToEnd -> {
-                    onEdit()
-                    false
-                }
-                else -> false
-            }
+    val buttonSize = 44.dp
+    val gap = 14.dp
+    val sidePadding = 16.dp
+    val revealWidth = buttonSize * 2 + gap + sidePadding * 2
+    val revealPx = with(LocalDensity.current) { revealWidth.toPx() }
+
+    val offsetX = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    fun snapClose() {
+        scope.launch {
+            offsetX.animateTo(0f, spring(stiffness = Spring.StiffnessMedium))
         }
-    )
+    }
 
-    SwipeToDismissBox(
-        state = dismissState,
-        backgroundContent = {
-            val direction = dismissState.dismissDirection
+    fun snapOpen() {
+        scope.launch {
+            offsetX.animateTo(-revealPx, spring(stiffness = Spring.StiffnessMedium))
+        }
+    }
 
-            Box(modifier = Modifier.fillMaxSize()) {
-                // Edit background (left side, orange)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color(0xFFFF9800))
-                        .padding(start = 20.dp),
-                    contentAlignment = Alignment.CenterStart
-                ) {
+    // Single source of truth for how "open" the row is — fed to both the
+    // action buttons' alpha and the gray card's alpha so they fade in
+    // together as the user drags.
+    val swipeProgress = (-offsetX.value / revealPx).coerceIn(0f, 1f)
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Action buttons live underneath the row content, on the right.
+        // Drag pushes the content left to expose them. Alpha follows the
+        // swipe progress so they're invisible at rest and don't bleed
+        // through the row's transparent background.
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = sidePadding)
+                .graphicsLayer { alpha = swipeProgress },
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ActionButton(
+                color = Color(0xFFFF9500),
+                icon = { tint ->
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = stringResource(R.string.edit),
-                        tint = Color.White
+                        tint = tint,
+                        modifier = Modifier.size(20.dp)
                     )
+                },
+                label = stringResource(R.string.edit),
+                size = buttonSize,
+                onClick = {
+                    snapClose()
+                    onEdit()
                 }
-
-                // Delete background (right side, red)
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.error)
-                        .padding(end = 20.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
+            )
+            ActionButton(
+                color = Color(0xFFFF3B30),
+                icon = { tint ->
                     Icon(
                         painter = painterResource(R.drawable.icon_trash),
                         contentDescription = stringResource(R.string.delete),
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
+                        tint = tint,
+                        modifier = Modifier.size(20.dp)
                     )
+                },
+                label = stringResource(R.string.delete),
+                size = buttonSize,
+                onClick = {
+                    snapClose()
+                    onDelete()
                 }
-            }
+            )
         }
-    ) {
+
+        // Foreground row content — draggable horizontally, snaps to
+        // fully-open or fully-closed when the drag ends.
+        //
+        // The light-gray rounded card behind the content only appears as
+        // you swipe; alpha is interpolated from the current drag offset
+        // so the card fades in smoothly and is fully gone when the row
+        // is closed. Matches the iOS swipe-action look — there's no
+        // standing inset/box on resting rows.
         Box(
-            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+            modifier = Modifier
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFFF2F2F7).copy(alpha = swipeProgress))
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (offsetX.value < -revealPx / 2f) snapOpen() else snapClose()
+                        }
+                    ) { _, dragAmount ->
+                        scope.launch {
+                            val target = (offsetX.value + dragAmount).coerceIn(-revealPx, 0f)
+                            offsetX.snapTo(target)
+                        }
+                    }
+                }
         ) {
             content()
         }
+    }
+}
+
+@Composable
+private fun ActionButton(
+    color: Color,
+    icon: @Composable (tint: Color) -> Unit,
+    label: String,
+    size: androidx.compose.ui.unit.Dp,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .background(color, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            icon(Color.White)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

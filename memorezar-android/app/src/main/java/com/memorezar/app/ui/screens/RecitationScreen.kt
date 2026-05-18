@@ -252,7 +252,18 @@ fun RecitationScreen(
             }
         } else {
             val quote = quoteStore.getQuote(quoteId)
-            if (quote != null) viewModel.setQuote(quote)
+            if (quote != null) {
+                viewModel.setQuote(quote)
+                // Apply the user's "Default mode" from Settings → Display.
+                // Without this, opening a quote always landed in Voice mode
+                // because UiState's currentMode default never got overridden.
+                // Matches the iOS RecitationViewModel.applyDefaultMode() flow.
+                val defaultMode =
+                    settingsStore?.settings?.value?.defaultMemorizationMode
+                if (defaultMode != null) {
+                    viewModel.switchMode(defaultMode)
+                }
+            }
         }
     }
 
@@ -261,7 +272,20 @@ fun RecitationScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) viewModel.startRecitation()
+        if (granted) {
+            viewModel.startRecitation()
+        } else {
+            // Mic denied → drop the user into typing mode (mic-less alternative)
+            // instead of leaving them stuck in voice mode. If their saved
+            // default was Voice, flip it to Typing too so the next quote
+            // doesn't re-trigger the same prompt-and-deny loop.
+            settingsStore?.let { store ->
+                if (store.settings.value.defaultMemorizationMode == MemorizationMode.VOICE) {
+                    store.updateSettings(store.settings.value.copy(defaultMemorizationMode = MemorizationMode.TYPING))
+                }
+            }
+            viewModel.switchMode(MemorizationMode.TYPING)
+        }
     }
 
     // Separate launcher for the audio-mode "Record your own" flow, so granting
@@ -381,7 +405,22 @@ fun RecitationScreen(
                         ttsPlaying = ttsPlaying,
                         isRecording = isRecording,
                         showAudioBadge = hasUnseenCommunity,
-                        onModeChange = { viewModel.switchMode(it) },
+                        onModeChange = { mode ->
+                            viewModel.switchMode(mode)
+                            // Switching INTO voice fires the mic prompt so the
+                            // user sees the same flow as opening a quote with
+                            // voice as their default. If they deny, the
+                            // permissionLauncher's else-branch flips them back
+                            // to typing (mirrors iOS's custom alert flow).
+                            if (mode == MemorizationMode.VOICE &&
+                                ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.RECORD_AUDIO
+                                ) != PackageManager.PERMISSION_GRANTED
+                            ) {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        },
                         onSeek = { viewModel.seekPlayback(it) },
                         onExit = {
                             viewModel.stopRecitation()
@@ -1279,7 +1318,16 @@ private fun ReadingModeProseText(
     val capFontSizePx = fontSizePx * 3.2f
     val capGapPx = with(density) { (fontSize.value * 0.5f).dp.toPx() }
 
-    val trimmed = text.trim()
+    // Strip leading whitespace from every line so paragraphs flush to the left
+    // margin (some source texts encode paragraph breaks as "\n\n\t" or with
+    // leading spaces/NBSPs; the indent looked broken in reading mode).
+    // Uses a permissive predicate: Kotlin's default trimStart misses NBSP
+    // ( ) because Character.isWhitespace returns false for it.
+    val trimmed = text.split(Regex("\\r?\\n"))
+        .joinToString("\n") { line ->
+            line.trimStart { it.isWhitespace() || Character.isSpaceChar(it) }
+        }
+        .trim()
     val (dropCap, rest) = when {
         isRTL -> "" to trimmed
         trimmed.isNotEmpty() && (trimmed[0] == '¡' || trimmed[0] == '¿') && trimmed.length > 1 ->
@@ -1342,8 +1390,13 @@ private fun ReadingModeProseText(
                     ) {}
                     override fun getLeadingMarginLineCount(): Int = 2
                 }
+                // Limit the leading-margin span to the first paragraph only —
+                // LeadingMarginSpan2's "first N lines" rule resets at every \n
+                // boundary, so a span covering the whole text would indent the
+                // first 2 lines of every paragraph (not just the cap area).
+                val firstParaEnd = rest.indexOf('\n').let { if (it == -1) rest.length else it }
                 val ss = android.text.SpannableString(rest)
-                ss.setSpan(span, 0, rest.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                ss.setSpan(span, 0, firstParaEnd, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
                 bodyTv.text = ss
 
                 // The cap font has more "headroom" above its glyph than the body font
@@ -2105,6 +2158,10 @@ private fun ControlPill(
 ) {
     val isReading = uiState.isReadingMode
     val pillHeight = 50.dp
+
+    // Reading mode hides the stats pill entirely (including INFO) — the user
+    // is focused on reading the quote, not on practice feedback.
+    if (isReading) return
 
     // No-ripple press tracking — on tap the icon+label go a shade darker (matches
     // iOS). Default Material ripple would paint a grey square that looks wrong on
