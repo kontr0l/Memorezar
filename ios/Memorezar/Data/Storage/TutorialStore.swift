@@ -42,6 +42,12 @@ final class TutorialStore: ObservableObject {
 
     func resetAll() {
         completedTips = []
+        // Also clear the one-shot post-completion hint pair so a fresh-data user
+        // sees the "Tap Done to go back" / "Tap your mistakes" tooltips again
+        // on their next first quote. The key is owned by RecitationScreen via
+        // @AppStorage("hasSeenResultsTutorial"); reset it through the same
+        // UserDefaults instance.
+        userDefaults.removeObject(forKey: "hasSeenResultsTutorial")
     }
 
     private func save() {

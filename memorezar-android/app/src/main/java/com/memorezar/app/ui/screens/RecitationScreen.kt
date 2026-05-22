@@ -1,7 +1,10 @@
 package com.memorezar.app.ui.screens
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import androidx.annotation.DrawableRes
 import kotlin.math.roundToInt
@@ -183,6 +186,13 @@ import com.memorezar.app.ui.viewmodels.RecitationUiState
 import com.memorezar.app.ui.viewmodels.RecitationViewModel
 import com.memorezar.app.ui.viewmodels.WordDisplayMode
 import com.memorezar.app.ui.viewmodels.WordState
+import com.memorezar.app.data.storage.TutorialStore
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.foundation.shape.GenericShape
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
 import java.util.Locale
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -215,6 +225,7 @@ fun RecitationScreen(
     quoteId: String,
     quoteStore: QuoteStore,
     settingsStore: SettingsStore? = null,
+    tutorialStore: TutorialStore? = null,
     authService: AuthService,
     onShowAuthSheet: () -> Unit,
     tutorialQuote: Quote? = null,
@@ -232,6 +243,64 @@ fun RecitationScreen(
     val ttsPlaying by viewModel.ttsService.isPlaying.collectAsStateWithLifecycle()
     val isRecording by viewModel.recorderService.isRecording.collectAsStateWithLifecycle()
     val wordFontSize = settingsStore?.settings?.collectAsState()?.value?.fontSize?.pointSize?.sp ?: 18.sp
+
+    // Flips true once the quote has loaded and the user's default mode has
+    // been applied — guards downstream effects (notably the mic-permission
+    // launcher) from firing against the UiState's initial `VOICE` value
+    // before the quote's actual default is in place.
+    var initialModeApplied by remember(quoteId) { mutableStateOf(false) }
+
+    // ---- Post-completion sticky-note tutorial state ----
+    // Matches the iOS yellow-tooltip behavior: shown once per install after
+    // the user finishes their first quote with mistakes and presses Done.
+    // Dismisses when they tap any red word or press Try Again.
+    val resultsHintTipId = "post_results_mistake_tap"
+    val completedTipsForHint by (tutorialStore?.completedTips
+        ?: kotlinx.coroutines.flow.MutableStateFlow(emptySet<String>())).collectAsState()
+    val hasSeenResultsTutorial = resultsHintTipId in completedTipsForHint
+    var showResultsHint2 by remember { mutableStateOf(false) }
+    var resultsHintQueued by remember { mutableStateOf(false) }
+    val mistakeWordFrames = remember { mutableStateMapOf<Int, Rect>() }
+
+    // Queue the hint when the completion overlay first appears (with mistakes),
+    // then fire it after a short delay once the user dismisses it.
+    LaunchedEffect(uiState.isComplete) {
+        val modeQualifies = uiState.currentMode == MemorizationMode.VOICE
+            || uiState.currentMode == MemorizationMode.TYPING
+            || uiState.currentMode == MemorizationMode.MULTIPLE_CHOICE
+        if (uiState.isComplete) {
+            val hasMistakes = uiState.mistakeCount > 0
+            if (!hasSeenResultsTutorial && modeQualifies && !isTutorialMode && hasMistakes) {
+                resultsHintQueued = true
+            }
+        } else if (resultsHintQueued) {
+            resultsHintQueued = false
+            delay(450)
+            showResultsHint2 = true
+            // Mark as seen the moment we show it — even if the user resets
+            // before tapping a mistake, the hint never returns.
+            tutorialStore?.completeTip(resultsHintTipId)
+        }
+    }
+
+    // Press Try Again (or RESET) → session reverts to in-progress → hide
+    // the popup along with the rest of the completion UI.
+    LaunchedEffect(
+        uiState.currentPosition,
+        uiState.words.size,
+        uiState.currentMode,
+        uiState.isReadingMode
+    ) {
+        val sessionAwaitingRestart = !uiState.isReadingMode
+            && uiState.words.isNotEmpty()
+            && uiState.currentPosition >= uiState.words.size
+            && (uiState.currentMode == MemorizationMode.VOICE
+                || uiState.currentMode == MemorizationMode.TYPING
+                || uiState.currentMode == MemorizationMode.MULTIPLE_CHOICE)
+        if (!sessionAwaitingRestart && showResultsHint2) {
+            showResultsHint2 = false
+        }
+    }
 
     LaunchedEffect(quoteId) {
         if (tutorialQuote != null) {
@@ -265,9 +334,12 @@ fun RecitationScreen(
                 }
             }
         }
+        initialModeApplied = true
     }
 
     val context = LocalContext.current
+
+    var showMicPermissionAlert by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -275,16 +347,38 @@ fun RecitationScreen(
         if (granted) {
             viewModel.startRecitation()
         } else {
-            // Mic denied → drop the user into typing mode (mic-less alternative)
-            // instead of leaving them stuck in voice mode. If their saved
-            // default was Voice, flip it to Typing too so the next quote
-            // doesn't re-trigger the same prompt-and-deny loop.
-            settingsStore?.let { store ->
-                if (store.settings.value.defaultMemorizationMode == MemorizationMode.VOICE) {
-                    store.updateSettings(store.settings.value.copy(defaultMemorizationMode = MemorizationMode.TYPING))
-                }
-            }
-            viewModel.switchMode(MemorizationMode.TYPING)
+            // Mic denied → surface the same "Microphone Access Required" alert
+            // as iOS (Open Settings / Cancel). The Cancel button then flips to
+            // typing + updates the default; this keeps the system prompt and
+            // the soft "fallback to typing" decision on separate buttons.
+            showMicPermissionAlert = true
+        }
+    }
+
+    // Mirror iOS's `requestPermissions()` on quote appear: whenever the user
+    // lands in (or switches into) voice mode without RECORD_AUDIO granted, kick
+    // off the system permission flow. The launcher's else-branch above then
+    // shows the custom alert if it ends up denied (including permanent-deny,
+    // where the system dialog doesn't appear and the launcher returns false
+    // synchronously).
+    //
+    // Gated on `initialModeApplied` so the UiState's `VOICE` default doesn't
+    // fire the prompt before the quote's real default mode (e.g. Typing) has
+    // been switched in. The body reads the mode directly from
+    // `viewModel.uiState.value` — the Compose State surfaced by
+    // `collectAsStateWithLifecycle()` lags one dispatch behind the underlying
+    // StateFlow, so reading it here would see the stale VOICE default for a
+    // moment after the LaunchedEffect(quoteId) above runs switchMode(...).
+    LaunchedEffect(uiState.currentMode, quoteId, initialModeApplied) {
+        if (!initialModeApplied) return@LaunchedEffect
+        val mode = viewModel.uiState.value.currentMode
+        if (mode == MemorizationMode.VOICE &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
@@ -405,22 +499,7 @@ fun RecitationScreen(
                         ttsPlaying = ttsPlaying,
                         isRecording = isRecording,
                         showAudioBadge = hasUnseenCommunity,
-                        onModeChange = { mode ->
-                            viewModel.switchMode(mode)
-                            // Switching INTO voice fires the mic prompt so the
-                            // user sees the same flow as opening a quote with
-                            // voice as their default. If they deny, the
-                            // permissionLauncher's else-branch flips them back
-                            // to typing (mirrors iOS's custom alert flow).
-                            if (mode == MemorizationMode.VOICE &&
-                                ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.RECORD_AUDIO
-                                ) != PackageManager.PERMISSION_GRANTED
-                            ) {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }
-                        },
+                        onModeChange = { viewModel.switchMode(it) },
                         onSeek = { viewModel.seekPlayback(it) },
                         onExit = {
                             viewModel.stopRecitation()
@@ -587,6 +666,13 @@ fun RecitationScreen(
                                         wordFontSize = wordFontSize,
                                         wordYPositions = wordYPositions,
                                         wordGridOffsetY = wordGridOffsetY,
+                                        onIncorrectWordTap = {
+                                            if (showResultsHint2) showResultsHint2 = false
+                                        },
+                                        onMistakeFrameChanged = { idx, rect ->
+                                            if (rect != null) mistakeWordFrames[idx] = rect
+                                            else mistakeWordFrames.remove(idx)
+                                        },
                                         modifier = Modifier.padding(12.dp)
                                     )
                                 }
@@ -632,10 +718,40 @@ fun RecitationScreen(
                             Spacer(Modifier.height(4.dp))
                         }
 
+                        // After Done is pressed on the results panel the user lands
+                        // back on the quote with the session already at the end.
+                        // The per-mode input controls (mic / typing field / MC
+                        // choices) are useless until the user resets, so we
+                        // replace them with a single Try Again button matching
+                        // the one on the results panel.
+                        val sessionAwaitingRestart =
+                            !uiState.isReadingMode &&
+                            uiState.words.isNotEmpty() &&
+                            uiState.currentPosition >= uiState.words.size &&
+                            (uiState.currentMode == MemorizationMode.VOICE ||
+                                uiState.currentMode == MemorizationMode.TYPING ||
+                                uiState.currentMode == MemorizationMode.MULTIPLE_CHOICE)
+
                         // Input area — varies by mode. Reading mode hides voice/typing/MC
                         // inputs (no recitation in reading mode), but keeps audio playback
                         // controls so the user can still play/pause/skip recordings.
-                        if (uiState.isReadingMode && uiState.currentMode != MemorizationMode.AUDIO) {
+                        if (sessionAwaitingRestart) {
+                            TryAgainBigButton(
+                                onRetry = {
+                                    viewModel.stopResultSound()
+                                    if (uiState.isMasterMode) {
+                                        viewModel.enterMasterMode()
+                                    } else {
+                                        val quote = quoteStore.getQuote(quoteId)
+                                        if (quote != null) viewModel.setQuote(quote)
+                                    }
+                                },
+                                modifier = Modifier.padding(horizontal = 16.dp)
+                            )
+                            // Small breathing room between the Try Again button
+                            // and the dark info pill below it.
+                            Spacer(Modifier.height(5.dp))
+                        } else if (uiState.isReadingMode && uiState.currentMode != MemorizationMode.AUDIO) {
                             // No input controls in reading mode (non-audio modes)
                         } else when (uiState.currentMode) {
                             MemorizationMode.VOICE -> {
@@ -910,7 +1026,10 @@ fun RecitationScreen(
                             onDone = {
                                 viewModel.stopResultSound()
                                 viewModel.exitMasterMode()
-                                onBack()
+                                // Slide the results panel away but keep the
+                                // user on the quote (don't pop the screen
+                                // back to the library).
+                                viewModel.dismissCompletion()
                             },
                             onRetry = {
                                 viewModel.stopResultSound()
@@ -923,7 +1042,10 @@ fun RecitationScreen(
                             isTutorialMode = isTutorialMode,
                             onDone = {
                                 viewModel.stopResultSound()
-                                onBack()
+                                // Slide the results panel away but keep the
+                                // user on the quote (don't pop the screen
+                                // back to the library).
+                                viewModel.dismissCompletion()
                             },
                             onRetry = {
                                 viewModel.stopResultSound()
@@ -937,6 +1059,72 @@ fun RecitationScreen(
             }
         }
     } // inner Box (content with insets)
+
+    // Post-completion sticky-note tutorial — a one-time yellow tooltip that
+    // points at the first red mistake word. Non-interactive (no clickable
+    // modifier) so taps pass through; dismissal is triggered by tapping any
+    // red mistake or pressing Try Again.
+    if (showResultsHint2) {
+        val anchorRect = mistakeWordFrames.entries
+            .sortedBy { it.key }
+            .firstOrNull()?.value
+        if (anchorRect != null) {
+            val configuration = LocalConfiguration.current
+            val density = LocalDensity.current
+            val cardWidthDp = 280.dp
+            val sideMarginDp = 16.dp
+            val arrowEdgeClampDp = (cardWidthDp / 2 - 22.dp)
+            val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
+            val cardWidthPx = with(density) { cardWidthDp.toPx() }
+            val sideMarginPx = with(density) { sideMarginDp.toPx() }
+            val arrowEdgeClampPx = with(density) { arrowEdgeClampDp.toPx() }
+
+            val desiredCardOriginX = anchorRect.center.x - cardWidthPx / 2
+            val cardOriginX = desiredCardOriginX.coerceIn(
+                sideMarginPx,
+                screenWidthPx - cardWidthPx - sideMarginPx
+            )
+            val cardCenterX = cardOriginX + cardWidthPx / 2
+            val cardOriginY = anchorRect.bottom + 1
+            val arrowOffsetPx = (anchorRect.center.x - cardCenterX)
+                .coerceIn(-arrowEdgeClampPx, arrowEdgeClampPx)
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .offset { IntOffset(cardOriginX.roundToInt(), cardOriginY.roundToInt()) }
+                    .width(cardWidthDp)
+            ) {
+                // Triangle pointing up at the mistake word
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(arrowOffsetPx.roundToInt(), 0) }
+                        .size(width = 28.dp, height = 16.dp)
+                        .clip(TriangleUp)
+                        .background(TipYellow)
+                )
+                // Yellow sticky-note bubble
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(4.dp, RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(TipYellow)
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        "Tap the words you got wrong to see what was expected.",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color.Black.copy(alpha = 0.85f),
+                        textAlign = TextAlign.Center,
+                        lineHeight = 17.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        }
+    }
     } // outer Box (opaque background)
 
     // Recording picker bottom sheet
@@ -1013,6 +1201,41 @@ fun RecitationScreen(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.dismissDeleteConfirm() }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Microphone permission alert — shown after the system permission dialog
+    // is denied (or returns synchronously when the user has permanently denied).
+    // Mirrors the iOS "Microphone Access Required" alert exactly.
+    if (showMicPermissionAlert) {
+        AlertDialog(
+            onDismissRequest = { /* require an explicit button choice */ },
+            title = { Text("Microphone Access Required") },
+            text = { Text("Memorezar needs microphone access to hear your recitation. Please enable it in Settings.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showMicPermissionAlert = false
+                    val intent = Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.fromParts("package", context.packageName, null)
+                    ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                    context.startActivity(intent)
+                }) { Text("Open Settings") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showMicPermissionAlert = false
+                    // Drop the user into typing mode (mic-less alternative) and,
+                    // if their saved default was Voice, flip it to Typing so the
+                    // next quote doesn't re-trigger the same prompt-and-deny loop.
+                    settingsStore?.let { store ->
+                        if (store.settings.value.defaultMemorizationMode == MemorizationMode.VOICE) {
+                            store.updateSettings(store.settings.value.copy(defaultMemorizationMode = MemorizationMode.TYPING))
+                        }
+                    }
+                    viewModel.switchMode(MemorizationMode.TYPING)
+                }) { Text("Cancel") }
             }
         )
     }
@@ -1430,46 +1653,116 @@ private fun WordGrid(
     wordFontSize: androidx.compose.ui.unit.TextUnit = 18.sp,
     wordYPositions: MutableMap<Int, Float> = mutableMapOf(),
     wordGridOffsetY: Float = 0f,
+    onIncorrectWordTap: () -> Unit = {},
+    onMistakeFrameChanged: ((Int, Rect?) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var flowRowOffsetY by remember { mutableFloatStateOf(0f) }
+    val paragraphOffsets = remember { mutableMapOf<Int, Float>() }
     // Persian/Arabic/Hebrew/Urdu — flow words right-to-left so the first word
     // in reading order sits on the right edge.
     val langCode = viewModel.getActiveLanguageCode().lowercase()
     val isRTL = langCode in setOf("fa", "ar", "he", "ur", "yi", "ps", "sd", "dv")
+
+    // Split the quote into paragraphs (separated by blank lines) and render
+    // one FlowRow per paragraph stacked vertically inside the same grey
+    // container. Single-paragraph quotes look identical to before.
+    val ranges = paragraphWordRanges(viewModel.getActiveText(), uiState.words.size)
+
     CompositionLocalProvider(
         LocalLayoutDirection provides if (isRTL) LayoutDirection.Rtl else LayoutDirection.Ltr
     ) {
         Box(modifier = modifier.onGloballyPositioned { coords ->
             flowRowOffsetY = coords.positionInParent().y
         }) {
-            FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                uiState.words.forEachIndexed { index, word ->
-                    val displayMode = viewModel.wordDisplayMode(index)
-                    Box(
-                        modifier = Modifier.onGloballyPositioned { coords ->
-                            wordYPositions[index] = wordGridOffsetY + flowRowOffsetY + coords.positionInParent().y
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                ranges.forEachIndexed { pIdx, range ->
+                    Box(modifier = Modifier.onGloballyPositioned { coords ->
+                        paragraphOffsets[pIdx] = coords.positionInParent().y
+                    }) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            for (index in range) {
+                                val word = uiState.words[index]
+                                val displayMode = viewModel.wordDisplayMode(index)
+                                Box(
+                                    modifier = Modifier.onGloballyPositioned { coords ->
+                                        val pOffset = paragraphOffsets[pIdx] ?: 0f
+                                        wordYPositions[index] = wordGridOffsetY + flowRowOffsetY + pOffset + coords.positionInParent().y
+                                        // Report this cell's window-relative frame so
+                                        // the post-completion sticky-note tutorial can
+                                        // anchor its tooltip directly under a red
+                                        // mistake word.
+                                        if (onMistakeFrameChanged != null) {
+                                            val rect = if (word.state == WordState.INCORRECT) coords.boundsInRoot() else null
+                                            onMistakeFrameChanged(index, rect)
+                                        }
+                                    }
+                                ) {
+                                    WordCell(
+                                        text = word.text,
+                                        wordState = word.state,
+                                        displayMode = displayMode,
+                                        isFlashing = uiState.flashingWordIndex == index,
+                                        fontSize = wordFontSize,
+                                        isRTL = isRTL,
+                                        onTap = {
+                                            if (word.state == WordState.INCORRECT) {
+                                                onIncorrectWordTap()
+                                            }
+                                            viewModel.tapWord(index)
+                                        }
+                                    )
+                                }
+                            }
                         }
-                    ) {
-                        WordCell(
-                            text = word.text,
-                            wordState = word.state,
-                            displayMode = displayMode,
-                            isFlashing = uiState.flashingWordIndex == index,
-                            fontSize = wordFontSize,
-                            isRTL = isRTL,
-                            onTap = { viewModel.tapWord(index) }
-                        )
                     }
                 }
             }
         }
     }
+}
+
+/// Splits `text` into paragraphs (separated by blank lines) and returns one
+/// inclusive-exclusive IntRange per paragraph into the flat word index list.
+/// Used by the practice mode word grid to render each paragraph as its own
+/// FlowRow inside a shared grey container. Falls back to a single range when
+/// the quote has no blank-line separators.
+private fun paragraphWordRanges(text: String, totalWords: Int): List<IntRange> {
+    if (totalWords == 0) return emptyList()
+    val normalized = text.replace("\r\n", "\n")
+    val paragraphs = normalized.split("\n")
+        .fold(mutableListOf<MutableList<String>>()) { acc, line ->
+            val trimmed = line.trim()
+            if (trimmed.isEmpty()) {
+                if (acc.lastOrNull()?.isNotEmpty() == true) acc.add(mutableListOf())
+            } else {
+                if (acc.isEmpty()) acc.add(mutableListOf())
+                acc.last().add(trimmed)
+            }
+            acc
+        }
+        .map { it.joinToString(" ") }
+        .filter { it.isNotEmpty() }
+    if (paragraphs.size <= 1) return listOf(0 until totalWords)
+    val ranges = mutableListOf<IntRange>()
+    var cursor = 0
+    for (paragraph in paragraphs) {
+        val count = paragraph.split(Regex("\\s+")).filter { it.isNotEmpty() }.size
+        val end = minOf(cursor + count, totalWords)
+        if (cursor < end) ranges.add(cursor until end)
+        cursor = end
+    }
+    // Safety: if word-count split drifted from the actual word list, absorb
+    // the remainder into the last paragraph so no word is dropped.
+    if (cursor < totalWords && ranges.isNotEmpty()) {
+        val last = ranges.removeAt(ranges.size - 1)
+        ranges.add(last.first until totalWords)
+    }
+    return ranges.ifEmpty { listOf(0 until totalWords) }
 }
 
 // ---------------------------------------------------------------------------
@@ -2514,6 +2807,24 @@ private fun ResultStat(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = color)
         Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+    }
+}
+
+/// Shown above the dark info pill when the user has finished the session and
+/// pressed Done on the results panel. Replaces the per-mode input controls
+/// with a single Try Again button styled to match the prominent indigo one
+/// the iOS version uses in the same spot.
+@Composable
+private fun TryAgainBigButton(onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Button(
+        onClick = onRetry,
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7A71F0)),
+        shape = CircleShape,
+        modifier = modifier.fillMaxWidth().height(60.dp)
+    ) {
+        Text("Try Again", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        Spacer(Modifier.width(10.dp))
+        Icon(Icons.Default.Refresh, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -4833,4 +5144,16 @@ private fun formatTime(seconds: Double): String {
     val min = totalSec / 60
     val sec = totalSec % 60
     return "%d:%02d".format(min, sec)
+}
+
+// Sticky-note tooltip palette (kept in sync with the iOS noteColor).
+private val TipYellow = Color(0xFFFFF29A)
+
+// Upward-pointing triangle used as the tooltip's tail. Apex at the top
+// middle, base along the bottom.
+private val TriangleUp = GenericShape { size, _ ->
+    moveTo(size.width / 2, 0f)
+    lineTo(0f, size.height)
+    lineTo(size.width, size.height)
+    close()
 }

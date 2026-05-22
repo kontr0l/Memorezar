@@ -14,6 +14,12 @@ struct RecitationScreen: View {
     @EnvironmentObject var tutorialStore: TutorialStore
     @EnvironmentObject var seenCommunityRecordingsStore: SeenCommunityRecordingsStore
 
+    /// Used to re-trigger the mic-permission flow when the user backgrounds
+    /// the app while stuck on the voice screen and then comes back without
+    /// having granted permission — `onAppear` doesn't fire for foregrounds,
+    /// so without this they'd be stuck with a mic button that doesn't work.
+    @Environment(\.scenePhase) private var scenePhase
+
     let quote: Quote
     var isTutorialMode: Bool = false
 
@@ -86,10 +92,37 @@ struct RecitationScreen: View {
     @State private var pendingUploadLocal: LocalRecording?
     @State private var showPaywall = false
 
+    // First-completion onboarding: a one-time hint shown after the user
+    // finishes their first quote in voice/typing/multiple-choice mode. It
+    // appears on the quote screen once the results sheet is dismissed and
+    // tells the user that mistake words are tappable. Persisted via
+    // AppStorage so it fires once per install.
+    @AppStorage("hasSeenResultsTutorial") private var hasSeenResultsTutorial = false
+    @State private var showResultsHint2 = false
+    @State private var resultsHintQueued = false
+    /// Frames of every incorrect word in the current word grid, tracked
+    /// via .background GeometryReader on each WordView. Used to anchor the
+    /// post-completion tutorial's sticky-note tooltip + triangle tail.
+    @State private var mistakeWordFrames: [Int: CGRect] = [:]
+
     init(quote: Quote, isTutorialMode: Bool = false) {
         self.quote = quote
         self.isTutorialMode = isTutorialMode
         _viewModel = StateObject(wrappedValue: RecitationViewModel(quote: quote))
+    }
+
+    /// Maintains `mistakeWordFrames` from the per-WordView `.background`
+    /// GeometryReader. Adds a frame for incorrect words; removes the
+    /// entry once the word's state changes (e.g. on Try Again reset) so
+    /// stale frames don't anchor the next tutorial run.
+    private func updateMistakeFrame(index: Int, state: WordState, frame: CGRect) {
+        if state == .incorrect {
+            if mistakeWordFrames[index] != frame {
+                mistakeWordFrames[index] = frame
+            }
+        } else if mistakeWordFrames[index] != nil {
+            mistakeWordFrames.removeValue(forKey: index)
+        }
     }
 
     /// Quotes in the same category, sorted by explicit order (matches library)
@@ -321,6 +354,14 @@ struct RecitationScreen: View {
                     }
                     if isTutorialMode {
                         viewModel.isTutorialMode = true
+                        // OnboardingFlow already saved the user's First Letter
+                        // choice to `settingsStore.settings.firstLetterModeEnabled`,
+                        // but `applyDefaultMode()` deliberately resets the
+                        // per-session toggle to off on every quote open. For
+                        // the tutorial we want the choice the user just made
+                        // on the previous screen to take effect immediately,
+                        // so apply it explicitly here.
+                        viewModel.isFirstLetterToggle = settingsStore.settings.firstLetterModeEnabled
                         let isVoiceFirstLetter = viewModel.currentMode == .voice && viewModel.isFirstLetterToggle
                         if !isVoiceFirstLetter {
                             // All tutorial modes except voice+first letter: hide "Happy" (0) and "to" (2)
@@ -470,6 +511,69 @@ struct RecitationScreen: View {
                 }
             }
             .animation(.easeInOut(duration: 0.3), value: showSpotlightTutorial)
+            // Tutorial dim mode: WordView reads `tutorialResultsHintActive`
+            // and dims non-mistake words to .opacity(0.35), keeping mistakes
+            // at full opacity (with a red glow). The non-WordView UI
+            // (top bar, control bar, etc.) is dimmed individually below.
+            .overlay {
+                if showResultsHint2 {
+                    GeometryReader { proxy in
+                        let cardWidth: CGFloat = 280
+                        // Convert the WordView frames (stored in `.global`)
+                        // into the GeometryReader's local space by
+                        // subtracting the GR's global origin. Without this
+                        // step there's a status-bar/safe-area offset between
+                        // where we think the mistake is and where the card
+                        // gets rendered.
+                        let gridGlobal = proxy.frame(in: .global)
+                        // Pick the first mistake whose frame sits inside the
+                        // visible safe-area band; fall back to the earliest
+                        // mistake by word index if none qualifies.
+                        let sortedFrames = mistakeWordFrames
+                            .sorted { $0.key < $1.key }
+                            .map { $0.value }
+                        let visible = sortedFrames.first {
+                            $0.minY >= gridGlobal.minY + 80
+                                && $0.maxY <= gridGlobal.maxY - 80
+                        }
+                        let anchorRect = visible ?? sortedFrames.first
+                        let mistakeLocalMidX: CGFloat = anchorRect.map { $0.midX - gridGlobal.minX } ?? proxy.size.width / 2
+                        let mistakeLocalMaxY: CGFloat = anchorRect.map { $0.maxY - gridGlobal.minY } ?? proxy.size.height / 2
+                        // Center the card horizontally on the mistake, then
+                        // clamp to keep it on-screen. The triangle uses the
+                        // remaining slack as its X offset so it still points
+                        // at the mistake's midpoint even when the card is
+                        // pushed away from a screen edge.
+                        let desiredCardOriginX: CGFloat = mistakeLocalMidX - cardWidth / 2
+                        let cardOriginX: CGFloat = max(
+                            16,
+                            min(proxy.size.width - cardWidth - 16, desiredCardOriginX)
+                        )
+                        let cardCenterX: CGFloat = cardOriginX + cardWidth / 2
+                        let cardOriginY: CGFloat = anchorRect != nil ? mistakeLocalMaxY + 1 : (proxy.size.height / 2 - 60)
+                        let arrowOffset: CGFloat = anchorRect.map {
+                            max(-cardWidth / 2 + 22, min(cardWidth / 2 - 22, ($0.midX - gridGlobal.minX) - cardCenterX))
+                        } ?? 0
+
+                        // Non-interactive annotation — taps pass through to
+                        // the words underneath. Dismissal happens when the
+                        // user taps any incorrect WordView (handled inside
+                        // the per-word onTap closure below).
+                        ZStack(alignment: .topLeading) {
+                            OnboardingHint(
+                                text: String(localized: "Tap the words you got wrong to see what was expected."),
+                                arrowOffset: arrowOffset,
+                                showArrow: anchorRect != nil
+                            )
+                            .frame(width: cardWidth)
+                            .offset(x: cardOriginX, y: cardOriginY)
+                        }
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                    }
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: showResultsHint2)
             .onChange(of: viewModel.isMasterMode) { _, isMaster in
                 if isMaster {
                     wasMasterMode = true
@@ -493,6 +597,52 @@ struct RecitationScreen: View {
                     let lang = viewModel.activeLanguage ?? viewModel.primaryLanguageCode
                     tts.stop()
                     tts.speak(viewModel.currentChunkText, language: lang)
+                }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                // App came back to the foreground. If we're parked in voice
+                // mode without mic permission (e.g. the user backgrounded the
+                // app from the tutorial without granting access), re-fire
+                // the permission flow so the alert shows again and the user
+                // can either grant access or Cancel into Typing.
+                if newPhase == .active
+                    && viewModel.currentMode == .voice
+                    && !isPlaybackMode
+                    && !SpeechRecognitionService.isAuthorized
+                {
+                    viewModel.requestPermissions()
+                }
+            }
+            .onChange(of: viewModel.showResults) { _, isShowing in
+                let modeQualifies = viewModel.currentMode == .voice
+                    || viewModel.currentMode == .typing
+                    || viewModel.currentMode == .multipleChoice
+                if isShowing {
+                    // Only queue the "tap your mistakes" hint when there are
+                    // actual mistakes to tap. A perfect run shouldn't trigger
+                    // it (and shouldn't burn the once-per-install flag).
+                    let hasMistakes = viewModel.mistakeCount > 0
+                    if !hasSeenResultsTutorial && modeQualifies && !isTutorialMode && hasMistakes {
+                        resultsHintQueued = true
+                    }
+                } else if resultsHintQueued {
+                    resultsHintQueued = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        showResultsHint2 = true
+                        // Once the popup appears at all, mark the hint as
+                        // seen — it's a one-time onboarding tip; we don't
+                        // want it returning later even if the user resets
+                        // before tapping a mistake.
+                        hasSeenResultsTutorial = true
+                    }
+                }
+            }
+            .onChange(of: sessionAwaitingRestart) { _, awaiting in
+                // Press Try Again (or RESET) → session reverts to in-progress
+                // → hide the post-completion hint along with the rest of the
+                // completion UI.
+                if !awaiting && showResultsHint2 {
+                    showResultsHint2 = false
                 }
             }
             .sheet(isPresented: $viewModel.showResults, onDismiss: {
@@ -2352,6 +2502,102 @@ struct RecitationScreen: View {
 
     // MARK: - Word Display
 
+    /// Returns one inclusive-exclusive global-word-index range per paragraph
+    /// in `viewModel.activeText`. Paragraphs are separated by one or more
+    /// blank lines (`\n\s*\n`). Used by practice modes (voice/typing/MC/
+    /// audio) to render each paragraph in its own grey box. Reading mode
+    /// handles paragraph breaks itself inside the prose renderer.
+    private func paragraphWordRanges() -> [Range<Int>] {
+        let totalWords = viewModel.words.count
+        let normalized = viewModel.activeText.replacingOccurrences(of: "\r\n", with: "\n")
+        // Group consecutive non-blank lines into paragraphs.
+        let paragraphs = normalized
+            .components(separatedBy: "\n")
+            .reduce(into: [[String]]()) { acc, line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed.isEmpty {
+                    if !(acc.last?.isEmpty ?? true) {
+                        acc.append([])
+                    }
+                } else {
+                    if acc.isEmpty { acc.append([]) }
+                    acc[acc.count - 1].append(trimmed)
+                }
+            }
+            .map { $0.joined(separator: " ") }
+            .filter { !$0.isEmpty }
+
+        if paragraphs.count <= 1 || totalWords == 0 {
+            return totalWords > 0 ? [0..<totalWords] : []
+        }
+
+        var ranges: [Range<Int>] = []
+        var cursor = 0
+        for paragraph in paragraphs {
+            let count = paragraph.split(whereSeparator: { $0.isWhitespace }).count
+            let end = min(cursor + count, totalWords)
+            if cursor < end {
+                ranges.append(cursor..<end)
+            }
+            cursor = end
+        }
+        // Safety: if our word-count split drifted from the comparator's
+        // (uncommon, but possible with exotic whitespace), absorb the
+        // remainder into the last paragraph so no word is dropped.
+        if cursor < totalWords, !ranges.isEmpty {
+            let last = ranges.removeLast()
+            ranges.append(last.lowerBound..<totalWords)
+        }
+        return ranges.isEmpty ? [0..<totalWords] : ranges
+    }
+
+    @ViewBuilder
+    private func wordCell(globalIndex: Int, isRTL: Bool) -> some View {
+        let wordState = viewModel.words[globalIndex]
+        WordView(
+            word: wordState.word,
+            state: wordState.state,
+            isCurrentWord: !viewModel.isReadingMode && globalIndex == viewModel.currentPosition,
+            fontSize: settingsStore.fontSize.pointSize,
+            isVisible: viewModel.shouldShowWord(at: globalIndex),
+            displayMode: viewModel.wordDisplayMode(at: globalIndex),
+            hideProgress: false,
+            isFlashing: globalIndex == viewModel.flashingWordIndex,
+            isRTL: isRTL,
+            onTap: viewModel.isWordTappable(at: globalIndex)
+                ? {
+                    // Tapping a red mistake during the post-completion hint
+                    // also dismisses the sticky-note tooltip — the user has
+                    // discovered the gesture, so the hint has served its
+                    // purpose.
+                    if showResultsHint2 && wordState.state == .incorrect {
+                        showResultsHint2 = false
+                        hasSeenResultsTutorial = true
+                    }
+                    viewModel.tapWord(at: globalIndex, countAsHint: !isPlaybackMode)
+                }
+                : nil
+        )
+        .id(globalIndex)
+        // Track each incorrect word's current frame in global coordinates so
+        // the post-completion tutorial overlay can anchor its sticky-note
+        // tooltip + triangle tail directly under a real mistake.
+        .background {
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear {
+                        updateMistakeFrame(index: globalIndex, state: wordState.state, frame: geo.frame(in: .global))
+                    }
+                    .onChange(of: geo.frame(in: .global)) { _, newFrame in
+                        updateMistakeFrame(index: globalIndex, state: wordState.state, frame: newFrame)
+                    }
+                    .onChange(of: wordState.state) { _, newState in
+                        updateMistakeFrame(index: globalIndex, state: newState, frame: geo.frame(in: .global))
+                    }
+            }
+        }
+    }
+
     private func wordDisplay(proxy: ScrollViewProxy, flatTopCorners: Bool = false) -> some View {
         let cornerShape = UnevenRoundedRectangle(
             topLeadingRadius: flatTopCorners ? 0 : 16,
@@ -2377,23 +2623,17 @@ struct RecitationScreen: View {
                         isRTL: isRTL
                     )
                 } else {
-                    FlowLayout(spacing: 8, isRTL: isRTL) {
-                        ForEach(Array(viewModel.words.enumerated()), id: \.offset) { index, wordState in
-                            WordView(
-                                word: wordState.word,
-                                state: wordState.state,
-                                isCurrentWord: !viewModel.isReadingMode && index == viewModel.currentPosition,
-                                fontSize: settingsStore.fontSize.pointSize,
-                                isVisible: viewModel.shouldShowWord(at: index),
-                                displayMode: viewModel.wordDisplayMode(at: index),
-                                hideProgress: false,
-                                isFlashing: index == viewModel.flashingWordIndex,
-                                isRTL: isRTL,
-                                onTap: viewModel.isWordTappable(at: index)
-                                    ? { viewModel.tapWord(at: index, countAsHint: !isPlaybackMode) }
-                                    : nil
-                            )
-                            .id(index)
+                    // Practice / audio modes: a single grey box containing one
+                    // FlowLayout per paragraph stacked vertically. Quotes with
+                    // no blank lines fall back to a single paragraph block.
+                    let ranges = paragraphWordRanges()
+                    VStack(spacing: 16) {
+                        ForEach(Array(ranges.enumerated()), id: \.offset) { _, range in
+                            FlowLayout(spacing: 8, isRTL: isRTL) {
+                                ForEach(range, id: \.self) { globalIndex in
+                                    wordCell(globalIndex: globalIndex, isRTL: isRTL)
+                                }
+                            }
                         }
                     }
                 }
@@ -2403,7 +2643,6 @@ struct RecitationScreen: View {
             .background(viewModel.isReadingMode ? Color.clear : Color(.secondarySystemBackground))
             .clipShape(cornerShape)
             .spotlightAnchor("wordGrid")
-
         }
         .onChange(of: viewModel.currentPosition) { _, newPosition in
             withAnimation {
@@ -3141,11 +3380,15 @@ struct RecitationScreen: View {
                     DispatchQueue.main.async {
                         viewModel.saveSplitState()
                         if !viewModel.advanceToNextChunk() {
-                            dismiss()
+                            // All chunks done — close the results sheet but
+                            // keep the user on the quote (don't pop the
+                            // navigation back to the library).
+                            viewModel.showResults = false
                         }
                     }
                 } else {
-                    dismiss()
+                    // Close the results sheet but stay on the quote.
+                    viewModel.showResults = false
                 }
             },
             onRetry: {
@@ -3324,8 +3567,10 @@ struct RecitationScreen: View {
                 Button {
                     if viewModel.isListening {
                         viewModel.pause()
-                    } else {
+                    } else if SpeechRecognitionService.isAuthorized {
                         viewModel.start()
+                    } else {
+                        viewModel.requestPermissions()
                     }
                 } label: {
                     ZStack {
@@ -3408,8 +3653,47 @@ struct RecitationScreen: View {
 
     // MARK: - Control Bar
 
+    /// True when the user has worked through the whole session (or chunk) and
+    /// the results sheet has been dismissed back to the quote. In that state
+    /// the per-mode input controls (mic / typing field / MC grid) are useless
+    /// — the user must reset before practising again — so we replace them
+    /// with a single "Try Again" button above the dark info pill.
+    private var sessionAwaitingRestart: Bool {
+        !viewModel.isReadingMode
+            && !viewModel.words.isEmpty
+            && viewModel.currentPosition >= viewModel.words.count
+            && (viewModel.currentMode == .voice
+                || viewModel.currentMode == .typing
+                || viewModel.currentMode == .multipleChoice)
+    }
+
+    private var tryAgainBigButton: some View {
+        Button {
+            if viewModel.isMasterMode {
+                viewModel.reset(recalculateReveal: false)
+                viewModel.enterMasterMode()
+            } else {
+                viewModel.reset(recalculateReveal: true)
+            }
+        } label: {
+            HStack {
+                Text("Try Again")
+                Image(systemName: "arrow.counterclockwise")
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity, minHeight: 50)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(.indigo)
+        .padding(.horizontal)
+    }
+
     private var controlBar: some View {
         VStack(spacing: 8) {
+            if sessionAwaitingRestart {
+                tryAgainBigButton
+                    .frame(height: 80, alignment: .bottom)
+            } else {
             // MC choices above everything
             if viewModel.currentMode == .multipleChoice && !viewModel.isReadingMode {
                 multipleChoiceGrid
@@ -3442,8 +3726,15 @@ struct RecitationScreen: View {
                         Button {
                             if viewModel.isListening {
                                 viewModel.pause()
-                            } else {
+                            } else if SpeechRecognitionService.isAuthorized {
                                 viewModel.start()
+                            } else {
+                                // No mic permission — re-show the
+                                // "Microphone Access Required" alert instead
+                                // of silently failing. From the alert the
+                                // user can Open Settings or Cancel into
+                                // Typing mode.
+                                viewModel.requestPermissions()
                             }
                         } label: {
                             ZStack {
@@ -3482,6 +3773,7 @@ struct RecitationScreen: View {
                 }
             }
             .frame(height: 80, alignment: .bottom)
+            }
 
             // Dark pill — hidden entirely in reading mode (the user is focused
             // on reading the quote, not on practice feedback).
@@ -5193,5 +5485,45 @@ struct LiquidWaveShape: Shape {
         .environmentObject(SettingsStore())
         .environmentObject(UserEquivalencesStore())
         .environmentObject(LocalRecordingStore())
+}
+
+// MARK: - Onboarding Hint
+
+/// Tooltip-style card used by the first-completion hint (post-results
+/// "tap your mistakes" tip). Styled to match the yellow sticky-note
+/// `TooltipBubble` used elsewhere in the app for tip annotations.
+/// The triangle tail sits on top of the bubble and points up at the
+/// mistake word the tooltip is anchored to. The tooltip is purely
+/// decorative — dismissal happens when the user taps a mistake word in
+/// the quote (handled by the parent view).
+private struct OnboardingHint: View {
+    let text: String
+    var arrowOffset: CGFloat = 0
+    var showArrow: Bool = true
+
+    private let noteColor = Color(red: 1.0, green: 0.95, blue: 0.6)
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if showArrow {
+                Triangle()
+                    .fill(noteColor)
+                    .frame(width: 28, height: 16)
+                    .rotationEffect(.degrees(180))
+                    .offset(x: arrowOffset)
+            }
+
+            Text(text)
+                .multilineTextAlignment(.center)
+                .font(.subheadline.weight(.medium))
+                .foregroundColor(.black.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(noteColor)
+                .cornerRadius(8)
+        }
+        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+    }
 }
 

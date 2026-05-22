@@ -409,6 +409,7 @@ fun AppNavigation(
                     quoteId = quoteId,
                     quoteStore = quoteStore,
                     settingsStore = settingsStore,
+                    tutorialStore = tutorialStore,
                     authService = authService,
                     onShowAuthSheet = { showAuthSheet = true },
                     onBack = { navController.popBackStack() }
