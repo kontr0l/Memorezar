@@ -22,28 +22,41 @@ struct SettingsScreen: View {
     @State private var showRestoreToast = false
     @State private var showingSignOutAlert = false
 
+    // Assembled in layers rather than one expression: a flat List plus its
+    // ~20-modifier chain is the same shape that stopped RecitationScreen
+    // from type-checking under Xcode 26.3 (see KNOWN_ISSUES BUILD-001).
+    // Each layer wraps the previous one, so modifier order is unchanged.
     var body: some View {
         NavigationStack {
-            List {
-                // Inline large title — matches the Library screen's title style.
-                Text("Settings")
-                    .font(.largeTitle.bold())
-                    .foregroundColor(.primary)
-                    .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 16, leading: 1, bottom: 0, trailing: 0))
-                    .listRowSeparator(.hidden)
+            settingsListWithAlerts
+        }
+    }
 
-                Group {
-                    alertsSection
-                    displaySection
-                    statisticsSection
-                    accountSection
-                    dataSection
-                    aboutSection
-                }
-                // Invert default colors: cards become grey instead of white.
-                .listRowBackground(Color(.systemGroupedBackground))
+    private var settingsList: some View {
+        List {
+            // Inline large title — matches the Library screen's title style.
+            Text("Settings")
+                .font(.largeTitle.bold())
+                .foregroundColor(.primary)
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 16, leading: 1, bottom: 0, trailing: 0))
+                .listRowSeparator(.hidden)
+
+            Group {
+                alertsSection
+                displaySection
+                statisticsSection
+                accountSection
+                dataSection
+                aboutSection
             }
+            // Invert default colors: cards become grey instead of white.
+            .listRowBackground(Color(.systemGroupedBackground))
+        }
+    }
+
+    private var settingsListStyled: some View {
+        settingsList
             // Invert default colors: scroll background becomes white (the
             // color normally used for the section cards) instead of grey.
             .scrollContentBackground(.hidden)
@@ -56,6 +69,10 @@ struct SettingsScreen: View {
             // Pull section card margins from the default ~20pt down to ~10pt
             // by extending the List 10pt past its bounds on each side.
             .padding(.horizontal, -5)
+    }
+
+    private var settingsListWithSheets: some View {
+        settingsListStyled
             .sheet(isPresented: $showAuthSheet) {
                 AuthSheet()
                     .environmentObject(authService)
@@ -76,6 +93,10 @@ struct SettingsScreen: View {
                 }
                 AlertManager.shared.previewTheme(newValue)
             }
+    }
+
+    private var settingsListWithOverlays: some View {
+        settingsListWithSheets
             // ViewBuilder-trailing-closure form (the older .overlay(content)
             // with a nil-returning ternary stopped re-rendering on state flips
             // in iOS 17+ — the optional View would sometimes silently skip
@@ -125,6 +146,10 @@ struct SettingsScreen: View {
                     _ = await cloudBackupService.checkForCloudBackup()
                 }
             }
+    }
+
+    private var settingsListWithAlerts: some View {
+        settingsListWithOverlays
             .alert("Reset Settings", isPresented: $showingResetAlert) {
                 Button("Cancel", role: .cancel) { }
                 Button("Reset", role: .destructive) {
@@ -187,7 +212,6 @@ struct SettingsScreen: View {
             } message: {
                 Text(deleteAccountConfirmationMessage ?? "")
             }
-        }
     }
 
     // MARK: - Sections
@@ -423,7 +447,7 @@ struct SettingsScreen: View {
             HStack {
                 Label("Version", systemImage: "info.circle")
                 Spacer()
-                Text("v76.0")
+                Text("v76.1")
                     .foregroundColor(.secondary)
             }
 

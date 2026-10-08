@@ -1007,7 +1007,15 @@ The app could not be built at all on Xcode 26.3 / Swift 6.2.4 (it predates this 
 
 **Fix:** Split into five computed properties that each wrap the previous one — `mainStack` → `contentWithLifecycle` → `contentWithOverlays` → `contentWithObservers` → `contentWithSheets` — so each is its own expression. Modifier order is unchanged, so behaviour is identical (`git diff -w` shows only the new declarations).
 
-**Watch out:** `SettingsScreen.swift` has the same shape and SourceKit already flags its `body`. If it starts failing, apply the same layering.
+**`SettingsScreen.swift` given the same treatment (Oct 2026).** Its `body` was a `List` plus a ~20-modifier chain — the same shape, and SourceKit was already flagging it. Split into `settingsList` → `settingsListStyled` → `settingsListWithSheets` → `settingsListWithOverlays` → `settingsListWithAlerts`. It compiled before the change, so "it builds" proves nothing here; verify with the timing flags below.
+
+**How to measure instead of guessing:**
+
+```
+xcodebuild ... OTHER_SWIFT_FLAGS="-Xfrontend -warn-long-function-bodies=400 -Xfrontend -warn-long-expression-type-checking=400"
+```
+
+After both splits the only `body` over 400ms is `PaywallSheet.swift:11` at ~725ms — far below the hard solver limit that causes the build failure, so it is left alone. If a screen ever approaches the limit, apply the same layering: wrap each group of modifiers in its own computed property so each becomes a separate expression.
 
 ---
 
