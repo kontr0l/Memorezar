@@ -69,6 +69,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.memorezar.app.R
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FontDownload
@@ -864,6 +865,27 @@ fun RecitationScreen(
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
+
+                        // The tutorial hides the exit button, so finishing the
+                        // recitation would otherwise be the only way out —
+                        // anyone who can't finish it (mic denied, recogniser
+                        // mishearing, wrong locale) would be locked out of the
+                        // app across relaunches. See KNOWN_ISSUES TUTORIAL-002.
+                        if (isTutorialMode) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.stopRecitation()
+                                    onBack()
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.skip),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1042,10 +1064,21 @@ fun RecitationScreen(
                             isTutorialMode = isTutorialMode,
                             onDone = {
                                 viewModel.stopResultSound()
-                                // Slide the results panel away but keep the
-                                // user on the quote (don't pop the screen
-                                // back to the library).
-                                viewModel.dismissCompletion()
+                                if (isTutorialMode) {
+                                    // "Continue" ends onboarding. Only onBack()
+                                    // reaches completeOnboarding(), and the exit
+                                    // button is hidden in tutorial mode — merely
+                                    // dismissing the panel would strand the user
+                                    // on the tutorial quote forever, including
+                                    // across relaunches.
+                                    viewModel.stopRecitation()
+                                    onBack()
+                                } else {
+                                    // Slide the results panel away but keep the
+                                    // user on the quote (don't pop the screen
+                                    // back to the library).
+                                    viewModel.dismissCompletion()
+                                }
                             },
                             onRetry = {
                                 viewModel.stopResultSound()

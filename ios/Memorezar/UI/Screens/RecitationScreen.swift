@@ -135,204 +135,218 @@ struct RecitationScreen: View {
         siblingQuotes.firstIndex(where: { $0.id == viewModel.quote.id })
     }
 
+    // The hierarchy is assembled in layers instead of one expression:
+    // the flat ZStack + ~50-modifier chain exceeds the Swift type
+    // checker's budget ("unable to type-check this expression in
+    // reasonable time") and the whole target stops building. Each layer
+    // wraps the previous one, so modifier order is unchanged.
     var body: some View {
         NavigationStack {
-            ZStack {
-                // Background flash for mistakes (recitation only)
-                if !isPlaybackMode && viewModel.showMistakeFlash {
-                    Color.red.opacity(0.3)
-                        .ignoresSafeArea()
-                }
+            contentWithSheets
+        }
+    }
 
-                // Liquid fill animation when entering/exiting master mode
-                GeometryReader { geo in
-                    LiquidWaveShape(
-                        progress: liquidFillProgress,
-                        waveHeight: 12,
-                        phase: liquidWavePhase
-                    )
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color.yellow.opacity(0.7),
-                                Color.yellow.opacity(0.5),
-                                Color.yellow.opacity(0.3)
-                            ],
-                            startPoint: .bottom,
-                            endPoint: .top
-                        )
-                    )
-                    .frame(width: geo.size.width, height: geo.size.height)
-                }
-                .ignoresSafeArea()
-                .opacity(showLiquidFill ? liquidOpacity : 0)
-                .allowsHitTesting(false)
+    private var mainStack: some View {
+        ZStack {
+            // Background flash for mistakes (recitation only)
+            if !isPlaybackMode && viewModel.showMistakeFlash {
+                Color.red.opacity(0.3)
+                    .ignoresSafeArea()
+            }
 
-                VStack(spacing: 0) {
-                    if !isTutorialMode {
-                        // Mode picker + exit button
-                        HStack(spacing: 20) {
-                            modePicker
-                            Button {
-                                exitPlaybackMode()
-                                viewModel.saveSplitState()
-                                viewModel.stop()
-                                dismiss()
-                            } label: {
-                                Image("IconExit")
-                                    .renderingMode(.original)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(height: 32)
-                            }
-                            .disabled(viewModel.showSplitPopup)
+            // Liquid fill animation when entering/exiting master mode
+            GeometryReader { geo in
+                LiquidWaveShape(
+                    progress: liquidFillProgress,
+                    waveHeight: 12,
+                    phase: liquidWavePhase
+                )
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.yellow.opacity(0.7),
+                            Color.yellow.opacity(0.5),
+                            Color.yellow.opacity(0.3)
+                        ],
+                        startPoint: .bottom,
+                        endPoint: .top
+                    )
+                )
+                .frame(width: geo.size.width, height: geo.size.height)
+            }
+            .ignoresSafeArea()
+            .opacity(showLiquidFill ? liquidOpacity : 0)
+            .allowsHitTesting(false)
+
+            VStack(spacing: 0) {
+                if !isTutorialMode {
+                    // Mode picker + exit button
+                    HStack(spacing: 20) {
+                        modePicker
+                        Button {
+                            exitPlaybackMode()
+                            viewModel.saveSplitState()
+                            viewModel.stop()
+                            dismiss()
+                        } label: {
+                            Image("IconExit")
+                                .renderingMode(.original)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(height: 32)
                         }
-                        .padding(.horizontal)
-                        .padding(.vertical, 4)
+                        .disabled(viewModel.showSplitPopup)
                     }
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
+                }
 
-                    // Progress bar
-                    if !isTutorialMode {
-                        if isPlaybackMode {
-                            playbackProgressBar
-                        } else if settingsStore.showProgressBar {
-                            progressBar
-                        }
-                    } else {
+                // Progress bar
+                if !isTutorialMode {
+                    if isPlaybackMode {
+                        playbackProgressBar
+                    } else if settingsStore.showProgressBar {
                         progressBar
                     }
+                } else {
+                    progressBar
+                }
 
-                    // Main content with footer overlay
-                    ZStack(alignment: .bottom) {
-                        ScrollViewReader { proxy in
-                            ScrollView(showsIndicators: false) {
-                                VStack(spacing: 12) {
-                                    // Title (dropdown in playback, chunk nav when split, plain otherwise)
-                                    if isPlaybackMode {
-                                        VStack(spacing: 4) {
-                                            recordingDropdownButton
-                                                .frame(maxWidth: .infinity)
-                                                .overlay(alignment: .top) {
-                                                    playbackTimeLabelRow
-                                                        .padding(.horizontal, 4)
-                                                        .offset(y: -13)
-                                                }
-
-                                            // When the quote is split, keep the
-                                            // chunk-of-N navigator visible so the
-                                            // user can still see/switch chunks
-                                            // while in voice-recording or read-
-                                            // aloud mode. Reading mode shows the
-                                            // *whole* quote, so the per-chunk
-                                            // navigator is irrelevant there.
-                                            if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
-                                                chunkNavRow(chunks: chunks)
+                // Main content with footer overlay
+                ZStack(alignment: .bottom) {
+                    ScrollViewReader { proxy in
+                        ScrollView(showsIndicators: false) {
+                            VStack(spacing: 12) {
+                                // Title (dropdown in playback, chunk nav when split, plain otherwise)
+                                if isPlaybackMode {
+                                    VStack(spacing: 4) {
+                                        recordingDropdownButton
+                                            .frame(maxWidth: .infinity)
+                                            .overlay(alignment: .top) {
+                                                playbackTimeLabelRow
+                                                    .padding(.horizontal, 4)
+                                                    .offset(y: -13)
                                             }
+
+                                        // When the quote is split, keep the
+                                        // chunk-of-N navigator visible so the
+                                        // user can still see/switch chunks
+                                        // while in voice-recording or read-
+                                        // aloud mode. Reading mode shows the
+                                        // *whole* quote, so the per-chunk
+                                        // navigator is irrelevant there.
+                                        if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
+                                            chunkNavRow(chunks: chunks)
                                         }
-                                        .padding(.top, 7)
-                                    } else if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
-                                        VStack(spacing: 4) {
-                                            HStack(spacing: 4) {
-                                                Text("\(viewModel.activeTitle)")
-                                                    .font(.title2.bold())
-                                                    .lineLimit(1)
-
-                                                if viewModel.hasTranslations {
-                                                    languageTogglePill
-                                                }
-                                            }
-
-                                            HStack(spacing: 4) {
-                                                Button {
-                                                    if viewModel.activeChunkIndex > 0 {
-                                                        viewModel.switchToChunk(viewModel.activeChunkIndex - 1)
-                                                    }
-                                                } label: {
-                                                    Image(systemName: "chevron.left")
-                                                        .font(.headline)
-                                                        .foregroundColor(viewModel.activeChunkIndex > 0 ? .blue : Color(.systemGray4))
-                                                }
-                                                .disabled(viewModel.activeChunkIndex <= 0)
-
-                                                Text(String(localized: "\(viewModel.activeChunkIndex + 1) of \(chunks.count)", comment: "Chunk X of Y navigation"))
-                                                    .font(.headline)
-
-                                                Button {
-                                                    if viewModel.activeChunkIndex < chunks.count - 1 {
-                                                        viewModel.switchToChunk(viewModel.activeChunkIndex + 1)
-                                                    }
-                                                } label: {
-                                                    Image(systemName: "chevron.right")
-                                                        .font(.headline)
-                                                        .foregroundColor(viewModel.activeChunkIndex < chunks.count - 1 ? .blue : Color(.systemGray4))
-                                                }
-                                                .disabled(viewModel.activeChunkIndex >= chunks.count - 1)
-                                            }
-                                        }
-                                        .multilineTextAlignment(.center)
-                                        .padding(.top, 7)
-                                    } else {
-                                        HStack(spacing: 8) {
-                                            Text(viewModel.activeTitle)
+                                    }
+                                    .padding(.top, 7)
+                                } else if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
+                                    VStack(spacing: 4) {
+                                        HStack(spacing: 4) {
+                                            Text("\(viewModel.activeTitle)")
                                                 .font(.title2.bold())
                                                 .lineLimit(1)
 
-                                            if !isTutorialMode && viewModel.hasTranslations {
+                                            if viewModel.hasTranslations {
                                                 languageTogglePill
                                             }
                                         }
-                                        .padding(.top, 7)
+
+                                        HStack(spacing: 4) {
+                                            Button {
+                                                if viewModel.activeChunkIndex > 0 {
+                                                    viewModel.switchToChunk(viewModel.activeChunkIndex - 1)
+                                                }
+                                            } label: {
+                                                Image(systemName: "chevron.left")
+                                                    .font(.headline)
+                                                    .foregroundColor(viewModel.activeChunkIndex > 0 ? .blue : Color(.systemGray4))
+                                            }
+                                            .disabled(viewModel.activeChunkIndex <= 0)
+
+                                            Text(String(localized: "\(viewModel.activeChunkIndex + 1) of \(chunks.count)", comment: "Chunk X of Y navigation"))
+                                                .font(.headline)
+
+                                            Button {
+                                                if viewModel.activeChunkIndex < chunks.count - 1 {
+                                                    viewModel.switchToChunk(viewModel.activeChunkIndex + 1)
+                                                }
+                                            } label: {
+                                                Image(systemName: "chevron.right")
+                                                    .font(.headline)
+                                                    .foregroundColor(viewModel.activeChunkIndex < chunks.count - 1 ? .blue : Color(.systemGray4))
+                                            }
+                                            .disabled(viewModel.activeChunkIndex >= chunks.count - 1)
+                                        }
                                     }
+                                    .multilineTextAlignment(.center)
+                                    .padding(.top, 7)
+                                } else {
+                                    HStack(spacing: 8) {
+                                        Text(viewModel.activeTitle)
+                                            .font(.title2.bold())
+                                            .lineLimit(1)
 
-                                    // Reveal slider
-                                    revealSlider
-
-                                    // Word display — when the quote is split, render
-                                    // the active chunk plus peeks above/below in
-                                    // every mode *except* reading mode. Reading
-                                    // mode shows the whole quote as flowing prose
-                                    // (rendered by wordDisplay), so the chunk peeks
-                                    // would just be confusing duplicates.
-                                    if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
-                                        splitWordDisplay(chunks: chunks, proxy: proxy)
-                                    } else {
-                                        wordDisplay(proxy: proxy)
+                                        if !isTutorialMode && viewModel.hasTranslations {
+                                            languageTogglePill
+                                        }
                                     }
-
-                                    Spacer(minLength: 180)
+                                    .padding(.top, 7)
                                 }
-                                .padding()
-                                .frame(maxWidth: .infinity)
+
+                                // Reveal slider
+                                revealSlider
+
+                                // Word display — when the quote is split, render
+                                // the active chunk plus peeks above/below in
+                                // every mode *except* reading mode. Reading
+                                // mode shows the whole quote as flowing prose
+                                // (rendered by wordDisplay), so the chunk peeks
+                                // would just be confusing duplicates.
+                                if let chunks = viewModel.splitChunks, !viewModel.isReadingMode {
+                                    splitWordDisplay(chunks: chunks, proxy: proxy)
+                                } else {
+                                    wordDisplay(proxy: proxy)
+                                }
+
+                                Spacer(minLength: 180)
                             }
-                        }
-
-
-
-                        // Control bar overlaid at bottom
-                        if isTutorialMode {
-                            tutorialControlBar
-                        } else if isPlaybackMode {
-                            playbackControlBar
-                        } else {
-                            controlBar
+                            .padding()
+                            .frame(maxWidth: .infinity)
                         }
                     }
-                }
-                .animation(.none, value: viewModel.currentMode)
 
-                // Mistake dispute popup (recitation only)
-                if !isPlaybackMode,
-                   viewModel.tappedMistakeIndex != nil,
-                   let spokenWord = viewModel.tappedMistakeSpoken {
-                    mistakeDisputePopup(spokenWord: spokenWord)
-                }
 
-                // Split/chunk manager popup (recitation only)
-                if !isPlaybackMode && viewModel.showSplitPopup {
-                    splitPopup
-                }
 
+                    // Control bar overlaid at bottom
+                    if isTutorialMode {
+                        tutorialControlBar
+                    } else if isPlaybackMode {
+                        playbackControlBar
+                    } else {
+                        controlBar
+                    }
+                }
             }
+            .animation(.none, value: viewModel.currentMode)
+
+            // Mistake dispute popup (recitation only)
+            if !isPlaybackMode,
+               viewModel.tappedMistakeIndex != nil,
+               let spokenWord = viewModel.tappedMistakeSpoken {
+                mistakeDisputePopup(spokenWord: spokenWord)
+            }
+
+            // Split/chunk manager popup (recitation only)
+            if !isPlaybackMode && viewModel.showSplitPopup {
+                splitPopup
+            }
+
+        }
+    }
+
+    private var contentWithLifecycle: some View {
+        mainStack
             .navigationBarHidden(true)
             .onAppear {
                 viewModel.settingsStore = settingsStore
@@ -407,6 +421,10 @@ struct RecitationScreen: View {
                 viewModel.stop()
                 exitPlaybackMode()
             }
+    }
+
+    private var contentWithOverlays: some View {
+        contentWithLifecycle
             .alert(String(localized: "Microphone Access Required"), isPresented: $viewModel.showPermissionAlert) {
                 Button(String(localized: "Open Settings")) {
                     if let url = URL(string: UIApplication.openSettingsURLString) {
@@ -574,6 +592,10 @@ struct RecitationScreen: View {
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: showResultsHint2)
+    }
+
+    private var contentWithObservers: some View {
+        contentWithOverlays
             .onChange(of: viewModel.isMasterMode) { _, isMaster in
                 if isMaster {
                     wasMasterMode = true
@@ -645,6 +667,10 @@ struct RecitationScreen: View {
                     showResultsHint2 = false
                 }
             }
+    }
+
+    private var contentWithSheets: some View {
+        contentWithObservers
             .sheet(isPresented: $viewModel.showResults, onDismiss: {
                 AlertManager.shared.stopResultSound()
             }) {
@@ -942,7 +968,6 @@ struct RecitationScreen: View {
                 isLoadingRecordings = false
                 reconcileLocalCommunityLinks(for: hash)
             }
-        }
     }
 
     // MARK: - Playback / Recording Progress Bar
@@ -3646,6 +3671,21 @@ struct RecitationScreen: View {
                     .fill(Color(hex: 0x333333))
             )
             .padding(.horizontal, 8)
+
+            // The tutorial hides the exit button, so finishing the recitation
+            // would otherwise be the only way out — anyone who can't finish it
+            // (mic denied, recognizer mishearing, wrong locale) would be locked
+            // out of the app across relaunches. See KNOWN_ISSUES TUTORIAL-002.
+            Button {
+                viewModel.stop()
+                dismiss()
+            } label: {
+                Text("Skip")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
 
             Spacer().frame(height: 0)
         }

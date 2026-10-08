@@ -248,4 +248,7 @@
 
     <!-- Pack detail -->
     <string name="add_to_library">Agregar a la biblioteca</string>
+
+    <!-- Onboarding tutorial -->
+    <string name="skip">Omitir</string>
 </resources>

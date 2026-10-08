@@ -263,4 +263,7 @@
 
     <!-- Pack detail -->
     <string name="add_to_library">Add to Library</string>
+
+    <!-- Onboarding tutorial -->
+    <string name="skip">Skip</string>
 </resources>

@@ -3267,6 +3267,16 @@
         }
       }
     },
+    "Skip" : {
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Omitir"
+          }
+        }
+      }
+    },
     "Small" : {
       "extractionState" : "stale",
       "localizations" : {

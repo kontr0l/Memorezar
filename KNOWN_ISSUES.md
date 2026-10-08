@@ -972,6 +972,45 @@ The first four mastery levels still auto-progress based on practice count and ac
 
 ---
 
+### TUTORIAL-002: Android "Continue" never ended onboarding — users permanently stuck
+
+**Status:** Resolved (Oct 2026) — Android only, iOS was never affected
+**Files:**
+- `memorezar-android/.../ui/screens/RecitationScreen.kt` — `CompletionView`'s `onDone` handler (~line 1043)
+- `memorezar-android/.../ui/screens/OnboardingFlow.kt` — step 2 `onBack` (line 117)
+- `memorezar-android/.../ui/navigation/AppNavigation.kt` — `completeOnboarding()` (line 134)
+
+**Symptom:** User finishes the tutorial recitation, taps **Continue**, the results panel slides away — and they are left back on the tutorial quote with no way forward. Relaunching returns them to onboarding step 1. Permanent lockout.
+
+**Root cause:** `onDone` was wired to `viewModel.dismissCompletion()` only, which is the *non-tutorial* behaviour ("slide the panel away but keep the user on the quote"). The only code path that reaches `tutorialStore.completeOnboarding()` is `onBack()`, and Continue never called it. Three things then combine to make it a dead end:
+
+1. The exit button is hidden in tutorial mode (`RecitationScreen.kt`, `if (!isTutorialMode)` around `TopBarWithModePicker`).
+2. `OnboardingFlow` renders **before** the `NavController` exists (`AppNavigation.kt`, early `return`), so system-back has nothing to pop and just leaves the app.
+3. `hasCompletedOnboarding` was never persisted, so the next launch starts onboarding over.
+
+**Fix:** `onDone` now branches on `isTutorialMode` and calls `viewModel.stopRecitation()` + `onBack()`, mirroring iOS's `if isTutorialMode { dismiss(); return }` in `RecitationScreen.swift`'s `resultsSheet`.
+
+**Still open — same latent trap on both platforms:** the tutorial practice screen has *no skip or exit*. Completing the recitation is the only way out on iOS too. Anyone who cannot complete it (mic denied, STT mishearing, noisy room) is locked out of the app across relaunches. A "Skip" affordance in `tutorialControlBar` would close this off. Note also that the recogniser's locale follows the device language (`SpeechRecognitionService.swift` `speechLocaleIdentifier`) while the tutorial phrase "Happy birthday to you" is only translated to Spanish — a French or German phone shows English text but listens in `fr-FR`/`de-DE`, which can never match.
+
+---
+
+### BUILD-001: iOS target failed to compile under Xcode 26.3 (type-checker timeout)
+
+**Status:** Resolved (Oct 2026)
+**File:** `ios/Memorezar/UI/Screens/RecitationScreen.swift`
+
+**Symptom:** Both Debug and Release device builds failed with
+`RecitationScreen.swift:138:25: error: the compiler is unable to type-check this expression in reasonable time`.
+The app could not be built at all on Xcode 26.3 / Swift 6.2.4 (it predates this toolchain).
+
+**Root cause:** `RecitationScreen.body` was a single ~810-line expression — one `ZStack` plus roughly 50 chained modifiers (`.onAppear`, 6 `.onChange`, 5 `.overlay`, 7 `.sheet`/`.alert`, `.task`). Swift type-checks a `body` as one constraint system and gave up.
+
+**Fix:** Split into five computed properties that each wrap the previous one — `mainStack` → `contentWithLifecycle` → `contentWithOverlays` → `contentWithObservers` → `contentWithSheets` — so each is its own expression. Modifier order is unchanged, so behaviour is identical (`git diff -w` shows only the new declarations).
+
+**Watch out:** `SettingsScreen.swift` has the same shape and SourceKit already flags its `body`. If it starts failing, apply the same layering.
+
+---
+
 ## Android-Specific Issues
 
 Android's `SpeechRecognizer` is fundamentally different from iOS's `SFSpeechRecognizer`. iOS provides a continuous streaming session with per-word confidence, alternatives, and contextual priming. Android stops after every final result, requiring a destroy-and-recreate cycle. This creates **session gaps** — periods of 150-700ms where audio is lost permanently. Much of the Android voice mode work is about mitigating these gaps.
