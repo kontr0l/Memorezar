@@ -7,6 +7,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.triplet.play)
 }
 
 // Release signing credentials come from local.properties (gitignored) so keystore
@@ -26,14 +27,32 @@ val hasReleaseSigning = listOf(
     "MEMOREZAR_KEY_PASSWORD",
 ).all { keystoreProps.getProperty(it)?.isNotBlank() == true }
 
+// Play Store publishing credentials, same gitignored source as the keystore:
+//   MEMOREZAR_PLAY_CREDENTIALS = absolute path to the service-account JSON
+// The service account needs "Release to production" + "Manage production
+// releases" granted on this app in Play Console → Users and permissions.
+// Without the property the plugin still loads; only the publish tasks fail.
+val playCredentialsPath: String? = keystoreProps.getProperty("MEMOREZAR_PLAY_CREDENTIALS")
+    ?.takeIf { it.isNotBlank() }
+
+play {
+    playCredentialsPath?.let { serviceAccountCredentials.set(file(it)) }
+    track.set("production")
+    // COMPLETED = 100% rollout rather than staged. Every new install currently
+    // hits the onboarding lockout (KNOWN_ISSUES TUTORIAL-002), so a staged
+    // rollout would knowingly leave a slice of users stranded.
+    releaseStatus.set(com.github.triplet.gradle.androidpublisher.ReleaseStatus.COMPLETED)
+    defaultToAppBundles.set(true)
+}
+
 android {
     namespace = "com.memorezar.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.memorezar.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 4
         versionName = "1.3"
 
